@@ -235,7 +235,7 @@ export function LeftSidebar() {
       {/* Mini Calendar */}
       <div class="p-2 border-b border-[#e8e8e8]">
         {/* Month navigation */}
-        <div class="flex items-center justify-between mb-1 pl-2">
+        <div class="flex items-center justify-between mb-2 px-1.5">
           <span class="text-sm font-medium text-[#37352f]">
             {formatMonthYear(currentMonth())}
           </span>
@@ -256,26 +256,26 @@ export function LeftSidebar() {
         </div>
 
         {/* Weekday headers */}
-        <div class="grid grid-cols-7 gap-0.5 mb-1">
+        <div class="grid grid-cols-7 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-            <div class="w-6 text-center text-xs text-[#91918e]">{day}</div>
+            <div class="w-7 text-center text-xs text-[#91918e]">{day}</div>
           ))}
         </div>
 
         {/* Calendar grid */}
-        <div class="flex flex-col gap-0.5">
+        <div class="flex flex-col gap-1">
           <For each={getWeeksInMonth(currentMonth())}>
             {(week) => (
-              <div class="relative">
+              <div class="relative py-1">
                 {/* Active week background marker */}
                 <Show when={isActiveWeek(week)}>
-                  <div class="absolute -inset-y-1 inset-x-0 bg-[#f1f1ef] rounded-md" />
+                  <div class="absolute inset-0 bg-[#f1f1ef] rounded-md" />
                 </Show>
-                <div class="relative grid grid-cols-7 gap-0.5">
+                <div class="relative grid grid-cols-7">
                   <For each={week}>
                     {(dayInfo) => (
                       <button
-                        class="w-6 h-6 flex items-center justify-center text-xs rounded transition-colors"
+                        class="w-7 h-6 flex items-center justify-center text-xs rounded transition-colors"
                         classList={{
                           "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
                           "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
