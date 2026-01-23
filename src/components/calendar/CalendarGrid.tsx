@@ -272,8 +272,8 @@ export function CalendarGrid() {
           <span class="text-xs text-[#91918e]">All-day</span>
         </div>
 
-        {/* Scrollable date headers - pr-[8px] matches scrollbar-gutter on body */}
-        <div ref={headerScrollRef} class="flex-1 overflow-hidden pr-[8px]">
+        {/* Scrollable date headers */}
+        <div ref={headerScrollRef} class="flex-1 overflow-hidden">
           <div class="flex h-full" style={{ width: `${(TOTAL_DAYS / VISIBLE_DAYS) * 100}%` }}>
             <For each={visibleDays()}>
               {(day) => (
@@ -295,10 +295,10 @@ export function CalendarGrid() {
           </div>
         </div>
 
-        {/* Scrollable day columns - CSS flexbox handles resize */}
+        {/* Scrollable day columns - scrollbar hidden for clean edge alignment */}
         <div
           ref={scrollContainerRef}
-          class="flex-1 overflow-auto overscroll-y-none"
+          class="flex-1 overflow-auto overscroll-y-none scrollbar-hidden"
           onScroll={handleScrollWithSnap}
         >
           <div

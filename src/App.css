@@ -44,8 +44,8 @@ html, body {
   background: #b1b1b1;
 }
 
-/* Hide scrollbar when not hovering */
-.overflow-auto {
+/* Reserve space for scrollbar to prevent layout shift */
+.overflow-auto:not(.scrollbar-hidden) {
   scrollbar-gutter: stable;
 }
 
