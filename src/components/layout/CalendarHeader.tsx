@@ -57,7 +57,13 @@ export function CalendarHeader() {
   };
 
   const goToToday = () => {
-    setCenterDate(new Date());
+    // Calculate Sunday of the current week (leftmost day)
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek);
+
+    setCenterDate(sunday);
   };
 
   return (
