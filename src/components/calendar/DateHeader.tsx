@@ -43,7 +43,7 @@ export function DateHeader(props: DateHeaderProps) {
 
       {/* Day number */}
       <span
-        class="text-xl font-medium mt-0.5 w-8 h-8 flex items-center justify-center rounded-full"
+        class="text-xl font-medium mt-0.5 w-8 h-8 flex items-center justify-center rounded-md"
         classList={{
           "bg-[#2383e2] text-white": isToday(),
           "text-[#37352f]": !isToday(),

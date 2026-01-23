@@ -74,7 +74,7 @@ export function CalendarHeader() {
       <div class="relative">
           <button
             onClick={() => setViewDropdownOpen((v) => !v)}
-            class="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors cursor-pointer"
+            class="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors "
           >
             <span>{currentView()}</span>
             <ChevronDown size={14} class="text-[#91918e]" />
@@ -93,7 +93,7 @@ export function CalendarHeader() {
                       setCurrentView(view);
                       setViewDropdownOpen(false);
                     }}
-                    class="w-full px-3 py-1.5 text-left text-sm hover:bg-[#efefef] text-[#37352f] cursor-pointer"
+                    class="w-full px-3 py-1.5 text-left text-sm hover:bg-[#efefef] text-[#37352f] "
                     classList={{
                       "bg-[#efefef]": currentView() === view,
                     }}
@@ -108,7 +108,7 @@ export function CalendarHeader() {
                 {/* Today button */}
                 <button
           onClick={goToToday}
-          class="px-2.5 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors cursor-pointer"
+          class="px-2.5 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors "
         >
           Today
         </button>
@@ -116,14 +116,14 @@ export function CalendarHeader() {
         {/* Navigation arrows */}
         <button
           onClick={navigatePrev}
-          class="ml-1 p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors cursor-pointer"
+          class="ml-1 p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
           title="Previous"
         >
           <ChevronLeft size={18} />
         </button>
         <button
           onClick={navigateNext}
-          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors cursor-pointer"
+          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
           title="Next"
         >
           <ChevronRight size={18} />
@@ -136,7 +136,7 @@ export function CalendarHeader() {
         {/* Right sidebar toggle */}
         <button
           onClick={toggleRightSidebar}
-          class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors cursor-pointer"
+          class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
           title={rightSidebarOpen() ? "Hide right sidebar" : "Show right sidebar"}
         >
           {rightSidebarOpen() ? (

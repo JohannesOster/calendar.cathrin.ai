@@ -1,4 +1,5 @@
-import { createSignal, For } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
+import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
@@ -43,30 +44,85 @@ const sampleAccounts: CalendarAccount[] = [
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = createSignal("");
-  const [currentMonth, setCurrentMonth] = createSignal(new Date());
+  const [currentMonth, setCurrentMonth] = createSignal(
+    new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
+  );
   const [accounts, setAccounts] = createSignal(sampleAccounts);
 
-  const getDaysInMonth = (date: Date) => {
+  interface DayInfo {
+    day: number;
+    date: Date;
+    isCurrentMonth: boolean;
+  }
+
+  // Get weeks for the month view, including days from adjacent months
+  const getWeeksInMonth = (date: Date): DayInfo[][] => {
     const year = date.getFullYear();
     const month = date.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startingDay = firstDay.getDay();
+    const startingDay = firstDay.getDay(); // 0 = Sunday
 
-    const days: (number | null)[] = [];
+    const weeks: DayInfo[][] = [];
+    let currentWeek: DayInfo[] = [];
 
-    // Add empty cells for days before the first day
-    for (let i = 0; i < startingDay; i++) {
-      days.push(null);
+    // Add days from previous month to fill the first week
+    if (startingDay > 0) {
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (let i = startingDay - 1; i >= 0; i--) {
+        const day = prevMonthLastDay - i;
+        currentWeek.push({
+          day,
+          date: new Date(year, month - 1, day),
+          isCurrentMonth: false,
+        });
+      }
     }
 
-    // Add days of the month
+    // Add days of the current month
     for (let i = 1; i <= daysInMonth; i++) {
-      days.push(i);
+      currentWeek.push({
+        day: i,
+        date: new Date(year, month, i),
+        isCurrentMonth: true,
+      });
+
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
     }
 
-    return days;
+    // Add days from next month to fill the last week
+    let nextMonthDay = 1;
+    if (currentWeek.length > 0) {
+      while (currentWeek.length < 7) {
+        currentWeek.push({
+          day: nextMonthDay,
+          date: new Date(year, month + 1, nextMonthDay),
+          isCurrentMonth: false,
+        });
+        nextMonthDay++;
+      }
+      weeks.push(currentWeek);
+    }
+
+    // Always show 6 rows for consistent height
+    while (weeks.length < 6) {
+      const extraWeek: DayInfo[] = [];
+      for (let i = 0; i < 7; i++) {
+        extraWeek.push({
+          day: nextMonthDay,
+          date: new Date(year, month + 1, nextMonthDay),
+          isCurrentMonth: false,
+        });
+        nextMonthDay++;
+      }
+      weeks.push(extraWeek);
+    }
+
+    return weeks;
   };
 
   const formatMonthYear = (date: Date) => {
@@ -85,14 +141,12 @@ export function LeftSidebar() {
     setCurrentMonth(date);
   };
 
-  const isToday = (day: number | null) => {
-    if (!day) return false;
+  const isTodayDate = (date: Date) => {
     const today = new Date();
-    const current = currentMonth();
     return (
-      day === today.getDate() &&
-      current.getMonth() === today.getMonth() &&
-      current.getFullYear() === today.getFullYear()
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
     );
   };
 
@@ -115,6 +169,50 @@ export function LeftSidebar() {
     );
   };
 
+  // Get Sunday of any week
+  const getSundayOfWeek = (date: Date): Date => {
+    const result = new Date(date);
+    result.setDate(date.getDate() - date.getDay());
+    return result;
+  };
+
+  // Check if a week row is the active week (visible in main grid)
+  const isActiveWeek = (week: DayInfo[]): boolean => {
+    const weekStart = getSundayOfWeek(centerDate());
+    weekStart.setHours(0, 0, 0, 0);
+    // Check if the first day of this week matches the active week's Sunday
+    const rowSunday = new Date(week[0].date);
+    rowSunday.setHours(0, 0, 0, 0);
+    return rowSunday.getTime() === weekStart.getTime();
+  };
+
+  // Handle day click - navigate main grid to that week
+  const handleDayClick = (dayInfo: DayInfo) => {
+    const weekStart = getSundayOfWeek(dayInfo.date);
+    setCenterDate(weekStart);
+  };
+
+  // Track previous centerDate to detect external navigation changes
+  let prevCenterDate = centerDate();
+
+  // Sync mini calendar month only when centerDate changes (not on manual month browsing)
+  createEffect(() => {
+    const center = centerDate();
+    // Only sync if centerDate actually changed (external navigation)
+    if (
+      center.getTime() !== prevCenterDate.getTime()
+    ) {
+      prevCenterDate = center;
+      // Update mini calendar month to show the new active week
+      if (
+        center.getMonth() !== currentMonth().getMonth() ||
+        center.getFullYear() !== currentMonth().getFullYear()
+      ) {
+        setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+      }
+    }
+  });
+
   return (
     <div class="h-full flex flex-col overflow-hidden">
       {/* Search section */}
@@ -135,22 +233,22 @@ export function LeftSidebar() {
       </div>
 
       {/* Mini Calendar */}
-      <div class="p-3 border-b border-[#e8e8e8]">
+      <div class="p-2 border-b border-[#e8e8e8]">
         {/* Month navigation */}
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-2 px-1.5">
           <span class="text-sm font-medium text-[#37352f]">
             {formatMonthYear(currentMonth())}
           </span>
           <div class="flex items-center gap-1">
             <button
               onClick={prevMonth}
-              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
             >
               <ChevronLeft size={14} />
             </button>
             <button
               onClick={nextMonth}
-              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
             >
               <ChevronRight size={14} />
             </button>
@@ -160,25 +258,38 @@ export function LeftSidebar() {
         {/* Weekday headers */}
         <div class="grid grid-cols-7 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-            <div class="text-center text-xs text-[#91918e] py-1">{day}</div>
+            <div class="w-7 text-center text-xs text-[#91918e]">{day}</div>
           ))}
         </div>
 
         {/* Calendar grid */}
-        <div class="grid grid-cols-7">
-          <For each={getDaysInMonth(currentMonth())}>
-            {(day) => (
-              <button
-                class="aspect-square flex items-center justify-center text-xs rounded-full hover:bg-[#efefef] transition-colors"
-                classList={{
-                  "text-[#37352f]": day !== null && !isToday(day),
-                  "text-transparent": day === null,
-                  "bg-[#2383e2] text-white hover:bg-[#2383e2]": isToday(day),
-                }}
-                disabled={day === null}
-              >
-                {day ?? ""}
-              </button>
+        <div class="flex flex-col gap-1">
+          <For each={getWeeksInMonth(currentMonth())}>
+            {(week) => (
+              <div class="relative py-1">
+                {/* Active week background marker */}
+                <Show when={isActiveWeek(week)}>
+                  <div class="absolute inset-0 bg-[#f1f1ef] rounded-md" />
+                </Show>
+                <div class="relative grid grid-cols-7">
+                  <For each={week}>
+                    {(dayInfo) => (
+                      <button
+                        class="w-7 h-6 flex items-center justify-center text-xs rounded transition-colors"
+                        classList={{
+                          "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
+                          "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
+                          "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
+                          "hover:bg-[#e3e3e3]": !isTodayDate(dayInfo.date),
+                        }}
+                        onClick={() => handleDayClick(dayInfo)}
+                      >
+                        {dayInfo.day}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
             )}
           </For>
         </div>
