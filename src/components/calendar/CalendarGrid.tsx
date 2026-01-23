@@ -9,8 +9,16 @@ const VISIBLE_DAYS = 7;
 const TOTAL_DAYS = BUFFER_DAYS * 2 + VISIBLE_DAYS; // 21 days total
 const TOTAL_HEIGHT = 24 * 48; // 24 hours × 48px
 
+// Get Sunday of the current week for initial view
+const initialSunday = (() => {
+  const today = new Date();
+  const result = new Date(today);
+  result.setDate(today.getDate() - today.getDay());
+  return result;
+})();
+
 // Export signals for external control
-export const [centerDate, setCenterDate] = createSignal(new Date());
+export const [centerDate, setCenterDate] = createSignal(initialSunday);
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 
 function formatMonthYear(date: Date): string {
@@ -20,6 +28,12 @@ function formatMonthYear(date: Date): string {
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
+  return result;
+}
+
+function getSundayOfWeek(date: Date): Date {
+  const result = new Date(date);
+  result.setDate(date.getDate() - date.getDay());
   return result;
 }
 
@@ -203,18 +217,19 @@ export function CalendarGrid() {
       onCleanup(() => resizeObserver.disconnect());
     }
 
-    // Scroll to show today centered (at buffer position)
+    // Scroll to show Sunday of current week as leftmost day
     requestAnimationFrame(() => {
       if (scrollContainerRef) {
         const colWidth = getColumnWidth();
         const days = visibleDays();
-        const todayIndex = days.findIndex((d) => isSameDay(d, new Date()));
+        const sunday = getSundayOfWeek(new Date());
+        const sundayIndex = days.findIndex((d) => isSameDay(d, sunday));
 
-        if (todayIndex !== -1) {
-          leftmostDayIndex = todayIndex;
-          scrollContainerRef.scrollLeft = todayIndex * colWidth;
+        if (sundayIndex !== -1) {
+          leftmostDayIndex = sundayIndex;
+          scrollContainerRef.scrollLeft = sundayIndex * colWidth;
           if (headerScrollRef) {
-            headerScrollRef.scrollLeft = todayIndex * colWidth;
+            headerScrollRef.scrollLeft = sundayIndex * colWidth;
           }
         }
 
