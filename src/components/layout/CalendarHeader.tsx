@@ -7,7 +7,7 @@ import {
   PanelRightClose,
 } from "lucide-solid";
 import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
-import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
+import { centerDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
 
 type ViewType = "Day" | "Week" | "Month";
 
@@ -64,6 +64,7 @@ export function CalendarHeader() {
     sunday.setDate(today.getDate() - dayOfWeek);
 
     setCenterDate(sunday);
+    setFlashDate(today);
   };
 
   return (
