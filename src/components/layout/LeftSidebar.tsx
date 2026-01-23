@@ -1,4 +1,5 @@
-import { createSignal, For } from "solid-js";
+import { createSignal, createEffect, For } from "solid-js";
+import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
@@ -46,27 +47,66 @@ export function LeftSidebar() {
   const [currentMonth, setCurrentMonth] = createSignal(new Date());
   const [accounts, setAccounts] = createSignal(sampleAccounts);
 
-  const getDaysInMonth = (date: Date) => {
+  interface DayInfo {
+    day: number;
+    date: Date;
+    isCurrentMonth: boolean;
+  }
+
+  // Get weeks for the month view, including days from adjacent months
+  const getWeeksInMonth = (date: Date): DayInfo[][] => {
     const year = date.getFullYear();
     const month = date.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startingDay = firstDay.getDay();
+    const startingDay = firstDay.getDay(); // 0 = Sunday
 
-    const days: (number | null)[] = [];
+    const weeks: DayInfo[][] = [];
+    let currentWeek: DayInfo[] = [];
 
-    // Add empty cells for days before the first day
-    for (let i = 0; i < startingDay; i++) {
-      days.push(null);
+    // Add days from previous month to fill the first week
+    if (startingDay > 0) {
+      const prevMonthLastDay = new Date(year, month, 0).getDate();
+      for (let i = startingDay - 1; i >= 0; i--) {
+        const day = prevMonthLastDay - i;
+        currentWeek.push({
+          day,
+          date: new Date(year, month - 1, day),
+          isCurrentMonth: false,
+        });
+      }
     }
 
-    // Add days of the month
+    // Add days of the current month
     for (let i = 1; i <= daysInMonth; i++) {
-      days.push(i);
+      currentWeek.push({
+        day: i,
+        date: new Date(year, month, i),
+        isCurrentMonth: true,
+      });
+
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
     }
 
-    return days;
+    // Add days from next month to fill the last week
+    if (currentWeek.length > 0) {
+      let nextMonthDay = 1;
+      while (currentWeek.length < 7) {
+        currentWeek.push({
+          day: nextMonthDay,
+          date: new Date(year, month + 1, nextMonthDay),
+          isCurrentMonth: false,
+        });
+        nextMonthDay++;
+      }
+      weeks.push(currentWeek);
+    }
+
+    return weeks;
   };
 
   const formatMonthYear = (date: Date) => {
@@ -85,14 +125,12 @@ export function LeftSidebar() {
     setCurrentMonth(date);
   };
 
-  const isToday = (day: number | null) => {
-    if (!day) return false;
+  const isTodayDate = (date: Date) => {
     const today = new Date();
-    const current = currentMonth();
     return (
-      day === today.getDate() &&
-      current.getMonth() === today.getMonth() &&
-      current.getFullYear() === today.getFullYear()
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
     );
   };
 
@@ -114,6 +152,41 @@ export function LeftSidebar() {
       })
     );
   };
+
+  // Get Sunday of any week
+  const getSundayOfWeek = (date: Date): Date => {
+    const result = new Date(date);
+    result.setDate(date.getDate() - date.getDay());
+    return result;
+  };
+
+  // Check if a week row is the active week (visible in main grid)
+  const isActiveWeek = (week: DayInfo[]): boolean => {
+    const weekStart = getSundayOfWeek(centerDate());
+    weekStart.setHours(0, 0, 0, 0);
+    // Check if the first day of this week matches the active week's Sunday
+    const rowSunday = new Date(week[0].date);
+    rowSunday.setHours(0, 0, 0, 0);
+    return rowSunday.getTime() === weekStart.getTime();
+  };
+
+  // Handle day click - navigate main grid to that week
+  const handleDayClick = (dayInfo: DayInfo) => {
+    const weekStart = getSundayOfWeek(dayInfo.date);
+    setCenterDate(weekStart);
+  };
+
+  // Sync mini calendar month when main grid navigates to a different month
+  createEffect(() => {
+    const center = centerDate();
+    const current = currentMonth();
+    if (
+      center.getMonth() !== current.getMonth() ||
+      center.getFullYear() !== current.getFullYear()
+    ) {
+      setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+    }
+  });
 
   return (
     <div class="h-full flex flex-col overflow-hidden">
@@ -165,20 +238,32 @@ export function LeftSidebar() {
         </div>
 
         {/* Calendar grid */}
-        <div class="grid grid-cols-7">
-          <For each={getDaysInMonth(currentMonth())}>
-            {(day) => (
-              <button
-                class="aspect-square flex items-center justify-center text-xs rounded-full hover:bg-[#efefef] transition-colors"
+        <div class="flex flex-col">
+          <For each={getWeeksInMonth(currentMonth())}>
+            {(week) => (
+              <div
+                class="grid grid-cols-7 rounded-sm transition-colors"
                 classList={{
-                  "text-[#37352f]": day !== null && !isToday(day),
-                  "text-transparent": day === null,
-                  "bg-[#2383e2] text-white hover:bg-[#2383e2]": isToday(day),
+                  "bg-[#f1f1ef]": isActiveWeek(week),
                 }}
-                disabled={day === null}
               >
-                {day ?? ""}
-              </button>
+                <For each={week}>
+                  {(dayInfo) => (
+                    <button
+                      class="aspect-square flex items-center justify-center text-xs rounded-full transition-colors"
+                      classList={{
+                        "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
+                        "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
+                        "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
+                        "hover:bg-[#efefef]": !isTodayDate(dayInfo.date),
+                      }}
+                      onClick={() => handleDayClick(dayInfo)}
+                    >
+                      {dayInfo.day}
+                    </button>
+                  )}
+                </For>
+              </div>
             )}
           </For>
         </div>
