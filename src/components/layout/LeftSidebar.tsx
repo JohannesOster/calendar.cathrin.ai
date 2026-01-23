@@ -176,15 +176,24 @@ export function LeftSidebar() {
     setCenterDate(weekStart);
   };
 
-  // Sync mini calendar month when main grid navigates to a different month
+  // Track previous centerDate to detect external navigation changes
+  let prevCenterDate = centerDate();
+
+  // Sync mini calendar month only when centerDate changes (not on manual month browsing)
   createEffect(() => {
     const center = centerDate();
-    const current = currentMonth();
+    // Only sync if centerDate actually changed (external navigation)
     if (
-      center.getMonth() !== current.getMonth() ||
-      center.getFullYear() !== current.getFullYear()
+      center.getTime() !== prevCenterDate.getTime()
     ) {
-      setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+      prevCenterDate = center;
+      // Update mini calendar month to show the new active week
+      if (
+        center.getMonth() !== currentMonth().getMonth() ||
+        center.getFullYear() !== currentMonth().getFullYear()
+      ) {
+        setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+      }
     }
   });
 
