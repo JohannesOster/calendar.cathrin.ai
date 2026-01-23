@@ -278,7 +278,7 @@ export function LeftSidebar() {
                         "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
                         "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
                         "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
-                        "hover:bg-[#efefef]": !isTodayDate(dayInfo.date),
+                        "hover:bg-[#e3e3e3]": !isTodayDate(dayInfo.date),
                       }}
                       onClick={() => handleDayClick(dayInfo)}
                     >
