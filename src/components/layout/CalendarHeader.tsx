@@ -4,50 +4,60 @@ import {
   ChevronRight,
   ChevronDown,
   PanelRight,
+  PanelRightClose,
 } from "lucide-solid";
 import { rightSidebarOpen, setRightSidebarOpen } from "./AppShell";
+import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
 
 type ViewType = "Day" | "Week" | "Month";
 
+// Helper to add days to a date
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
 export function CalendarHeader() {
   const [currentView, setCurrentView] = createSignal<ViewType>("Week");
-  const [currentDate, setCurrentDate] = createSignal(new Date());
   const [viewDropdownOpen, setViewDropdownOpen] = createSignal(false);
 
   const navigatePrev = () => {
-    const date = new Date(currentDate());
+    const date = centerDate();
     switch (currentView()) {
       case "Day":
-        date.setDate(date.getDate() - 1);
+        setCenterDate(addDays(date, -1));
         break;
       case "Week":
-        date.setDate(date.getDate() - 7);
+        setCenterDate(addDays(date, -7));
         break;
       case "Month":
-        date.setMonth(date.getMonth() - 1);
+        const prevMonth = new Date(date);
+        prevMonth.setMonth(prevMonth.getMonth() - 1);
+        setCenterDate(prevMonth);
         break;
     }
-    setCurrentDate(date);
   };
 
   const navigateNext = () => {
-    const date = new Date(currentDate());
+    const date = centerDate();
     switch (currentView()) {
       case "Day":
-        date.setDate(date.getDate() + 1);
+        setCenterDate(addDays(date, 1));
         break;
       case "Week":
-        date.setDate(date.getDate() + 7);
+        setCenterDate(addDays(date, 7));
         break;
       case "Month":
-        date.setMonth(date.getMonth() + 1);
+        const nextMonth = new Date(date);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        setCenterDate(nextMonth);
         break;
     }
-    setCurrentDate(date);
   };
 
   const goToToday = () => {
-    setCurrentDate(new Date());
+    setCenterDate(new Date());
   };
 
   return (
@@ -115,7 +125,7 @@ export function CalendarHeader() {
         >
           <ChevronRight size={18} />
         </button>
-    
+
       </div>
 
       {/* Right section - Sidebar toggle */}
@@ -124,12 +134,13 @@ export function CalendarHeader() {
         <button
           onClick={() => setRightSidebarOpen((v) => !v)}
           class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
-          classList={{
-            "bg-[#efefef] text-[#37352f]": rightSidebarOpen(),
-          }}
           title={rightSidebarOpen() ? "Hide right sidebar" : "Show right sidebar"}
         >
-          <PanelRight size={18} />
+          {rightSidebarOpen() ? (
+            <PanelRightClose size={18} />
+          ) : (
+            <PanelRight size={18} />
+          )}
         </button>
       </div>
     </header>

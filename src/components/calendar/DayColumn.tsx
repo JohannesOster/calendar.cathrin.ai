@@ -1,10 +1,9 @@
-import { For } from "solid-js";
-
 interface DayColumnProps {
   date: Date;
 }
 
-const hours = Array.from({ length: 24 }, (_, i) => i);
+// Total height: 24 hours × 48px = 1152px
+const TOTAL_HEIGHT = 24 * 48;
 
 export function DayColumn(props: DayColumnProps) {
   const isWeekend = () => {
@@ -33,20 +32,22 @@ export function DayColumn(props: DayColumnProps) {
 
   return (
     <div
-      class="flex-1 min-w-0 border-l border-[#e8e8e8] first:border-l-0 relative"
+      class="relative [contain:strict]"
+      style={{ height: `${TOTAL_HEIGHT}px` }}
       classList={{
         "bg-[#fafafa]": isWeekend(),
       }}
     >
-      {/* Hour grid lines */}
-      <For each={hours}>
-        {(hour) => (
-          <div
-            class="h-[var(--grid-hour-height)] border-b border-[#e8e8e8]"
-            style={{ height: "var(--grid-hour-height)" }}
-          />
-        )}
-      </For>
+      {/* Hour grid lines rendered via CSS background for performance */}
+      {/* Draw lines at TOP of each hour cell, starting from hour 1 (23 lines total, no line at top or bottom edge) */}
+      <div
+        class="absolute inset-0 pointer-events-none"
+        style={{
+          "background-image": "linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)",
+          "background-size": "100% var(--grid-hour-height)",
+          "background-position": "0 var(--grid-hour-height)",
+        }}
+      />
 
       {/* Current time indicator - only show on today's column */}
       {isToday() && (

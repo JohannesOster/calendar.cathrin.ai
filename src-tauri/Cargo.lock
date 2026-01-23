@@ -355,6 +355,8 @@ name = "calendarcathrinai"
 version = "0.1.0"
 dependencies = [
  "cocoa",
+ "dispatch",
+ "objc",
  "serde",
  "serde_json",
  "tauri",

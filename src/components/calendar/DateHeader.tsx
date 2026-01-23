@@ -25,7 +25,7 @@ export function DateHeader(props: DateHeaderProps) {
 
   return (
     <div
-      class="flex-1 min-w-0 flex flex-col items-center justify-center py-2 border-l border-[#e8e8e8] first:border-l-0"
+      class="h-full flex flex-col items-center justify-center py-2"
       classList={{
         "bg-[#fafafa]": isWeekend(),
       }}

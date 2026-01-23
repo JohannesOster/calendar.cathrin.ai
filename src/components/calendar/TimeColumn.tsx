@@ -3,7 +3,7 @@ import { For } from "solid-js";
 const hours = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHour(hour: number): string {
-  if (hour === 0) return "12 AM";
+  if (hour === 0) return "";
   if (hour === 12) return "12 PM";
   if (hour < 12) return `${hour} AM`;
   return `${hour - 12} PM`;
