@@ -44,7 +44,9 @@ const sampleAccounts: CalendarAccount[] = [
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = createSignal("");
-  const [currentMonth, setCurrentMonth] = createSignal(new Date());
+  const [currentMonth, setCurrentMonth] = createSignal(
+    new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
+  );
   const [accounts, setAccounts] = createSignal(sampleAccounts);
 
   interface DayInfo {
