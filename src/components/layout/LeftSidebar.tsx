@@ -1,5 +1,5 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
-import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
+import { centerDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
@@ -186,10 +186,11 @@ export function LeftSidebar() {
     return rowSunday.getTime() === weekStart.getTime();
   };
 
-  // Handle day click - navigate main grid to that week
+  // Handle day click - navigate main grid to that week and flash the selected day
   const handleDayClick = (dayInfo: DayInfo) => {
     const weekStart = getSundayOfWeek(dayInfo.date);
     setCenterDate(weekStart);
+    setFlashDate(dayInfo.date);
   };
 
   // Track previous centerDate to detect external navigation changes

@@ -20,6 +20,8 @@ const initialSunday = (() => {
 // Export signals for external control
 export const [centerDate, setCenterDate] = createSignal(initialSunday);
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
+// Flash highlight signal - set this to a date to trigger a flash animation on that day column
+export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 
 function formatMonthYear(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });

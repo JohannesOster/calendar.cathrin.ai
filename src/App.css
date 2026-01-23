@@ -74,3 +74,23 @@ button:focus-visible {
 button {
   cursor: pointer;
 }
+
+/* Flash highlight animation for mini-calendar navigation */
+@keyframes flash-highlight {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.2;
+  }
+  15% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-flash-highlight {
+  animation: flash-highlight 2s ease-out forwards;
+}
