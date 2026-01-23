@@ -93,8 +93,8 @@ export function LeftSidebar() {
     }
 
     // Add days from next month to fill the last week
+    let nextMonthDay = 1;
     if (currentWeek.length > 0) {
-      let nextMonthDay = 1;
       while (currentWeek.length < 7) {
         currentWeek.push({
           day: nextMonthDay,
@@ -104,6 +104,20 @@ export function LeftSidebar() {
         nextMonthDay++;
       }
       weeks.push(currentWeek);
+    }
+
+    // Always show 6 rows for consistent height
+    while (weeks.length < 6) {
+      const extraWeek: DayInfo[] = [];
+      for (let i = 0; i < 7; i++) {
+        extraWeek.push({
+          day: nextMonthDay,
+          date: new Date(year, month + 1, nextMonthDay),
+          isCurrentMonth: false,
+        });
+        nextMonthDay++;
+      }
+      weeks.push(extraWeek);
     }
 
     return weeks;
