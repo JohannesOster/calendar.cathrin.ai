@@ -118,7 +118,7 @@ export function AppShell(props: AppShellProps) {
       </div>
 
       {/* Main layout - 3 column */}
-      <div class="flex-1 flex min-h-0 min-w-0 relative">
+      <div class="flex-1 flex min-h-0 min-w-0 relative overflow-hidden">
         {/* Left Sidebar - collapsible */}
         <aside
           class="shrink-0 border-r border-[#e8e8e8] bg-[#fbfbfa] relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
@@ -132,8 +132,8 @@ export function AppShell(props: AppShellProps) {
           </div>
         </aside>
 
-        {/* Center content area */}
-        <main class="flex-1 flex flex-col max-h-full bg-white">
+        {/* Center content area - min-w-0 allows shrinking, overflow-hidden prevents layout issues during sidebar animation */}
+        <main class="flex-1 flex flex-col max-h-full bg-white min-w-0 overflow-hidden">
           {props.children}
         </main>
 

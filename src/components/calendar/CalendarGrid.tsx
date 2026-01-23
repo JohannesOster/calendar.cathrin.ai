@@ -55,10 +55,9 @@ export function CalendarGrid() {
 
   // Get current column width (for scroll calculations only)
   const getColumnWidth = () => {
-    if (!containerRef) return 100;
-    const timeColWidth = 64;
-    const availableWidth = containerRef.clientWidth - timeColWidth;
-    return availableWidth / VISIBLE_DAYS;
+    if (!scrollContainerRef) return 100;
+    // Use scrollContainerRef.clientWidth to account for scrollbar gutter
+    return scrollContainerRef.clientWidth / VISIBLE_DAYS;
   };
 
   // Update displayed month based on scroll position
