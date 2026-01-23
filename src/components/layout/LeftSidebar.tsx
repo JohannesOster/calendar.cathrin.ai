@@ -1,0 +1,269 @@
+import { createSignal, For } from "solid-js";
+import {
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Link,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+  Plus,
+} from "lucide-solid";
+
+interface CalendarAccount {
+  email: string;
+  calendars: Calendar[];
+}
+
+interface Calendar {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+  isDefault?: boolean;
+}
+
+// Sample data
+const sampleAccounts: CalendarAccount[] = [
+  {
+    email: "user@example.com",
+    calendars: [
+      {
+        id: "1",
+        name: "Personal",
+        color: "#ff7b72",
+        visible: true,
+        isDefault: true,
+      },
+      { id: "2", name: "Work", color: "#79c0ff", visible: true },
+      { id: "3", name: "Family", color: "#a5d6ff", visible: true },
+    ],
+  },
+];
+
+export function LeftSidebar() {
+  const [searchQuery, setSearchQuery] = createSignal("");
+  const [currentMonth, setCurrentMonth] = createSignal(new Date());
+  const [accounts, setAccounts] = createSignal(sampleAccounts);
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+
+    const days: (number | null)[] = [];
+
+    // Add empty cells for days before the first day
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+
+    return days;
+  };
+
+  const formatMonthYear = (date: Date) => {
+    return date.toLocaleString("default", { month: "long", year: "numeric" });
+  };
+
+  const prevMonth = () => {
+    const date = new Date(currentMonth());
+    date.setMonth(date.getMonth() - 1);
+    setCurrentMonth(date);
+  };
+
+  const nextMonth = () => {
+    const date = new Date(currentMonth());
+    date.setMonth(date.getMonth() + 1);
+    setCurrentMonth(date);
+  };
+
+  const isToday = (day: number | null) => {
+    if (!day) return false;
+    const today = new Date();
+    const current = currentMonth();
+    return (
+      day === today.getDate() &&
+      current.getMonth() === today.getMonth() &&
+      current.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const toggleCalendarVisibility = (accountEmail: string, calendarId: string) => {
+    setAccounts((prev) =>
+      prev.map((account) => {
+        if (account.email === accountEmail) {
+          return {
+            ...account,
+            calendars: account.calendars.map((cal) => {
+              if (cal.id === calendarId) {
+                return { ...cal, visible: !cal.visible };
+              }
+              return cal;
+            }),
+          };
+        }
+        return account;
+      })
+    );
+  };
+
+  return (
+    <div class="h-full flex flex-col overflow-hidden">
+      {/* Search section */}
+      <div class="p-3 border-b border-[#e8e8e8]">
+        <div class="relative">
+          <Search
+            size={16}
+            class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#91918e]"
+          />
+          <input
+            type="text"
+            placeholder="Search events"
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            class="w-full pl-8 pr-3 py-1.5 text-sm bg-[#f1f1ef] rounded-md border-none outline-none placeholder:text-[#91918e] text-[#37352f] focus:ring-2 focus:ring-[#2383e2] focus:ring-opacity-50"
+          />
+        </div>
+      </div>
+
+      {/* Mini Calendar */}
+      <div class="p-3 border-b border-[#e8e8e8]">
+        {/* Month navigation */}
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm font-medium text-[#37352f]">
+            {formatMonthYear(currentMonth())}
+          </span>
+          <div class="flex items-center gap-1">
+            <button
+              onClick={prevMonth}
+              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={nextMonth}
+              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Weekday headers */}
+        <div class="grid grid-cols-7 mb-1">
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+            <div class="text-center text-xs text-[#91918e] py-1">{day}</div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div class="grid grid-cols-7">
+          <For each={getDaysInMonth(currentMonth())}>
+            {(day) => (
+              <button
+                class="aspect-square flex items-center justify-center text-xs rounded-full hover:bg-[#efefef] transition-colors"
+                classList={{
+                  "text-[#37352f]": day !== null && !isToday(day),
+                  "text-transparent": day === null,
+                  "bg-[#2383e2] text-white hover:bg-[#2383e2]": isToday(day),
+                }}
+                disabled={day === null}
+              >
+                {day ?? ""}
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+
+      {/* Scheduling Link */}
+      <div class="p-3 border-b border-[#e8e8e8]">
+        <button class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] rounded transition-colors">
+          <Link size={16} class="text-[#91918e]" />
+          <span>Scheduling</span>
+        </button>
+      </div>
+
+      {/* Calendar Accounts List */}
+      <div class="flex-1 overflow-auto p-3">
+        <For each={accounts()}>
+          {(account) => (
+            <div class="mb-4">
+              {/* Account header */}
+              <div class="flex items-center justify-between mb-2 group">
+                <span class="text-xs font-medium text-[#91918e] truncate">
+                  {account.email}
+                </span>
+                <button class="p-1 rounded hover:bg-[#efefef] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity">
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+
+              {/* Calendars */}
+              <div class="space-y-0.5">
+                <For each={account.calendars}>
+                  {(calendar) => (
+                    <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-pointer">
+                      {/* Color indicator */}
+                      <div
+                        class="w-4 h-4 rounded flex-shrink-0"
+                        style={{ "background-color": calendar.color }}
+                      />
+
+                      {/* Calendar name */}
+                      <span
+                        class="flex-1 text-sm truncate"
+                        classList={{
+                          "text-[#37352f]": calendar.visible,
+                          "text-[#91918e] line-through": !calendar.visible,
+                        }}
+                      >
+                        {calendar.name}
+                      </span>
+
+                      {/* Default badge */}
+                      {calendar.isDefault && (
+                        <span class="text-xs text-[#91918e]">Default</span>
+                      )}
+
+                      {/* Visibility toggle */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCalendarVisibility(account.email, calendar.id);
+                        }}
+                        class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        {calendar.visible ? (
+                          <Eye size={14} />
+                        ) : (
+                          <EyeOff size={14} />
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          )}
+        </For>
+      </div>
+
+      {/* Add calendar button */}
+      <div class="p-3 border-t border-[#e8e8e8]">
+        <button class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors">
+          <Plus size={16} />
+          <span>Add calendar account</span>
+        </button>
+      </div>
+    </div>
+  );
+}
