@@ -44,10 +44,10 @@ The app uses a three-layer layout system defined in `src/components/layout/AppSh
 
 1. **AppShell** - Main layout container with:
    - Draggable header region (data-tauri-drag-region)
-   - Left sidebar (60px wide when open, collapsible)
-   - Right sidebar (60px wide when open, collapsible)
+   - Left sidebar (240px wide when open, collapsible)
+   - Right sidebar (240px wide when open, collapsible)
    - Center content area
-   - Sidebar state management via exported signals: `leftSidebarOpen`, `setLeftSidebarOpen`, `rightSidebarOpen`, `setRightSidebarOpen`
+   - Sidebar state management via exported signals and toggle functions: `leftSidebarOpen`, `rightSidebarOpen`, `toggleLeftSidebar()`, `toggleRightSidebar()`
    - Sidebar state persisted to localStorage
 
 2. **Calendar Components** (`src/components/calendar/`):
@@ -92,8 +92,17 @@ The app uses a three-layer layout system defined in `src/components/layout/AppSh
 - Use `onMount()` for initialization logic
 - Prefer `<For>` component over `.map()` for lists
 
-### Sidebar Toggling
-The current implementation uses width-based transitions (`w-60` to `w-0`). Per the README notes, there's a known issue that this causes content to be "smashed" during animation. Consider using `transform: translateX()` or margin-left adjustments instead of width changes.
+### Sidebar Animation
+The sidebars use width-based transitions (`w-60` to `w-0`) with `overflow-hidden` on the outer container and a fixed-width inner container. This prevents content from being "smashed" during animation - the inner content maintains its width while the outer container clips it.
+
+### Calendar Grid Layout
+The calendar grid uses percentage-based flexbox widths (`width: ${(TOTAL_DAYS / VISIBLE_DAYS) * 100}%`) rather than pixel-based calculations. This approach:
+- Automatically adapts to container resize without recalculating column widths
+- Avoids animation lag when sidebars toggle (no width recalculation needed)
+- Uses CSS `flex-1` on day columns for equal distribution
+
+### Scroll Synchronization
+The time column uses CSS transform (`translateY`) instead of a separate scrollable container for vertical sync with the main grid. This provides pixel-perfect alignment and avoids scroll event race conditions.
 
 ### TypeScript Configuration
 - Strict mode enabled
@@ -104,6 +113,6 @@ The current implementation uses width-based transitions (`w-60` to `w-0`). Per t
 
 Minimal Rust backend in `src-tauri/src/`:
 - `main.rs` - Entry point
-- `lib.rs` - Core Tauri setup
+- `lib.rs` - Core Tauri setup with fullscreen event hooks
 - Uses `tauri-plugin-opener` for opening URLs
-- macOS-specific dependencies: `cocoa` crate for native integrations
+- macOS-specific dependencies: `objc2` ecosystem (`objc2`, `objc2-foundation`, `objc2-app-kit`) for native integrations
