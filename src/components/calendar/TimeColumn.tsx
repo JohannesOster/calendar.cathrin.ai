@@ -18,8 +18,9 @@ export function TimeColumn() {
             class="h-[var(--grid-hour-height)] relative"
             style={{ height: "var(--grid-hour-height)" }}
           >
-            {/* Time label - positioned to align with grid line */}
-            <span class="absolute -top-2.5 right-2 text-xs text-[#91918e] bg-white px-1">
+            {/* Time label - vertically centered on the grid line (top of this cell) */}
+            {/* Using -translate-y-1/2 to center the text on the line */}
+            <span class="absolute top-0 -translate-y-1/2 right-2 text-xs text-[#91918e] leading-none">
               {formatHour(hour)}
             </span>
           </div>

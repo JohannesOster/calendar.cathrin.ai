@@ -14,6 +14,15 @@ interface AppShellProps {
 export const [leftSidebarOpen, setLeftSidebarOpen] = createSignal(true);
 export const [rightSidebarOpen, setRightSidebarOpen] = createSignal(true);
 
+// Toggle functions for sidebar state
+export function toggleLeftSidebar() {
+  setLeftSidebarOpen((v) => !v);
+}
+
+export function toggleRightSidebar() {
+  setRightSidebarOpen((v) => !v);
+}
+
 export function AppShell(props: AppShellProps) {
   const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [showTrafficLightOutlines, setShowTrafficLightOutlines] = createSignal(false);
@@ -92,7 +101,7 @@ export function AppShell(props: AppShellProps) {
           }}
         >
           <button
-            onClick={() => setLeftSidebarOpen((v) => !v)}
+            onClick={toggleLeftSidebar}
             class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
             title={leftSidebarOpen() ? "Hide sidebar" : "Show sidebar"}
           >
@@ -124,9 +133,8 @@ export function AppShell(props: AppShellProps) {
         </aside>
 
         {/* Center content area */}
-        <main class="flex-1 flex flex-col min-h-0 min-w-0 bg-white">
-          {/* Calendar grid */}
-          <div class="flex-1 min-h-0 min-w-0">{props.children}</div>
+        <main class="flex-1 flex flex-col max-h-full bg-white">
+          {props.children}
         </main>
 
         {/* Right Sidebar - collapsible */}

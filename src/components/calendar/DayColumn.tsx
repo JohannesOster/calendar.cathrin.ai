@@ -39,13 +39,13 @@ export function DayColumn(props: DayColumnProps) {
       }}
     >
       {/* Hour grid lines rendered via CSS background for performance */}
-      {/* Draw lines at TOP of each hour cell, starting from hour 1 (23 lines total, no line at top or bottom edge) */}
+      {/* Start at 48px (1 hour) to avoid line at y=0, lines appear at 48, 96, 144... (1AM, 2AM, 3AM...) */}
       <div
-        class="absolute inset-0 pointer-events-none"
+        class="absolute left-0 right-0 bottom-0 pointer-events-none"
         style={{
+          top: "var(--grid-hour-height)",
           "background-image": "linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)",
           "background-size": "100% var(--grid-hour-height)",
-          "background-position": "0 var(--grid-hour-height)",
         }}
       />
 
