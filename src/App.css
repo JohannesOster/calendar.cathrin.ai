@@ -14,9 +14,6 @@ html, body {
   --grid-time-col-width: 64px;
   --grid-all-day-chip-height: 20px;
   
-  /* Sidebar dimensions */
-  --sidebar-width: 240px;
-  
   /* Colors - Notion-like palette */
   --color-text-primary: #37352f;
   --color-text-secondary: #91918e;

@@ -6,7 +6,7 @@ import {
   PanelRight,
   PanelRightClose,
 } from "lucide-solid";
-import { rightSidebarOpen, setRightSidebarOpen } from "./AppShell";
+import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
 import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
 
 type ViewType = "Day" | "Week" | "Month";
@@ -62,10 +62,7 @@ export function CalendarHeader() {
 
   return (
     <header class="flex items-center px-3 h-full">
-      {/* Left section - Navigation controls */}
-
-
-      {/* Center section - View selector (centered) */}
+      {/* Center section - View selector and navigation */}
       <div class="flex-1 flex justify-center">
         {/* View Selector */}
       <div class="relative">
@@ -132,7 +129,7 @@ export function CalendarHeader() {
       <div class="flex items-center gap-2">
         {/* Right sidebar toggle */}
         <button
-          onClick={() => setRightSidebarOpen((v) => !v)}
+          onClick={toggleRightSidebar}
           class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
           title={rightSidebarOpen() ? "Hide right sidebar" : "Show right sidebar"}
         >
