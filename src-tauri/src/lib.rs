@@ -1,33 +1,29 @@
 use tauri::{Emitter, Manager};
 
 #[cfg(target_os = "macos")]
-use cocoa::appkit::{NSWindow, NSWindowButton};
-
+use objc2::rc::Retained;
 #[cfg(target_os = "macos")]
-use cocoa::base::{id, nil};
-
+use objc2::runtime::AnyObject;
 #[cfg(target_os = "macos")]
-use objc::declare::ClassDecl;
-
+use objc2::{define_class, msg_send, sel, AllocAnyThread};
 #[cfg(target_os = "macos")]
-use objc::runtime::{Object, Sel};
-
+use objc2_app_kit::{NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
-use objc::{class, msg_send, sel, sel_impl};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSObject, NSObjectProtocol, NSString};
 
 /// Set the visibility of macOS traffic light buttons (close, minimize, zoom)
 #[cfg(target_os = "macos")]
-fn set_traffic_lights_visible(ns_window: id, visible: bool) {
+fn set_traffic_lights_visible(ns_window: *mut AnyObject, visible: bool) {
     unsafe {
+        let window: &NSWindow = &*(ns_window as *const NSWindow);
         let buttons = [
-            NSWindowButton::NSWindowCloseButton,
-            NSWindowButton::NSWindowMiniaturizeButton,
-            NSWindowButton::NSWindowZoomButton,
+            NSWindowButton::CloseButton,
+            NSWindowButton::MiniaturizeButton,
+            NSWindowButton::ZoomButton,
         ];
-        for button_type in buttons {
-            let button: id = ns_window.standardWindowButton_(button_type);
-            if button != nil {
-                let _: () = msg_send![button, setHidden: !visible];
+        for button_kind in buttons {
+            if let Some(button) = window.standardWindowButton(button_kind) {
+                button.setHidden(!visible);
             }
         }
     }
@@ -35,16 +31,24 @@ fn set_traffic_lights_visible(ns_window: id, visible: bool) {
 
 #[cfg(target_os = "macos")]
 struct FullscreenObserverContext {
-    ns_window: id,
+    ns_window: *mut AnyObject,
     app_handle: tauri::AppHandle,
 }
 
 #[cfg(target_os = "macos")]
+unsafe impl Send for FullscreenObserverContext {}
+#[cfg(target_os = "macos")]
+unsafe impl Sync for FullscreenObserverContext {}
+
+#[cfg(target_os = "macos")]
 static mut OBSERVER_CONTEXT: Option<Box<FullscreenObserverContext>> = None;
 
-/// Callback for NSWindowWillExitFullScreenNotification - fires BEFORE the animation
+/// Static storage to keep the observer alive (NSNotificationCenter holds weak reference)
 #[cfg(target_os = "macos")]
-extern "C" fn handle_will_exit_fullscreen(_this: &Object, _cmd: Sel, _notification: id) {
+static mut OBSERVER_INSTANCE: Option<Retained<FullscreenObserver>> = None;
+
+#[cfg(target_os = "macos")]
+fn handle_will_exit_fullscreen_impl() {
     unsafe {
         if let Some(ref ctx) = OBSERVER_CONTEXT {
             // Hide traffic lights BEFORE the animation starts
@@ -56,18 +60,16 @@ extern "C" fn handle_will_exit_fullscreen(_this: &Object, _cmd: Sel, _notificati
     }
 }
 
-/// Callback for NSWindowDidExitFullScreenNotification - fires AFTER the animation
 #[cfg(target_os = "macos")]
-extern "C" fn handle_did_exit_fullscreen(_this: &Object, _cmd: Sel, _notification: id) {
+fn handle_did_exit_fullscreen_impl() {
     unsafe {
         if let Some(ref ctx) = OBSERVER_CONTEXT {
             // Show traffic lights after animation completes + delay for toggle button animation (200ms)
-            // Convert to usize for thread safety, then back to id
             let ns_window_ptr = ctx.ns_window as usize;
             dispatch::Queue::main().exec_after(
                 std::time::Duration::from_millis(200),
                 move || {
-                    let ns_window = ns_window_ptr as id;
+                    let ns_window = ns_window_ptr as *mut AnyObject;
                     set_traffic_lights_visible(ns_window, true);
                 },
             );
@@ -75,9 +77,8 @@ extern "C" fn handle_did_exit_fullscreen(_this: &Object, _cmd: Sel, _notificatio
     }
 }
 
-/// Callback for NSWindowWillEnterFullScreenNotification - fires BEFORE the animation
 #[cfg(target_os = "macos")]
-extern "C" fn handle_will_enter_fullscreen(_this: &Object, _cmd: Sel, _notification: id) {
+fn handle_will_enter_fullscreen_impl() {
     unsafe {
         if let Some(ref ctx) = OBSERVER_CONTEXT {
             // Notify frontend that fullscreen transition is starting
@@ -87,9 +88,8 @@ extern "C" fn handle_will_enter_fullscreen(_this: &Object, _cmd: Sel, _notificat
     }
 }
 
-/// Callback for NSWindowDidEnterFullScreenNotification - fires AFTER the animation
 #[cfg(target_os = "macos")]
-extern "C" fn handle_did_enter_fullscreen(_this: &Object, _cmd: Sel, _notification: id) {
+fn handle_did_enter_fullscreen_impl() {
     unsafe {
         if let Some(ref ctx) = OBSERVER_CONTEXT {
             // Emit event to frontend after macOS animation completes
@@ -100,7 +100,47 @@ extern "C" fn handle_did_enter_fullscreen(_this: &Object, _cmd: Sel, _notificati
 }
 
 #[cfg(target_os = "macos")]
-fn register_fullscreen_observer(ns_window: id, app_handle: tauri::AppHandle) {
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[name = "FullscreenObserver"]
+    #[ivars = ()]
+    struct FullscreenObserver;
+
+    unsafe impl NSObjectProtocol for FullscreenObserver {}
+
+    impl FullscreenObserver {
+        #[unsafe(method(windowWillExitFullScreen:))]
+        fn _window_will_exit_fullscreen(&self, _notification: *mut NSNotification) {
+            handle_will_exit_fullscreen_impl();
+        }
+
+        #[unsafe(method(windowDidExitFullScreen:))]
+        fn _window_did_exit_fullscreen(&self, _notification: *mut NSNotification) {
+            handle_did_exit_fullscreen_impl();
+        }
+
+        #[unsafe(method(windowWillEnterFullScreen:))]
+        fn _window_will_enter_fullscreen(&self, _notification: *mut NSNotification) {
+            handle_will_enter_fullscreen_impl();
+        }
+
+        #[unsafe(method(windowDidEnterFullScreen:))]
+        fn _window_did_enter_fullscreen(&self, _notification: *mut NSNotification) {
+            handle_did_enter_fullscreen_impl();
+        }
+    }
+);
+
+#[cfg(target_os = "macos")]
+impl FullscreenObserver {
+    fn new() -> Retained<Self> {
+        let this = Self::alloc();
+        unsafe { msg_send![this, init] }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn register_fullscreen_observer(ns_window: *mut AnyObject, app_handle: tauri::AppHandle) {
     unsafe {
         // Store context for callbacks
         OBSERVER_CONTEXT = Some(Box::new(FullscreenObserverContext {
@@ -108,68 +148,52 @@ fn register_fullscreen_observer(ns_window: id, app_handle: tauri::AppHandle) {
             app_handle,
         }));
 
-        // Create a custom class to receive notifications
-        let superclass = class!(NSObject);
-        let mut decl = ClassDecl::new("FullscreenObserver", superclass).unwrap();
-
-        // Add methods for notification callbacks
-        decl.add_method(
-            sel!(windowWillExitFullScreen:),
-            handle_will_exit_fullscreen as extern "C" fn(&Object, Sel, id),
-        );
-        decl.add_method(
-            sel!(windowDidExitFullScreen:),
-            handle_did_exit_fullscreen as extern "C" fn(&Object, Sel, id),
-        );
-        decl.add_method(
-            sel!(windowWillEnterFullScreen:),
-            handle_will_enter_fullscreen as extern "C" fn(&Object, Sel, id),
-        );
-        decl.add_method(
-            sel!(windowDidEnterFullScreen:),
-            handle_did_enter_fullscreen as extern "C" fn(&Object, Sel, id),
-        );
-
-        let observer_class = decl.register();
-        let observer: id = msg_send![observer_class, new];
+        // Create observer instance and store it to keep alive
+        let observer = FullscreenObserver::new();
+        OBSERVER_INSTANCE = Some(observer.clone());
 
         // Get notification center
-        let notification_center: id = msg_send![class!(NSNotificationCenter), defaultCenter];
+        let notification_center = NSNotificationCenter::defaultCenter();
 
-        // Get notification name strings
-        let will_exit_name: id = msg_send![class!(NSString), stringWithUTF8String: b"NSWindowWillExitFullScreenNotification\0".as_ptr()];
-        let did_exit_name: id = msg_send![class!(NSString), stringWithUTF8String: b"NSWindowDidExitFullScreenNotification\0".as_ptr()];
-        let will_enter_name: id = msg_send![class!(NSString), stringWithUTF8String: b"NSWindowWillEnterFullScreenNotification\0".as_ptr()];
-        let did_enter_name: id = msg_send![class!(NSString), stringWithUTF8String: b"NSWindowDidEnterFullScreenNotification\0".as_ptr()];
+        // Create notification name strings
+        let will_exit_name = NSString::from_str("NSWindowWillExitFullScreenNotification");
+        let did_exit_name = NSString::from_str("NSWindowDidExitFullScreenNotification");
+        let will_enter_name = NSString::from_str("NSWindowWillEnterFullScreenNotification");
+        let did_enter_name = NSString::from_str("NSWindowDidEnterFullScreenNotification");
 
-        // Register observers
-        let _: () = msg_send![notification_center,
-            addObserver: observer
-            selector: sel!(windowWillExitFullScreen:)
-            name: will_exit_name
-            object: ns_window
-        ];
+        // Cast window pointer for use as notification object
+        let window_object: &AnyObject = &*(ns_window as *const AnyObject);
 
-        let _: () = msg_send![notification_center,
-            addObserver: observer
-            selector: sel!(windowDidExitFullScreen:)
-            name: did_exit_name
-            object: ns_window
-        ];
+        // Cast observer to AnyObject for the notification center API
+        let observer_ref: &AnyObject = &**observer;
 
-        let _: () = msg_send![notification_center,
-            addObserver: observer
-            selector: sel!(windowWillEnterFullScreen:)
-            name: will_enter_name
-            object: ns_window
-        ];
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowWillExitFullScreen:),
+            Some(&will_exit_name),
+            Some(window_object),
+        );
 
-        let _: () = msg_send![notification_center,
-            addObserver: observer
-            selector: sel!(windowDidEnterFullScreen:)
-            name: did_enter_name
-            object: ns_window
-        ];
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowDidExitFullScreen:),
+            Some(&did_exit_name),
+            Some(window_object),
+        );
+
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowWillEnterFullScreen:),
+            Some(&will_enter_name),
+            Some(window_object),
+        );
+
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowDidEnterFullScreen:),
+            Some(&did_enter_name),
+            Some(window_object),
+        );
     }
 }
 
@@ -184,7 +208,7 @@ pub fn run() {
 
                 if let Some(window) = app.get_webview_window("main") {
                     if let Ok(ns_window_ptr) = window.ns_window() {
-                        let ns_window = ns_window_ptr as id;
+                        let ns_window = ns_window_ptr as *mut AnyObject;
 
                         // Register NSNotificationCenter observers for fullscreen events
                         // These fire BEFORE/AFTER the animation, giving us precise timing
