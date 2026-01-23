@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import { centerDate, setCenterDate } from "../calendar/CalendarGrid";
 import {
   Search,
@@ -233,22 +233,22 @@ export function LeftSidebar() {
       </div>
 
       {/* Mini Calendar */}
-      <div class="p-3 border-b border-[#e8e8e8]">
+      <div class="p-2 border-b border-[#e8e8e8]">
         {/* Month navigation */}
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-1 pl-2">
           <span class="text-sm font-medium text-[#37352f]">
             {formatMonthYear(currentMonth())}
           </span>
           <div class="flex items-center gap-1">
             <button
               onClick={prevMonth}
-              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
             >
               <ChevronLeft size={14} />
             </button>
             <button
               onClick={nextMonth}
-              class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
             >
               <ChevronRight size={14} />
             </button>
@@ -256,38 +256,39 @@ export function LeftSidebar() {
         </div>
 
         {/* Weekday headers */}
-        <div class="grid grid-cols-7 mb-1">
+        <div class="grid grid-cols-7 gap-0.5 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-            <div class="text-center text-xs text-[#91918e] py-1">{day}</div>
+            <div class="w-6 text-center text-xs text-[#91918e]">{day}</div>
           ))}
         </div>
 
         {/* Calendar grid */}
-        <div class="flex flex-col">
+        <div class="flex flex-col gap-0.5">
           <For each={getWeeksInMonth(currentMonth())}>
             {(week) => (
-              <div
-                class="grid grid-cols-7 rounded-sm transition-colors"
-                classList={{
-                  "bg-[#f1f1ef]": isActiveWeek(week),
-                }}
-              >
-                <For each={week}>
-                  {(dayInfo) => (
-                    <button
-                      class="aspect-square flex items-center justify-center text-xs rounded-full transition-colors"
-                      classList={{
-                        "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
-                        "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
-                        "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
-                        "hover:bg-[#e3e3e3]": !isTodayDate(dayInfo.date),
-                      }}
-                      onClick={() => handleDayClick(dayInfo)}
-                    >
-                      {dayInfo.day}
-                    </button>
-                  )}
-                </For>
+              <div class="relative">
+                {/* Active week background marker */}
+                <Show when={isActiveWeek(week)}>
+                  <div class="absolute -inset-y-1 inset-x-0 bg-[#f1f1ef] rounded-md" />
+                </Show>
+                <div class="relative grid grid-cols-7 gap-0.5">
+                  <For each={week}>
+                    {(dayInfo) => (
+                      <button
+                        class="w-6 h-6 flex items-center justify-center text-xs rounded transition-colors"
+                        classList={{
+                          "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
+                          "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
+                          "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
+                          "hover:bg-[#e3e3e3]": !isTodayDate(dayInfo.date),
+                        }}
+                        onClick={() => handleDayClick(dayInfo)}
+                      >
+                        {dayInfo.day}
+                      </button>
+                    )}
+                  </For>
+                </div>
               </div>
             )}
           </For>
