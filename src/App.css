@@ -95,11 +95,22 @@ button {
   animation: flash-highlight 2s ease-out forwards;
 }
 
-/* Calendar event focus state - use :focus (not :focus-visible) for consistent selection feedback */
-/* Use stacked box-shadow instead of outline to respect border-radius */
+/* Calendar event states */
+.calendar-event {
+  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
+  border-color: var(--event-color);
+  color: var(--event-color);
+}
+
+.calendar-event:hover {
+  background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
+}
+
+/* Focus/selected state - solid background color */
 .calendar-event:focus {
   outline: none;
-  box-shadow: inset 0 0 0 2px currentColor, 0 0 0 2px rgba(0, 0, 0, 0.08);
+  background-color: var(--event-color);
+  color: white;
 }
 
 /* Paper burning animation - video-based fire effect */

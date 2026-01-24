@@ -83,11 +83,9 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Content - this gets clipped during burn */}
       <div
         ref={contentRef}
-        class="absolute inset-0 rounded-lg border-l-4 px-2 py-1 cursor-pointer hover:brightness-95 transition-[filter] calendar-event overflow-hidden"
+        class="absolute inset-0 rounded-lg border-l-4 px-2 py-1 cursor-pointer transition-colors calendar-event overflow-hidden"
         style={{
-          "background-color": `${props.event.color}33`,
-          "border-color": props.event.color,
-          color: props.event.color,
+          "--event-color": props.event.color,
         }}
         tabIndex={0}
         role="button"
@@ -97,31 +95,19 @@ export function CalendarEvent(props: CalendarEventProps) {
           when={getHeight() >= 40}
           fallback={
             <div class="truncate text-xs leading-tight">
-              <span
-                class="font-medium"
-                style={{ color: props.event.color }}
-              >
+              <span class="font-medium">
                 {props.event.title}
               </span>
-              <span
-                class="text-[10px] font-light ml-1.5"
-                style={{ color: props.event.color }}
-              >
+              <span class="text-[10px] font-light ml-1.5 opacity-80">
                 {formatTimeRange(props.event.start, props.event.end)}
               </span>
             </div>
           }
         >
-          <div
-            class="text-xs font-medium line-clamp-2 leading-tight"
-            style={{ color: props.event.color }}
-          >
+          <div class="text-xs font-medium line-clamp-2 leading-tight">
             {props.event.title}
           </div>
-          <div
-            class="text-[10px] font-light mt-0.5"
-            style={{ color: props.event.color }}
-          >
+          <div class="text-[10px] font-light mt-0.5 opacity-80">
             {formatTimeRange(props.event.start, props.event.end)}
           </div>
         </Show>
