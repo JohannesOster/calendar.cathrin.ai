@@ -25,10 +25,12 @@ export function toggleRightSidebar() {
 
 export function AppShell(props: AppShellProps) {
   const [isFullscreen, setIsFullscreen] = createSignal(false);
+  const [isWindowFocused, setIsWindowFocused] = createSignal(true);
   const [showTrafficLightOutlines, setShowTrafficLightOutlines] = createSignal(false);
   let unlistenResize: (() => void) | undefined;
   let unlistenFullscreen: (() => void) | undefined;
   let unlistenTransitionStart: (() => void) | undefined;
+  let unlistenFocusChanged: (() => void) | undefined;
 
   // Initialize from localStorage and set up fullscreen detection on mount
   onMount(async () => {
@@ -59,12 +61,18 @@ export function AppShell(props: AppShellProps) {
     unlistenResize = await appWindow.onResized(async () => {
       setIsFullscreen(await appWindow.isFullscreen());
     });
+
+    // Listen for window focus changes (traffic lights disappear when unfocused on macOS)
+    unlistenFocusChanged = await listen<boolean>("window-focus-changed", (event) => {
+      setIsWindowFocused(event.payload);
+    });
   });
 
   onCleanup(() => {
     unlistenResize?.();
     unlistenFullscreen?.();
     unlistenTransitionStart?.();
+    unlistenFocusChanged?.();
   });
 
   // Persist sidebar state to localStorage
@@ -83,8 +91,8 @@ export function AppShell(props: AppShellProps) {
         data-tauri-drag-region
         class="h-[var(--grid-header-height)] w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
       >
-        {/* Traffic light outlines - shown during fullscreen transition */}
-        {showTrafficLightOutlines() && (
+        {/* Traffic light outlines - shown during fullscreen transition or when window unfocused */}
+        {(showTrafficLightOutlines() || (!isWindowFocused() && !isFullscreen())) && (
           <div class="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
             <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
             <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
