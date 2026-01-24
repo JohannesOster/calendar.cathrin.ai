@@ -1,5 +1,5 @@
-import { createSignal, createEffect, For, Show } from "solid-js";
-import { centerDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
+import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { centerDate, setCenterDate, setFlashDate, displayedMonth, visibleStartDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
@@ -9,6 +9,7 @@ import {
   EyeOff,
   MoreHorizontal,
   Plus,
+  RotateCcw,
 } from "lucide-solid";
 
 interface CalendarAccount {
@@ -141,6 +142,23 @@ export function LeftSidebar() {
     setCurrentMonth(date);
   };
 
+  // Check if mini calendar is showing the current month
+  const isCurrentMonthView = () => {
+    const today = new Date();
+    return (
+      currentMonth().getMonth() === today.getMonth() &&
+      currentMonth().getFullYear() === today.getFullYear()
+    );
+  };
+
+  // Go to today - navigate to show this week (Sunday first), flash today
+  const goToToday = () => {
+    const today = new Date();
+    const weekStart = getSundayOfWeek(today);
+    setCenterDate(weekStart);
+    setFlashDate(today);
+  };
+
   const isTodayDate = (date: Date) => {
     const today = new Date();
     return (
@@ -176,17 +194,26 @@ export function LeftSidebar() {
     return result;
   };
 
-  // Check if a week row is the active week (visible in main grid)
-  const isActiveWeek = (week: DayInfo[]): boolean => {
-    const weekStart = getSundayOfWeek(centerDate());
-    weekStart.setHours(0, 0, 0, 0);
-    // Check if the first day of this week matches the active week's Sunday
-    const rowSunday = new Date(week[0].date);
-    rowSunday.setHours(0, 0, 0, 0);
-    return rowSunday.getTime() === weekStart.getTime();
+  // Compute the visible date range as timestamps for efficient comparison
+  const visibleRange = createMemo(() => {
+    const startDate = new Date(visibleStartDate());
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+    return { start: startDate.getTime(), end: endDate.getTime() };
+  });
+
+  // Check if a day is within the visible 7-day window in the main grid
+  const isVisibleDay = (date: Date): boolean => {
+    const range = visibleRange();
+    const checkDate = new Date(date);
+    checkDate.setHours(12, 0, 0, 0);
+    const checkTime = checkDate.getTime();
+    return checkTime >= range.start && checkTime <= range.end;
   };
 
-  // Handle day click - navigate main grid to that week and flash the selected day
+  // Handle day click - navigate main grid to show the week (Sunday first), flash the clicked day
   const handleDayClick = (dayInfo: DayInfo) => {
     const weekStart = getSundayOfWeek(dayInfo.date);
     setCenterDate(weekStart);
@@ -241,6 +268,15 @@ export function LeftSidebar() {
             {formatMonthYear(currentMonth())}
           </span>
           <div class="flex items-center gap-1">
+            <Show when={!isCurrentMonthView()}>
+              <button
+                onClick={goToToday}
+                class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+                title="Go to today"
+              >
+                <RotateCcw size={14} />
+              </button>
+            </Show>
             <button
               onClick={prevMonth}
               class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
@@ -266,32 +302,77 @@ export function LeftSidebar() {
         {/* Calendar grid */}
         <div class="flex flex-col gap-1">
           <For each={getWeeksInMonth(currentMonth())}>
-            {(week) => (
-              <div class="relative py-1">
-                {/* Active week background marker */}
-                <Show when={isActiveWeek(week)}>
-                  <div class="absolute inset-0 bg-[#f1f1ef] rounded-md" />
-                </Show>
-                <div class="relative grid grid-cols-7">
-                  <For each={week}>
-                    {(dayInfo) => (
-                      <button
-                        class="w-7 h-6 flex items-center justify-center text-xs rounded transition-colors"
-                        classList={{
-                          "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate(dayInfo.date),
-                          "text-[#c4c4c4]": !dayInfo.isCurrentMonth,
-                          "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate(dayInfo.date),
-                          "hover:bg-[#e3e3e3]": !isTodayDate(dayInfo.date),
-                        }}
-                        onClick={() => handleDayClick(dayInfo)}
-                      >
-                        {dayInfo.day}
-                      </button>
-                    )}
-                  </For>
+            {(week) => {
+              // Compute which days in this row are visible
+              const getVisibleIndices = () => {
+                const range = visibleRange();
+                const indices: number[] = [];
+                week.forEach((dayInfo, idx) => {
+                  const checkDate = new Date(dayInfo.date);
+                  checkDate.setHours(12, 0, 0, 0);
+                  const dateTime = checkDate.getTime();
+                  if (dateTime >= range.start && dateTime <= range.end) {
+                    indices.push(idx);
+                  }
+                });
+                return indices;
+              };
+
+              return (
+                <div class="relative py-1">
+                  {/* Continuous background for visible days in this row */}
+                  <Show when={getVisibleIndices().length > 0}>
+                    {(() => {
+                      const indices = getVisibleIndices();
+                      const firstIdx = Math.min(...indices);
+                      const lastIdx = Math.max(...indices);
+                      // Each cell is w-7 (28px), calculate left position and width
+                      const left = `${(firstIdx / 7) * 100}%`;
+                      const width = `${((lastIdx - firstIdx + 1) / 7) * 100}%`;
+                      return (
+                        <div
+                          class="absolute top-0 bottom-0 bg-[#f1f1ef] rounded-md"
+                          style={{ left, width }}
+                        />
+                      );
+                    })()}
+                  </Show>
+                  <div class="relative grid grid-cols-7">
+                    <For each={week}>
+                      {(dayInfo) => {
+                        const checkDate = new Date(dayInfo.date);
+                        checkDate.setHours(12, 0, 0, 0);
+                        const dateTime = checkDate.getTime();
+                        const isToday = isTodayDate(dayInfo.date);
+
+                        // Create reactive getters that access the memo
+                        const visible = () => {
+                          const range = visibleRange();
+                          return dateTime >= range.start && dateTime <= range.end;
+                        };
+
+                        return (
+                          <button
+                            class="w-7 h-6 flex items-center justify-center text-xs transition-colors rounded"
+                            classList={{
+                              "text-[#37352f]": dayInfo.isCurrentMonth && !isToday,
+                              "text-[#c4c4c4]": !dayInfo.isCurrentMonth && !visible(),
+                              "text-[#91918e]": !dayInfo.isCurrentMonth && visible() && !isToday,
+                              "bg-[#2383e2] text-white hover:bg-[#2383e2]": isToday,
+                              "hover:bg-[#e3e3e3]": !isToday && !visible(),
+                              "hover:bg-[#e5e5e3]": !isToday && visible(),
+                            }}
+                            onClick={() => handleDayClick(dayInfo)}
+                          >
+                            {dayInfo.day}
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            }}
           </For>
         </div>
       </div>
