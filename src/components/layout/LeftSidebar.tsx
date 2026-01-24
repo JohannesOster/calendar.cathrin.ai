@@ -1,9 +1,11 @@
-import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { createSignal, createEffect, createMemo, For, Show, onMount } from "solid-js";
 import { centerDate, setCenterDate, setFlashDate, visibleStartDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Eye,
   EyeOff,
   MoreHorizontal,
@@ -29,6 +31,42 @@ export function LeftSidebar() {
     new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
   );
   const [accountMenuOpen, setAccountMenuOpen] = createSignal<string | null>(null);
+  const [collapsedAccounts, setCollapsedAccounts] = createSignal<Set<string>>(new Set());
+
+  // Initialize collapsed accounts from localStorage
+  onMount(() => {
+    const saved = localStorage.getItem("sidebar-collapsed-accounts");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCollapsedAccounts(new Set(parsed));
+        }
+      } catch {
+        // Ignore invalid JSON
+      }
+    }
+  });
+
+  // Persist collapsed accounts to localStorage
+  createEffect(() => {
+    const collapsed = collapsedAccounts();
+    localStorage.setItem("sidebar-collapsed-accounts", JSON.stringify([...collapsed]));
+  });
+
+  const toggleAccountCollapse = (accountId: string) => {
+    setCollapsedAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  };
+
+  const isAccountCollapsed = (accountId: string) => collapsedAccounts().has(accountId);
 
   interface DayInfo {
     day: number;
@@ -369,7 +407,7 @@ export function LeftSidebar() {
       </div>
 
       {/* Calendar Accounts List */}
-      <div class="flex-1 overflow-auto p-3">
+      <div class="flex-1 overflow-y-scroll scrollbar-hidden p-2">
         {/* Auth error message */}
         <Show when={authError()}>
           <div class="mb-3 p-2 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
@@ -394,88 +432,112 @@ export function LeftSidebar() {
         </Show>
 
         <For each={connectedAccounts()}>
-          {(account) => (
-            <div class="mb-4">
-              {/* Account header */}
-              <div class="flex items-center justify-between mb-2 group relative">
-                <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
-                  {account.email}
-                </span>
-                <button
-                  onClick={() => setAccountMenuOpen(accountMenuOpen() === account.id ? null : account.id)}
-                  class="p-1 rounded hover:bg-[#efefef] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-
-                {/* Account dropdown menu */}
-                <Show when={accountMenuOpen() === account.id}>
-                  <div class="absolute right-0 top-6 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
+          {(account) => {
+            const collapsed = () => isAccountCollapsed(account.id);
+            return (
+              <div class="mb-4">
+                {/* Account header - clickable row */}
+                <div class="group relative">
+                  <div
+                    onClick={() => toggleAccountCollapse(account.id)}
+                    class="flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer hover:bg-[#efefef] transition-colors"
+                  >
+                    <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
+                      {account.email}
+                    </span>
+                    {/* Chevron indicator */}
+                    <span class="text-[#91918e] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {collapsed() ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </span>
+                    {/* More menu button - separate click zone */}
                     <button
-                      onClick={() => handleRefreshAccount(account.id)}
-                      class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAccountMenuOpen(accountMenuOpen() === account.id ? null : account.id);
+                      }}
+                      class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                     >
-                      <RefreshCw size={14} />
-                      Refresh
-                    </button>
-                    <button
-                      onClick={() => handleRemoveAccount(account.id)}
-                      class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
-                    >
-                      <Trash2 size={14} />
-                      Remove
+                      <MoreHorizontal size={14} />
                     </button>
                   </div>
-                </Show>
-              </div>
 
-              {/* Calendars */}
-              <div class="space-y-0.5">
-                <For each={account.calendars}>
-                  {(calendar) => (
-                    <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-pointer">
-                      {/* Color indicator */}
-                      <div
-                        class="w-4 h-4 rounded flex-shrink-0"
-                        style={{ "background-color": calendar.color }}
-                      />
-
-                      {/* Calendar name */}
-                      <span
-                        class="flex-1 text-sm truncate"
-                        classList={{
-                          "text-[#37352f]": calendar.visible,
-                          "text-[#91918e] line-through": !calendar.visible,
-                        }}
-                      >
-                        {calendar.name}
-                      </span>
-
-                      {/* Default badge */}
-                      {calendar.isDefault && (
-                        <span class="text-xs text-[#91918e]">Default</span>
-                      )}
-
-                      {/* Visibility toggle */}
+                  {/* Account dropdown menu */}
+                  <Show when={accountMenuOpen() === account.id}>
+                    <div class="absolute right-0 top-8 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
-                        }}
-                        class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleRefreshAccount(account.id)}
+                        class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
                       >
-                        {calendar.visible ? (
-                          <Eye size={14} />
-                        ) : (
-                          <EyeOff size={14} />
-                        )}
+                        <RefreshCw size={14} />
+                        Refresh
+                      </button>
+                      <button
+                        onClick={() => handleRemoveAccount(account.id)}
+                        class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
+                      >
+                        <Trash2 size={14} />
+                        Remove
                       </button>
                     </div>
-                  )}
-                </For>
+                  </Show>
+                </div>
+
+                {/* Calendars - collapsible with animation */}
+                <div
+                  class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+                  style={{
+                    "max-height": collapsed() ? "0px" : `${account.calendars.length * 36 + 8}px`,
+                    opacity: collapsed() ? "0" : "1",
+                  }}
+                >
+                  <div class="space-y-0.5 pt-1">
+                    <For each={account.calendars}>
+                      {(calendar) => (
+                        <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-pointer">
+                          {/* Color indicator */}
+                          <div
+                            class="w-4 h-4 rounded flex-shrink-0"
+                            style={{ "background-color": calendar.color }}
+                          />
+
+                          {/* Calendar name */}
+                          <span
+                            class="flex-1 text-sm truncate"
+                            classList={{
+                              "text-[#37352f]": calendar.visible,
+                              "text-[#91918e] line-through": !calendar.visible,
+                            }}
+                          >
+                            {calendar.name}
+                          </span>
+
+                          {/* Default badge */}
+                          {calendar.isDefault && (
+                            <span class="text-xs text-[#91918e]">Default</span>
+                          )}
+
+                          {/* Visibility toggle */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
+                            }}
+                            class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            {calendar.visible ? (
+                              <Eye size={14} />
+                            ) : (
+                              <EyeOff size={14} />
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          }}
         </For>
       </div>
 

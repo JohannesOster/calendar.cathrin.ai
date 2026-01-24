@@ -71,10 +71,17 @@ export async function addAccount(): Promise<void> {
       return [...prev, account];
     });
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+
+    // Silently ignore timeout errors - user likely closed the window to restart
+    if (errorMessage.includes("timed out")) {
+      console.log("OAuth flow timed out (likely user cancelled to retry)");
+      return;
+    }
+
     console.error("Failed to add account:", error);
-    setAuthError(
-      error instanceof Error ? error.message : "Failed to add account"
-    );
+    setAuthError(errorMessage || "Failed to add account");
   }
 }
 
