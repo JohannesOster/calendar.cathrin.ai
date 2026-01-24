@@ -4,7 +4,6 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Link,
   Eye,
   EyeOff,
   MoreHorizontal,
@@ -375,14 +374,6 @@ export function LeftSidebar() {
             }}
           </For>
         </div>
-      </div>
-
-      {/* Scheduling Link */}
-      <div class="p-3 border-b border-[#e8e8e8]">
-        <button class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] rounded transition-colors">
-          <Link size={16} class="text-[#91918e]" />
-          <span>Scheduling</span>
-        </button>
       </div>
 
       {/* Calendar Accounts List */}
