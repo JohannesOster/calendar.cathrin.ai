@@ -591,7 +591,7 @@ function SortableAccountsList(
   });
 
   return (
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col gap-1">
       <For each={displayAccounts()}>
         {(account) => (
           <SortableAccountItem
@@ -665,7 +665,7 @@ function SortableAccountItem(props: SortableAccountItemProps) {
               props.toggleCollapse();
             }
           }}
-          class="flex items-center gap-1 px-2 py-1.5 rounded cursor-grab hover:bg-[#efefef] transition-colors select-none"
+          class="flex items-center gap-1 px-2 py-1 rounded cursor-grab hover:bg-[#efefef] transition-colors select-none"
           classList={{
             "cursor-grabbing": sortable.isActiveDraggable,
           }}
