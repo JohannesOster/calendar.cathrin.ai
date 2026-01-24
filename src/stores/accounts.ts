@@ -27,8 +27,6 @@ export interface CalendarAccount {
 export const [connectedAccounts, setConnectedAccounts] = createSignal<
   CalendarAccount[]
 >([]);
-export const [isAuthenticating, setIsAuthenticating] =
-  createSignal<boolean>(false);
 export const [authError, setAuthError] = createSignal<string | null>(null);
 
 // Flag to track if accounts have been initialized
@@ -54,13 +52,13 @@ export async function initializeAccounts(): Promise<void> {
 /**
  * Start the OAuth flow to add a new calendar account
  * This opens the browser, waits for authorization, and returns the account
+ * Multiple flows can run concurrently - each gets its own port
  */
 export async function addAccount(): Promise<void> {
-  setIsAuthenticating(true);
   setAuthError(null);
 
   try {
-    // The OAuth flow now runs completely in the backend and returns the account
+    // The OAuth flow runs in the backend and returns the account
     const account = await startOAuthFlow();
 
     // Add the new account to the list
@@ -77,8 +75,6 @@ export async function addAccount(): Promise<void> {
     setAuthError(
       error instanceof Error ? error.message : "Failed to add account"
     );
-  } finally {
-    setIsAuthenticating(false);
   }
 }
 

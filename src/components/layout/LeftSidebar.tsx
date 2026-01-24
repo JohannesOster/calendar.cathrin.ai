@@ -9,14 +9,12 @@ import {
   MoreHorizontal,
   Plus,
   RotateCcw,
-  Loader2,
   RefreshCw,
   Trash2,
   X,
 } from "lucide-solid";
 import {
   connectedAccounts,
-  isAuthenticating,
   authError,
   addAccount,
   deleteAccount,
@@ -386,7 +384,7 @@ export function LeftSidebar() {
         </Show>
 
         {/* Empty state */}
-        <Show when={connectedAccounts().length === 0 && !isAuthenticating()}>
+        <Show when={connectedAccounts().length === 0}>
           <div class="text-center py-6">
             <p class="text-sm text-[#91918e] mb-2">No calendars connected</p>
             <p class="text-xs text-[#b8b8b5]">
@@ -485,13 +483,10 @@ export function LeftSidebar() {
       <div class="p-3 border-t border-[#e8e8e8]">
         <button
           onClick={() => addAccount()}
-          disabled={isAuthenticating()}
-          class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors"
         >
-          <Show when={isAuthenticating()} fallback={<Plus size={16} />}>
-            <Loader2 size={16} class="animate-spin" />
-          </Show>
-          <span>{isAuthenticating() ? "Connecting..." : "Add calendar account"}</span>
+          <Plus size={16} />
+          <span>Add calendar account</span>
         </button>
       </div>
     </div>

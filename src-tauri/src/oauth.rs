@@ -4,9 +4,13 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::net::TcpListener;
+use std::time::Duration;
 use thiserror::Error;
 use tiny_http::{Response, Server};
 use url::Url;
+
+/// Timeout for waiting for OAuth callback (5 minutes)
+const CALLBACK_TIMEOUT_SECS: u64 = 300;
 
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
@@ -32,6 +36,8 @@ pub enum OAuthError {
     MissingCredentials,
     #[error("Failed to start callback server: {0}")]
     ServerError(String),
+    #[error("OAuth flow timed out - no response from browser")]
+    Timeout,
 }
 
 #[derive(Debug, Clone)]
@@ -144,16 +150,18 @@ pub enum CallbackResult {
     Error(String),   // Error message
 }
 
-/// Start a local HTTP server and wait for the OAuth callback
+/// Start a local HTTP server and wait for the OAuth callback with timeout
 pub fn wait_for_callback(port: u16) -> Result<CallbackResult, OAuthError> {
     let addr = format!("127.0.0.1:{}", port);
     let server =
         Server::http(&addr).map_err(|e| OAuthError::ServerError(e.to_string()))?;
 
-    // Wait for a single request (the OAuth callback)
+    // Wait for a single request with timeout (the OAuth callback)
+    let timeout = Duration::from_secs(CALLBACK_TIMEOUT_SECS);
     let request = server
-        .recv()
-        .map_err(|e| OAuthError::ServerError(e.to_string()))?;
+        .recv_timeout(timeout)
+        .map_err(|e| OAuthError::ServerError(e.to_string()))?
+        .ok_or(OAuthError::Timeout)?;
 
     // Parse the URL to extract query parameters
     let url_str = format!("http://127.0.0.1{}", request.url());
