@@ -23,6 +23,8 @@ import {
   updateCalendarVisibility,
   refreshAccount,
   setAuthError,
+  defaultCalendarId,
+  setDefaultCalendar,
 } from "../../stores/accounts";
 
 export function LeftSidebar() {
@@ -492,46 +494,56 @@ export function LeftSidebar() {
                 >
                   <div class="space-y-0.5 pt-1">
                     <For each={account.calendars}>
-                      {(calendar) => (
-                        <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-pointer">
-                          {/* Color indicator */}
-                          <div
-                            class="w-4 h-4 rounded flex-shrink-0"
-                            style={{ "background-color": calendar.color }}
-                          />
+                      {(calendar) => {
+                        const isDefault = () => defaultCalendarId() === calendar.id;
+                        return (
+                          <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group">
+                            {/* Color indicator - clickable to set as default */}
+                            <button
+                              onClick={() => setDefaultCalendar(calendar.id)}
+                              class="w-3 h-3 rounded flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+                              style={{
+                                "background-color": calendar.color,
+                                "box-shadow": isDefault()
+                                  ? `0 0 0 2px white, 0 0 0 4px ${calendar.color}`
+                                  : undefined,
+                              }}
+                              title="Set as default calendar"
+                            />
 
-                          {/* Calendar name */}
-                          <span
-                            class="flex-1 text-sm truncate"
-                            classList={{
-                              "text-[#37352f]": calendar.visible,
-                              "text-[#91918e] line-through": !calendar.visible,
-                            }}
-                          >
-                            {calendar.name}
-                          </span>
+                            {/* Calendar name */}
+                            <span
+                              class="flex-1 text-sm truncate"
+                              classList={{
+                                "text-[#37352f]": calendar.visible,
+                                "text-[#91918e] line-through": !calendar.visible,
+                              }}
+                            >
+                              {calendar.name}
+                            </span>
 
-                          {/* Default badge */}
-                          {calendar.isDefault && (
-                            <span class="text-xs text-[#91918e]">Default</span>
-                          )}
+                            {/* Default badge */}
+                            <Show when={isDefault()}>
+                              <span class="text-xs text-[#91918e]">Default</span>
+                            </Show>
 
-                          {/* Visibility toggle */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
-                            }}
-                            class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            {calendar.visible ? (
-                              <Eye size={14} />
-                            ) : (
-                              <EyeOff size={14} />
-                            )}
-                          </button>
-                        </div>
-                      )}
+                            {/* Visibility toggle */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
+                              }}
+                              class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              {calendar.visible ? (
+                                <Eye size={14} />
+                              ) : (
+                                <EyeOff size={14} />
+                              )}
+                            </button>
+                          </div>
+                        );
+                      }}
                     </For>
                   </div>
                 </div>

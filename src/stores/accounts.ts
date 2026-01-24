@@ -14,7 +14,6 @@ export interface Calendar {
   name: string;
   color: string;
   visible: boolean;
-  isDefault?: boolean;
 }
 
 export interface CalendarAccount {
@@ -28,6 +27,20 @@ export const [connectedAccounts, setConnectedAccounts] = createSignal<
   CalendarAccount[]
 >([]);
 export const [authError, setAuthError] = createSignal<string | null>(null);
+export const [defaultCalendarId, setDefaultCalendarId] = createSignal<
+  string | null
+>(null);
+
+const DEFAULT_CALENDAR_KEY = "default-calendar-id";
+
+/**
+ * Set the default calendar for new events
+ * Persists to localStorage
+ */
+export function setDefaultCalendar(calendarId: string): void {
+  setDefaultCalendarId(calendarId);
+  localStorage.setItem(DEFAULT_CALENDAR_KEY, calendarId);
+}
 
 // Flag to track if accounts have been initialized
 let initialized = false;
@@ -44,6 +57,20 @@ export async function initializeAccounts(): Promise<void> {
     // Load existing accounts from storage
     const accounts = await getConnectedAccounts();
     setConnectedAccounts(accounts);
+
+    // Load default calendar from localStorage and validate it exists
+    const savedDefaultId = localStorage.getItem(DEFAULT_CALENDAR_KEY);
+    if (savedDefaultId) {
+      const calendarExists = accounts.some((account) =>
+        account.calendars.some((cal) => cal.id === savedDefaultId)
+      );
+      if (calendarExists) {
+        setDefaultCalendarId(savedDefaultId);
+      } else {
+        // Default calendar was deleted, clear the saved value
+        localStorage.removeItem(DEFAULT_CALENDAR_KEY);
+      }
+    }
   } catch (error) {
     console.error("Failed to load accounts:", error);
   }
