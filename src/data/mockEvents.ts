@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import type { CalendarEvent } from "../components/calendar/CalendarEvent";
 
 // Helper to create dates relative to today
@@ -18,7 +19,7 @@ const COLORS = {
   pink: "#f48fb1",
 };
 
-export const mockEvents: CalendarEvent[] = [
+const initialEvents: CalendarEvent[] = [
   {
     id: "1",
     title: "Sim Modeling Lecture Videos",
@@ -76,3 +77,11 @@ export const mockEvents: CalendarEvent[] = [
     color: COLORS.purple,
   },
 ];
+
+const [events, setEvents] = createSignal<CalendarEvent[]>(initialEvents);
+
+export function deleteEvent(id: string): void {
+  setEvents((prev) => prev.filter((event) => event.id !== id));
+}
+
+export { events };
