@@ -97,13 +97,13 @@ button {
 
 /* Calendar event states */
 .calendar-event {
-  background-color: color-mix(in srgb, var(--event-color) 20%, transparent);
+  background-color: color-mix(in srgb, var(--event-color) 20%, white);
   border-color: var(--event-color);
   color: var(--event-color);
 }
 
 .calendar-event:hover {
-  background-color: color-mix(in srgb, var(--event-color) 30%, transparent);
+  background-color: color-mix(in srgb, var(--event-color) 30%, white);
 }
 
 /* Focus/selected state - solid background color */
