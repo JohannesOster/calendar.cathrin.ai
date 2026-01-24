@@ -1,11 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { burnElement } from "../../hooks/useBurnAnimation";
 import { deleteEvent } from "../../data/mockEvents";
-import {
-  selectEvent,
-  deselectEvent,
-  isEventSelected,
-} from "../../stores/eventSelection";
 import fireGif from "../../assets/fire.gif";
 
 export interface CalendarEvent {
@@ -56,21 +51,12 @@ export function CalendarEvent(props: CalendarEventProps) {
     return Math.max(durationHours * HOUR_HEIGHT, 24); // minimum height of 24px
   };
 
-  const handleClick = (e: MouseEvent) => {
-    e.stopPropagation();
-    if (!isBurning()) {
-      selectEvent(props.event.id);
-    }
-  };
-
-  const isSelected = () => isEventSelected(props.event.id);
-
   // Exposed method to trigger the burn animation
   const triggerBurn = () => {
     if (isBurning() || !contentRef) return;
 
     setIsBurning(true);
-    deselectEvent();
+    contentRef.blur();
 
     burnElement(contentRef, setFirePosition, () => {
       deleteEvent(props.event.id);
@@ -97,17 +83,12 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Content - this gets clipped during burn */}
       <div
         ref={contentRef}
-        class="absolute inset-0 rounded-lg border-l-4 px-2 py-1 cursor-pointer hover:brightness-95 transition-[filter]"
-        classList={{
-          "event-selected": isSelected() && !isBurning(),
-        }}
+        class="absolute inset-0 rounded-lg border-l-4 px-2 py-1 cursor-pointer hover:brightness-95 transition-[filter] calendar-event overflow-hidden"
         style={{
           "background-color": `${props.event.color}33`,
           "border-color": props.event.color,
           color: props.event.color,
-          "clip-path": isBurning() ? undefined : "inset(0 0 0 0)",
         }}
-        onClick={handleClick}
         tabIndex={0}
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}

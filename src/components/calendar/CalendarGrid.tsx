@@ -3,7 +3,6 @@ import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { selectedEventId, deselectEvent } from "../../stores/eventSelection";
 
 // Sliding window: small buffer since we're not virtualizing
 const BUFFER_DAYS = 7; // Days on each side
@@ -217,30 +216,18 @@ export function CalendarGrid() {
 
   // Handle keyboard events for event deletion
   const handleKeyDown = (e: KeyboardEvent) => {
-    const eventId = selectedEventId();
-    if (!eventId) return;
+    const activeEl = document.activeElement as HTMLElement | null;
+    const eventWrapper = activeEl?.closest("[data-event-id]") as HTMLElement | null;
+    if (!eventWrapper) return;
 
     if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      // Find the selected event element and trigger burn
-      const eventElement = document.querySelector(
-        `[data-event-id="${eventId}"]`
-      ) as HTMLElement | null;
-      if (eventElement && (eventElement as any).triggerBurn) {
-        (eventElement as any).triggerBurn();
+      if ((eventWrapper as any).triggerBurn) {
+        (eventWrapper as any).triggerBurn();
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
-      deselectEvent();
-    }
-  };
-
-  // Handle click outside to deselect
-  const handleContainerClick = (e: MouseEvent) => {
-    // Only deselect if clicking directly on the container, not on an event
-    const target = e.target as HTMLElement;
-    if (!target.closest("[data-event-id]")) {
-      deselectEvent();
+      activeEl?.blur();
     }
   };
 
@@ -325,7 +312,6 @@ export function CalendarGrid() {
     <div
       ref={containerRef}
       class="flex-1 flex flex-col max-h-full overflow-hidden"
-      onClick={handleContainerClick}
     >
       {/* Month/Year indicator */}
       <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0">

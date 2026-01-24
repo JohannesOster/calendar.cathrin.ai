@@ -95,11 +95,11 @@ button {
   animation: flash-highlight 2s ease-out forwards;
 }
 
-/* Event selection state */
-.event-selected {
-  outline: 2px solid currentColor;
-  outline-offset: -2px;
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+/* Calendar event focus state - use :focus (not :focus-visible) for consistent selection feedback */
+/* Use stacked box-shadow instead of outline to respect border-radius */
+.calendar-event:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px currentColor, 0 0 0 2px rgba(0, 0, 0, 0.08);
 }
 
 /* Paper burning animation - video-based fire effect */
