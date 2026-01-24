@@ -104,6 +104,15 @@ The calendar grid uses percentage-based flexbox widths (`width: ${(TOTAL_DAYS / 
 ### Scroll Synchronization
 The time column uses CSS transform (`translateY`) instead of a separate scrollable container for vertical sync with the main grid. This provides pixel-perfect alignment and avoids scroll event race conditions.
 
+### Drag-and-Drop with solid-dnd
+Uses `@thisbeyond/solid-dnd` for sortable lists. Pattern:
+1. Wrap with `<DragDropProvider>` and `<DragDropSensors>`
+2. Use `<SortableProvider ids={orderedIds()}>` with reactive ID array
+3. Each item uses `createSortable(id)` returning `{ ref, transform, isActiveDraggable }`
+4. Apply `transformStyle(sortable.transform)` for smooth animations
+5. Use `<DragOverlay>` for custom drag ghost (renders above everything)
+6. Handle `onDragEnd` to persist new order
+
 ### TypeScript Configuration
 - Strict mode enabled
 - JSX preserved with `jsxImportSource: "solid-js"`

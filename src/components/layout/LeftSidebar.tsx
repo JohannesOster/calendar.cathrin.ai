@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-solid";
 import {
-  connectedAccounts,
   authError,
   addAccount,
   deleteAccount,
@@ -25,7 +24,22 @@ import {
   setAuthError,
   defaultCalendarId,
   setDefaultCalendar,
+  orderedAccounts,
+  orderedAccountIds,
+  setAccountOrderAndPersist,
+  type CalendarAccount,
 } from "../../stores/accounts";
+import {
+  DragDropProvider,
+  DragDropSensors,
+  DragOverlay,
+  SortableProvider,
+  createSortable,
+  mostIntersecting,
+  useDragDropContext,
+  type Id,
+  type DragEvent,
+} from "@thisbeyond/solid-dnd";
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = createSignal("");
@@ -233,15 +247,6 @@ export function LeftSidebar() {
     return { start: startDate.getTime(), end: endDate.getTime() };
   });
 
-  // Check if a day is within the visible 7-day window in the main grid
-  const isVisibleDay = (date: Date): boolean => {
-    const range = visibleRange();
-    const checkDate = new Date(date);
-    checkDate.setHours(12, 0, 0, 0);
-    const checkTime = checkDate.getTime();
-    return checkTime >= range.start && checkTime <= range.end;
-  };
-
   // Handle day click - navigate main grid to show the week (Sunday first), flash the clicked day
   const handleDayClick = (dayInfo: DayInfo) => {
     const weekStart = getSundayOfWeek(dayInfo.date);
@@ -424,7 +429,7 @@ export function LeftSidebar() {
         </Show>
 
         {/* Empty state */}
-        <Show when={connectedAccounts().length === 0}>
+        <Show when={orderedAccounts().length === 0}>
           <div class="text-center py-6">
             <p class="text-sm text-[#91918e] mb-2">No calendars connected</p>
             <p class="text-xs text-[#b8b8b5]">
@@ -433,124 +438,15 @@ export function LeftSidebar() {
           </div>
         </Show>
 
-        <For each={connectedAccounts()}>
-          {(account) => {
-            const collapsed = () => isAccountCollapsed(account.id);
-            return (
-              <div class="mb-4">
-                {/* Account header - clickable row */}
-                <div class="group relative">
-                  <div
-                    onClick={() => toggleAccountCollapse(account.id)}
-                    class="flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer hover:bg-[#efefef] transition-colors"
-                  >
-                    <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
-                      {account.email}
-                    </span>
-                    {/* Chevron indicator */}
-                    <span class="text-[#91918e] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {collapsed() ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </span>
-                    {/* More menu button - separate click zone */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAccountMenuOpen(accountMenuOpen() === account.id ? null : account.id);
-                      }}
-                      class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                    >
-                      <MoreHorizontal size={14} />
-                    </button>
-                  </div>
-
-                  {/* Account dropdown menu */}
-                  <Show when={accountMenuOpen() === account.id}>
-                    <div class="absolute right-0 top-8 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
-                      <button
-                        onClick={() => handleRefreshAccount(account.id)}
-                        class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
-                      >
-                        <RefreshCw size={14} />
-                        Refresh
-                      </button>
-                      <button
-                        onClick={() => handleRemoveAccount(account.id)}
-                        class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
-                      >
-                        <Trash2 size={14} />
-                        Remove
-                      </button>
-                    </div>
-                  </Show>
-                </div>
-
-                {/* Calendars - collapsible with animation */}
-                <div
-                  class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
-                  style={{
-                    "max-height": collapsed() ? "0px" : `${account.calendars.length * 36 + 8}px`,
-                    opacity: collapsed() ? "0" : "1",
-                  }}
-                >
-                  <div class="space-y-0.5 pt-1">
-                    <For each={account.calendars}>
-                      {(calendar) => {
-                        const isDefault = () => defaultCalendarId() === calendar.id;
-                        return (
-                          <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group">
-                            {/* Color indicator - clickable to set as default */}
-                            <button
-                              onClick={() => setDefaultCalendar(calendar.id)}
-                              class="w-3 h-3 rounded flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
-                              style={{
-                                "background-color": calendar.color,
-                                "box-shadow": isDefault()
-                                  ? `0 0 0 2px white, 0 0 0 4px ${calendar.color}`
-                                  : undefined,
-                              }}
-                              title="Set as default calendar"
-                            />
-
-                            {/* Calendar name */}
-                            <span
-                              class="flex-1 text-sm truncate"
-                              classList={{
-                                "text-[#37352f]": calendar.visible,
-                                "text-[#91918e] line-through": !calendar.visible,
-                              }}
-                            >
-                              {calendar.name}
-                            </span>
-
-                            {/* Default badge */}
-                            <Show when={isDefault()}>
-                              <span class="text-xs text-[#91918e]">Default</span>
-                            </Show>
-
-                            {/* Visibility toggle */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
-                              }}
-                              class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {calendar.visible ? (
-                                <Eye size={14} />
-                              ) : (
-                                <EyeOff size={14} />
-                              )}
-                            </button>
-                          </div>
-                        );
-                      }}
-                    </For>
-                  </div>
-                </div>
-              </div>
-            );
-          }}
-        </For>
+        <AccountsList
+          isAccountCollapsed={isAccountCollapsed}
+          toggleAccountCollapse={toggleAccountCollapse}
+          accountMenuOpen={accountMenuOpen}
+          setAccountMenuOpen={setAccountMenuOpen}
+          handleRefreshAccount={handleRefreshAccount}
+          handleRemoveAccount={handleRemoveAccount}
+          handleToggleCalendarVisibility={handleToggleCalendarVisibility}
+        />
       </div>
 
       {/* Add calendar button */}
@@ -563,6 +459,329 @@ export function LeftSidebar() {
           <span>Add calendar account</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+// Props for accounts list components
+interface AccountsListProps {
+  isAccountCollapsed: (id: string) => boolean;
+  toggleAccountCollapse: (id: string) => void;
+  accountMenuOpen: () => string | null;
+  setAccountMenuOpen: (id: string | null) => void;
+  handleRefreshAccount: (id: string) => Promise<void>;
+  handleRemoveAccount: (id: string) => Promise<void>;
+  handleToggleCalendarVisibility: (
+    accountId: string,
+    calendarId: string,
+    currentVisible: boolean
+  ) => Promise<void>;
+}
+
+// Accounts list with drag-and-drop support
+// Uses onDragOver reordering instead of transforms to handle variable-height items
+// See: https://github.com/thisbeyond/solid-dnd/issues/97
+function AccountsList(props: AccountsListProps) {
+  const [activeId, setActiveId] = createSignal<Id | null>(null);
+  // Track order during drag (not persisted until drag ends)
+  const [dragOrder, setDragOrder] = createSignal<string[] | null>(null);
+
+  // Use drag order during drag, otherwise use persisted order
+  const displayOrder = () => dragOrder() ?? orderedAccountIds();
+
+  // Get the active account for the drag overlay
+  const activeAccount = () => {
+    const id = activeId();
+    if (!id) return null;
+    return orderedAccounts().find((a) => a.id === id) ?? null;
+  };
+
+  const onDragStart = (event: DragEvent) => {
+    setActiveId(event.draggable.id);
+    // Initialize drag order from current order
+    setDragOrder([...orderedAccountIds()]);
+  };
+
+  const onDragOver = (event: DragEvent) => {
+    const { draggable, droppable } = event;
+    if (!droppable) return;
+
+    const currentOrder = dragOrder();
+    if (!currentOrder) return;
+
+    const fromIndex = currentOrder.indexOf(draggable.id as string);
+    const toIndex = currentOrder.indexOf(droppable.id as string);
+
+    if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
+      const newOrder = [...currentOrder];
+      const [removed] = newOrder.splice(fromIndex, 1);
+      newOrder.splice(toIndex, 0, removed);
+      setDragOrder(newOrder);
+    }
+  };
+
+  const onDragEnd = (event: DragEvent) => {
+    const finalOrder = dragOrder();
+
+    // Persist the final order if it changed
+    if (finalOrder) {
+      const originalOrder = orderedAccountIds();
+      const orderChanged = finalOrder.some((id, i) => id !== originalOrder[i]);
+      if (orderChanged) {
+        setAccountOrderAndPersist(finalOrder);
+      }
+    }
+
+    setActiveId(null);
+    setDragOrder(null);
+  };
+
+  return (
+    <DragDropProvider
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      collisionDetector={mostIntersecting}
+    >
+      <DragDropSensors />
+      <SortableProvider ids={displayOrder()}>
+        <SortableAccountsList {...props} displayOrder={displayOrder} />
+      </SortableProvider>
+      <DragOverlay class="z-[9999]">
+        <Show when={activeAccount()}>
+          {(account) => (
+            <div class="opacity-60 bg-white rounded-md shadow-lg px-2 py-1.5 w-56 border border-[#e8e8e8]">
+              <div class="flex items-center gap-1">
+                <span class="text-xs font-medium text-[#91918e] truncate flex-1">
+                  {account().email}
+                </span>
+                <ChevronDown size={14} class="text-[#91918e] flex-shrink-0" />
+                <MoreHorizontal size={14} class="text-[#91918e] flex-shrink-0" />
+              </div>
+            </div>
+          )}
+        </Show>
+      </DragOverlay>
+    </DragDropProvider>
+  );
+}
+
+// Inner list component - renders items based on display order
+function SortableAccountsList(
+  props: AccountsListProps & { displayOrder: () => string[] }
+) {
+  const [, { recomputeLayouts }] = useDragDropContext()!;
+
+  // Get accounts in display order
+  const displayAccounts = () => {
+    const order = props.displayOrder();
+    const accounts = orderedAccounts();
+    return order
+      .map((id) => accounts.find((a) => a.id === id))
+      .filter((a): a is CalendarAccount => a !== undefined);
+  };
+
+  // Recompute layouts when order changes to keep collision detection accurate
+  createEffect(() => {
+    props.displayOrder(); // Track changes
+    // Wait for DOM to update, then recompute layouts
+    requestAnimationFrame(() => {
+      recomputeLayouts();
+    });
+  });
+
+  return (
+    <div class="flex flex-col gap-2">
+      <For each={displayAccounts()}>
+        {(account) => (
+          <SortableAccountItem
+            account={account}
+            isCollapsed={props.isAccountCollapsed(account.id)}
+            toggleCollapse={() => props.toggleAccountCollapse(account.id)}
+            menuOpen={props.accountMenuOpen() === account.id}
+            toggleMenu={() =>
+              props.setAccountMenuOpen(
+                props.accountMenuOpen() === account.id ? null : account.id
+              )
+            }
+            closeMenu={() => props.setAccountMenuOpen(null)}
+            onRefresh={() => props.handleRefreshAccount(account.id)}
+            onRemove={() => props.handleRemoveAccount(account.id)}
+            onToggleCalendarVisibility={props.handleToggleCalendarVisibility}
+          />
+        )}
+      </For>
+    </div>
+  );
+}
+
+// Props for sortable account item
+interface SortableAccountItemProps {
+  account: CalendarAccount;
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
+  menuOpen: boolean;
+  toggleMenu: () => void;
+  closeMenu: () => void;
+  onRefresh: () => Promise<void>;
+  onRemove: () => Promise<void>;
+  onToggleCalendarVisibility: (
+    accountId: string,
+    calendarId: string,
+    currentVisible: boolean
+  ) => Promise<void>;
+}
+
+// Individual sortable account item
+// Note: We don't use transforms for positioning - items actually reorder in the DOM
+// This approach handles variable-height items correctly
+function SortableAccountItem(props: SortableAccountItemProps) {
+  const sortable = createSortable(props.account.id);
+
+  return (
+    <div
+      ref={sortable}
+      class="rounded-md"
+    >
+      {/* Show simple placeholder when dragging, otherwise show full content */}
+      <Show
+        when={!sortable.isActiveDraggable}
+        fallback={
+          <div class="h-8 bg-[#f0f0ee] rounded-md" />
+        }
+      >
+      {/* Account header - draggable row */}
+      <div class="group relative">
+        <div
+          onMouseDown={(e) => {
+            // Prevent text selection
+            if ((e.target as HTMLElement).tagName !== "BUTTON") {
+              e.preventDefault();
+            }
+          }}
+          onClick={() => {
+            // Don't trigger collapse while dragging
+            if (!sortable.isActiveDraggable) {
+              props.toggleCollapse();
+            }
+          }}
+          class="flex items-center gap-1 px-2 py-1.5 rounded cursor-grab hover:bg-[#efefef] transition-colors select-none"
+          classList={{
+            "cursor-grabbing": sortable.isActiveDraggable,
+          }}
+        >
+          <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
+            {props.account.email}
+          </span>
+          {/* Chevron indicator */}
+          <span class="text-[#91918e] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {props.isCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
+          {/* More menu button - separate click zone */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              props.toggleMenu();
+            }}
+            class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </div>
+
+        {/* Account dropdown menu */}
+        <Show when={props.menuOpen}>
+          <div class="absolute right-0 top-8 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
+            <button
+              onClick={async () => {
+                await props.onRefresh();
+                props.closeMenu();
+              }}
+              class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
+            >
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+            <button
+              onClick={async () => {
+                await props.onRemove();
+                props.closeMenu();
+              }}
+              class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
+            >
+              <Trash2 size={14} />
+              Remove
+            </button>
+          </div>
+        </Show>
+      </div>
+
+      {/* Calendars - collapsible with animation */}
+      <div
+        class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{
+          "max-height": props.isCollapsed
+            ? "0px"
+            : `${props.account.calendars.length * 36 + 8}px`,
+          opacity: props.isCollapsed ? "0" : "1",
+        }}
+      >
+        <div class="space-y-0.5 pt-1">
+          <For each={props.account.calendars}>
+            {(calendar) => {
+              const isDefault = () => defaultCalendarId() === calendar.id;
+              return (
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group">
+                  {/* Color indicator - clickable to set as default */}
+                  <button
+                    onClick={() => setDefaultCalendar(calendar.id)}
+                    class="w-3 h-3 rounded flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+                    style={{
+                      "background-color": calendar.color,
+                      "box-shadow": isDefault()
+                        ? `0 0 0 2px white, 0 0 0 4px ${calendar.color}`
+                        : undefined,
+                    }}
+                    title="Set as default calendar"
+                  />
+
+                  {/* Calendar name */}
+                  <span
+                    class="flex-1 text-sm truncate"
+                    classList={{
+                      "text-[#37352f]": calendar.visible,
+                      "text-[#91918e] line-through": !calendar.visible,
+                    }}
+                  >
+                    {calendar.name}
+                  </span>
+
+                  {/* Default badge */}
+                  <Show when={isDefault()}>
+                    <span class="text-xs text-[#91918e]">Default</span>
+                  </Show>
+
+                  {/* Visibility toggle */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      props.onToggleCalendarVisibility(
+                        props.account.id,
+                        calendar.id,
+                        calendar.visible
+                      );
+                    }}
+                    class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    {calendar.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                  </button>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </div>
+      </Show>
     </div>
   );
 }

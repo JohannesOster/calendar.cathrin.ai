@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, createMemo } from "solid-js";
 import {
   getConnectedAccounts,
   removeAccount as removeAccountApi,
@@ -32,6 +32,47 @@ export const [defaultCalendarId, setDefaultCalendarId] = createSignal<
 >(null);
 
 const DEFAULT_CALENDAR_KEY = "default-calendar-id";
+const ACCOUNT_ORDER_KEY = "account-order";
+
+// Account ordering state - stores account IDs in display order
+const [accountOrder, setAccountOrder] = createSignal<string[]>([]);
+
+/**
+ * Get accounts sorted by the user's preferred order
+ */
+export const orderedAccounts = createMemo(() => {
+  const accounts = connectedAccounts();
+  const order = accountOrder();
+
+  // If no order set, return accounts as-is
+  if (order.length === 0) return accounts;
+
+  // Sort accounts by their position in the order array
+  // Accounts not in order go to the end
+  return [...accounts].sort((a, b) => {
+    const aIndex = order.indexOf(a.id);
+    const bIndex = order.indexOf(b.id);
+    // If not in order array, place at end (use large number)
+    const aPos = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+    const bPos = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+    return aPos - bPos;
+  });
+});
+
+/**
+ * Get the ordered account IDs for SortableProvider
+ */
+export const orderedAccountIds = createMemo(() =>
+  orderedAccounts().map((a) => a.id)
+);
+
+/**
+ * Update account order and persist to localStorage
+ */
+export function setAccountOrderAndPersist(newOrder: string[]): void {
+  setAccountOrder(newOrder);
+  localStorage.setItem(ACCOUNT_ORDER_KEY, JSON.stringify(newOrder));
+}
 
 /**
  * Set the default calendar for new events
@@ -69,6 +110,21 @@ export async function initializeAccounts(): Promise<void> {
       } else {
         // Default calendar was deleted, clear the saved value
         localStorage.removeItem(DEFAULT_CALENDAR_KEY);
+      }
+    }
+
+    // Load account order from localStorage
+    const savedOrder = localStorage.getItem(ACCOUNT_ORDER_KEY);
+    if (savedOrder) {
+      try {
+        const order = JSON.parse(savedOrder);
+        // Filter to only include accounts that still exist
+        const validOrder = order.filter((id: string) =>
+          accounts.some((a) => a.id === id)
+        );
+        setAccountOrder(validOrder);
+      } catch {
+        // Invalid JSON, ignore
       }
     }
   } catch (error) {
