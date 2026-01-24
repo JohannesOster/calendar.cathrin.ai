@@ -1,5 +1,7 @@
-import { createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { createSignal, createEffect, onCleanup, Show, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
+import { CalendarEvent } from "./CalendarEvent";
+import { mockEvents } from "../../data/mockEvents";
 
 interface DayColumnProps {
   date: Date;
@@ -69,6 +71,11 @@ export function DayColumn(props: DayColumnProps) {
     return (totalMinutes / 60) * hourHeight;
   };
 
+  // Filter events for this day
+  const dayEvents = () => {
+    return mockEvents.filter((event) => isSameDay(event.start, props.date));
+  };
+
   return (
     <div
       class="relative [contain:strict]"
@@ -87,6 +94,11 @@ export function DayColumn(props: DayColumnProps) {
           "background-size": "100% var(--grid-hour-height)",
         }}
       />
+
+      {/* Calendar events */}
+      <For each={dayEvents()}>
+        {(event) => <CalendarEvent event={event} />}
+      </For>
 
       {/* Current time indicator - only show on today's column */}
       {isToday() && (

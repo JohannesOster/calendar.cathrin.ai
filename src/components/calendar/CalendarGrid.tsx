@@ -22,6 +22,8 @@ export const [centerDate, setCenterDate] = createSignal(initialSunday);
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
+// The actual first visible day based on scroll position (updates with daily granularity)
+export const [visibleStartDate, setVisibleStartDate] = createSignal(initialSunday);
 
 function formatMonthYear(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -156,6 +158,11 @@ export function CalendarGrid() {
     const colWidth = getColumnWidth();
     if (colWidth > 0) {
       leftmostDayIndex = Math.round(scrollLeft / colWidth);
+      // Update the visible start date signal for mini-calendar sync
+      const days = visibleDays();
+      if (days[leftmostDayIndex]) {
+        setVisibleStartDate(days[leftmostDayIndex]);
+      }
     }
 
     // Update month display and check buffer
@@ -233,6 +240,8 @@ export function CalendarGrid() {
           if (headerScrollRef) {
             headerScrollRef.scrollLeft = sundayIndex * colWidth;
           }
+          // Initialize visible start date
+          setVisibleStartDate(days[sundayIndex]);
         }
 
         // Scroll vertically to current time
@@ -269,6 +278,8 @@ export function CalendarGrid() {
           if (headerScrollRef) {
             headerScrollRef.scrollLeft = centerIndex * colWidth;
           }
+          // Update visible start date for mini-calendar sync
+          setVisibleStartDate(days[centerIndex]);
           updateDisplayedMonth();
         }
       }
@@ -283,10 +294,9 @@ export function CalendarGrid() {
       </div>
 
       {/* Header row with date headers */}
-      <div class="flex border-b border-[#e8e8e8] bg-white shrink-0 h-16">
+      <div class="flex border-b border-[#e8e8e8] bg-white shrink-0 h-10">
         {/* Time column spacer */}
-        <div class="w-[var(--grid-time-col-width)] shrink-0 flex items-center justify-end pr-2 border-r border-[#e8e8e8]">
-          <span class="text-xs text-[#91918e]">All-day</span>
+        <div class="w-[var(--grid-time-col-width)] shrink-0 border-r border-[#e8e8e8]">
         </div>
 
         {/* Scrollable date headers */}
