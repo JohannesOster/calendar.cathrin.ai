@@ -93,18 +93,38 @@ export function CalendarEvent(props: CalendarEventProps) {
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
       >
-        <div
-          class="text-xs font-medium line-clamp-2 leading-tight"
-          style={{ color: props.event.color }}
+        <Show
+          when={getHeight() >= 40}
+          fallback={
+            <div class="truncate text-xs leading-tight">
+              <span
+                class="font-medium"
+                style={{ color: props.event.color }}
+              >
+                {props.event.title}
+              </span>
+              <span
+                class="text-[10px] font-light ml-1.5"
+                style={{ color: props.event.color }}
+              >
+                {formatTimeRange(props.event.start, props.event.end)}
+              </span>
+            </div>
+          }
         >
-          {props.event.title}
-        </div>
-        <div
-          class="text-xs font-light mt-0.5"
-          style={{ color: props.event.color }}
-        >
-          {formatTimeRange(props.event.start, props.event.end)}
-        </div>
+          <div
+            class="text-xs font-medium line-clamp-2 leading-tight"
+            style={{ color: props.event.color }}
+          >
+            {props.event.title}
+          </div>
+          <div
+            class="text-[10px] font-light mt-0.5"
+            style={{ color: props.event.color }}
+          >
+            {formatTimeRange(props.event.start, props.event.end)}
+          </div>
+        </Show>
       </div>
 
       {/* Fire GIF overlay - sibling to content, not clipped */}
