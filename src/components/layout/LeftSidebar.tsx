@@ -35,10 +35,11 @@ import {
   DragOverlay,
   SortableProvider,
   createSortable,
-  mostIntersecting,
   useDragDropContext,
   type Id,
   type DragEvent,
+  type Droppable,
+  type CollisionDetector,
 } from "@thisbeyond/solid-dnd";
 
 export function LeftSidebar() {
@@ -478,6 +479,14 @@ interface AccountsListProps {
   ) => Promise<void>;
 }
 
+// Hysteresis state for preventing rapid back-and-forth swaps
+interface SwapRecord {
+  fromId: string;
+  toId: string;
+  pointerY: number;
+  direction: "down" | "up"; // down = fromIndex < toIndex
+}
+
 // Accounts list with drag-and-drop support
 // Uses onDragOver reordering instead of transforms to handle variable-height items
 // See: https://github.com/thisbeyond/solid-dnd/issues/97
@@ -485,6 +494,10 @@ function AccountsList(props: AccountsListProps) {
   const [activeId, setActiveId] = createSignal<Id | null>(null);
   // Track order during drag (not persisted until drag ends)
   const [dragOrder, setDragOrder] = createSignal<string[] | null>(null);
+  // Track the last swap to implement hysteresis
+  let lastSwap: SwapRecord | null = null;
+  // Minimum pixels the pointer must move past the swap point to trigger a reverse swap
+  const HYSTERESIS_THRESHOLD = 20;
 
   // Use drag order during drag, otherwise use persisted order
   const displayOrder = () => dragOrder() ?? orderedAccountIds();
@@ -496,10 +509,89 @@ function AccountsList(props: AccountsListProps) {
     return orderedAccounts().find((a) => a.id === id) ?? null;
   };
 
+  // The placeholder shown during drag is always h-8 (32px), regardless of expanded state
+  const PLACEHOLDER_HEIGHT = 32;
+
+  // Custom collision detector with hysteresis
+  // Uses intersection + closestCenter logic to prevent rapid swaps
+  const hysteresisCollisionDetector: CollisionDetector = (draggable, droppables, _context) => {
+    // Use transformed position (during drag) with fallback to layout
+    const draggableLayout = draggable.transformed ?? draggable.layout;
+    if (!draggableLayout) return null;
+
+    // IMPORTANT: Use placeholder height (32px), not the stale transformed.height
+    // When dragging an expanded account, the DOM shows a 32px placeholder,
+    // but transformed.height still contains the old expanded height (250px+)
+    const draggableTop = draggableLayout.y;
+    const draggableBottom = draggableLayout.y + PLACEHOLDER_HEIGHT;
+    const draggableCenter = draggableLayout.y + PLACEHOLDER_HEIGHT / 2;
+
+    // Find droppables that the draggable actually OVERLAPS with
+    // Then pick the one with the closest center
+    let closestDroppable: Droppable | null = null;
+    let minDistance = Infinity;
+
+    for (const droppable of droppables) {
+      if (droppable.id === draggable.id) continue;
+
+      const droppableLayout = droppable.layout;
+      if (!droppableLayout) continue;
+
+      const droppableTop = droppableLayout.y;
+      const droppableBottom = droppableLayout.y + droppableLayout.height;
+
+      // Check if draggable overlaps with this droppable (vertical intersection)
+      const hasOverlap = draggableBottom > droppableTop && draggableTop < droppableBottom;
+      if (!hasOverlap) continue;
+
+      const droppableCenter = droppableLayout.y + droppableLayout.height / 2;
+      const distance = Math.abs(draggableCenter - droppableCenter);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestDroppable = droppable;
+      }
+    }
+
+    if (!closestDroppable) return null;
+
+    // Check if this would be a reverse swap (swapping back with same target)
+    if (lastSwap) {
+      // Reverse swap = same draggable trying to swap with the same target again
+      const isReverseSwap =
+        lastSwap.fromId === draggable.id as string &&
+        lastSwap.toId === closestDroppable.id as string;
+
+      if (isReverseSwap) {
+        // Get the current center of the target we previously swapped with
+        const targetLayout = closestDroppable.layout;
+        if (targetLayout) {
+          const targetCenter = targetLayout.y + targetLayout.height / 2;
+
+          // Require the draggable to move past the target's center by the threshold
+          if (lastSwap.direction === "down") {
+            // Original swap was downward, reverse requires moving UP past the target
+            if (draggableCenter > targetCenter - HYSTERESIS_THRESHOLD) {
+              return null; // Not far enough up - don't allow swap
+            }
+          } else {
+            // Original swap was upward, reverse requires moving DOWN past the target
+            if (draggableCenter < targetCenter + HYSTERESIS_THRESHOLD) {
+              return null; // Not far enough down - don't allow swap
+            }
+          }
+        }
+      }
+    }
+
+    return closestDroppable;
+  };
+
   const onDragStart = (event: DragEvent) => {
     setActiveId(event.draggable.id);
     // Initialize drag order from current order
     setDragOrder([...orderedAccountIds()]);
+    lastSwap = null;
   };
 
   const onDragOver = (event: DragEvent) => {
@@ -513,6 +605,15 @@ function AccountsList(props: AccountsListProps) {
     const toIndex = currentOrder.indexOf(droppable.id as string);
 
     if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
+      // Record this swap for hysteresis using the transformed (current) position
+      const draggableY = draggable.transformed?.y ?? draggable.layout?.y ?? 0;
+      lastSwap = {
+        fromId: draggable.id as string,
+        toId: droppable.id as string,
+        pointerY: draggableY,
+        direction: fromIndex < toIndex ? "down" : "up",
+      };
+
       const newOrder = [...currentOrder];
       const [removed] = newOrder.splice(fromIndex, 1);
       newOrder.splice(toIndex, 0, removed);
@@ -520,7 +621,7 @@ function AccountsList(props: AccountsListProps) {
     }
   };
 
-  const onDragEnd = (event: DragEvent) => {
+  const onDragEnd = (_event: DragEvent) => {
     const finalOrder = dragOrder();
 
     // Persist the final order if it changed
@@ -534,6 +635,7 @@ function AccountsList(props: AccountsListProps) {
 
     setActiveId(null);
     setDragOrder(null);
+    lastSwap = null;
   };
 
   return (
@@ -541,7 +643,7 @@ function AccountsList(props: AccountsListProps) {
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      collisionDetector={mostIntersecting}
+      collisionDetector={hysteresisCollisionDetector}
     >
       <DragDropSensors />
       <SortableProvider ids={displayOrder()}>
