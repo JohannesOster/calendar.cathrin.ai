@@ -2,6 +2,7 @@ import { createSignal, For, onMount, onCleanup, createEffect, createMemo } from 
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
+import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 
 // Sliding window: small buffer since we're not virtualizing
 const BUFFER_DAYS = 7; // Days on each side
@@ -317,8 +318,9 @@ export function CalendarGrid() {
       <div class="flex-1 flex min-h-0 overflow-hidden">
         {/* Time column - fixed, syncs via transform (not scrollable) */}
         <div class="w-[var(--grid-time-col-width)] shrink-0 border-r border-[#e8e8e8] bg-white overflow-y-hidden">
-          <div ref={timeColumnInnerRef} style={{ height: `${TOTAL_HEIGHT}px` }}>
+          <div ref={timeColumnInnerRef} class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
             <TimeColumn />
+            <CurrentTimeBadge />
           </div>
         </div>
 
@@ -329,7 +331,7 @@ export function CalendarGrid() {
           onScroll={handleScrollWithSnap}
         >
           <div
-            class="flex"
+            class="flex relative"
             style={{
               width: `${(TOTAL_DAYS / VISIBLE_DAYS) * 100}%`,
               height: `${TOTAL_HEIGHT}px`
@@ -342,6 +344,11 @@ export function CalendarGrid() {
                 </div>
               )}
             </For>
+            {/* Current time indicator line spanning all columns */}
+            <CurrentTimeLine
+              totalDays={TOTAL_DAYS}
+              visibleDaysCount={VISIBLE_DAYS}
+            />
           </div>
         </div>
       </div>
