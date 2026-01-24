@@ -38,15 +38,12 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
 
   return (
     <div class="rounded-md">
-      {/* Show placeholder when account is being dragged */}
-      <Show when={sortable.isActiveDraggable}>
-        <div class="h-8 bg-[#f0f0ee] rounded-md" />
-      </Show>
-
-      {/* Show full content when not dragging */}
-      <Show when={!sortable.isActiveDraggable}>
-        {/* Account header - only this part has the sortable ref for account dragging */}
-        <div ref={sortable} class="group relative">
+      {/* Account header - ref always attached, content conditionally shows placeholder */}
+      <div ref={sortable} class="group relative">
+        <Show
+          when={!sortable.isActiveDraggable}
+          fallback={<div class="h-8 bg-[#f0f0ee] rounded-md" />}
+        >
           <div
             onMouseDown={(e) => {
               // Prevent text selection
@@ -113,9 +110,11 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
               </button>
             </div>
           </Show>
-        </div>
+        </Show>
+      </div>
 
-        {/* Calendars - outside of account sortable ref, has its own SortableProvider */}
+      {/* Calendars - separate from account header, has its own SortableProvider */}
+      <Show when={!sortable.isActiveDraggable}>
         <div
           class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
