@@ -13,8 +13,8 @@ export const SIDEBAR = {
   // Animation timings
   FLASH_CLEAR_DELAY: 50,
 
-  // Drag and drop
-  HYSTERESIS_THRESHOLD: 20,
+  // Drag and drop - trigger zone is top/bottom X% of each item
+  TRIGGER_ZONE_PERCENT: 0.15,
 } as const;
 
 export const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;

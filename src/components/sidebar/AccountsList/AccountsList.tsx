@@ -8,7 +8,7 @@ import {
   type Id,
   type DragEvent,
 } from "@thisbeyond/solid-dnd";
-import { ChevronDown, MoreHorizontal, X } from "lucide-solid";
+import { ChevronDown, Eye, EyeOff, MoreHorizontal, X } from "lucide-solid";
 import {
   authError,
   setAuthError,
@@ -18,7 +18,12 @@ import {
   updateCalendarVisibility,
   refreshAccount,
   deleteAccount,
+  getOrderedCalendars,
+  getOrderedCalendarIds,
+  setCalendarOrderAndPersist,
+  defaultCalendarId,
   type CalendarAccount,
+  type Calendar,
 } from "../../../stores/accounts";
 import {
   isAccountCollapsed,
@@ -28,28 +33,80 @@ import {
   closeAccountMenu,
 } from "../../../stores/sidebar-ui";
 import { SIDEBAR } from "../../../constants/sidebar";
-import { createHysteresisCollisionDetector, type SwapRecord } from "./collisionDetector";
+import { createTriggerZoneCollisionDetector } from "./collisionDetector";
 import { SortableAccountItem } from "./SortableAccountItem";
+
+// Type to track what kind of item is being dragged
+type DragType = "account" | "calendar";
+
+interface CalendarDragInfo {
+  accountId: string;
+  calendar: Calendar;
+}
 
 export function AccountsList() {
   const [activeId, setActiveId] = createSignal<Id | null>(null);
+  const [dragType, setDragType] = createSignal<DragType | null>(null);
   // Track order during drag (not persisted until drag ends)
   const [dragOrder, setDragOrder] = createSignal<string[] | null>(null);
-  // Track the last swap to implement hysteresis
-  let lastSwap: SwapRecord | null = null;
+  // Track calendar order during drag for a specific account
+  const [calendarDragAccountId, setCalendarDragAccountId] = createSignal<
+    string | null
+  >(null);
+  const [calendarDragOrder, setCalendarDragOrder] = createSignal<
+    string[] | null
+  >(null);
 
   // Use drag order during drag, otherwise use persisted order
   const displayOrder = () => dragOrder() ?? orderedAccountIds();
 
+  // Get calendar display order for an account
+  const getCalendarDisplayOrder = (accountId: string) => {
+    if (calendarDragAccountId() === accountId && calendarDragOrder()) {
+      return calendarDragOrder()!;
+    }
+    return getOrderedCalendarIds(accountId);
+  };
+
+  // Get ordered calendars for an account during display
+  const getDisplayCalendars = (accountId: string): Calendar[] => {
+    const order = getCalendarDisplayOrder(accountId);
+    const calendars = getOrderedCalendars(accountId);
+    // Sort by display order
+    return order
+      .map((id) => calendars.find((c) => c.id === id))
+      .filter((c): c is Calendar => c !== undefined);
+  };
+
+  // Determine if a draggable ID is an account or calendar
+  const isAccountId = (id: string): boolean => {
+    return orderedAccounts().some((a) => a.id === id);
+  };
+
   // Get the active account for the drag overlay
   const activeAccount = () => {
     const id = activeId();
-    if (!id) return null;
+    if (!id || dragType() !== "account") return null;
     return orderedAccounts().find((a) => a.id === id) ?? null;
   };
 
-  // Create hysteresis-aware collision detector
-  const collisionDetector = createHysteresisCollisionDetector(() => lastSwap);
+  // Get the active calendar for the drag overlay
+  const activeCalendarInfo = (): CalendarDragInfo | null => {
+    const id = activeId();
+    const accountId = calendarDragAccountId();
+    if (!id || dragType() !== "calendar" || !accountId) return null;
+
+    const account = orderedAccounts().find((a) => a.id === accountId);
+    if (!account) return null;
+
+    const calendar = account.calendars.find((c) => c.id === id);
+    if (!calendar) return null;
+
+    return { accountId, calendar };
+  };
+
+  // Create trigger zone collision detector (no hysteresis needed)
+  const collisionDetector = createTriggerZoneCollisionDetector(isAccountId);
 
   const handleToggleCalendarVisibility = async (
     accountId: string,
@@ -82,53 +139,94 @@ export function AccountsList() {
   };
 
   const onDragStart = (event: DragEvent) => {
-    setActiveId(event.draggable.id);
-    setDragOrder([...orderedAccountIds()]);
-    lastSwap = null;
+    const id = event.draggable.id as string;
+    setActiveId(id);
+
+    if (isAccountId(id)) {
+      // Dragging an account
+      setDragType("account");
+      setDragOrder([...orderedAccountIds()]);
+    } else {
+      // Dragging a calendar - find which account it belongs to
+      setDragType("calendar");
+      const account = orderedAccounts().find((a) =>
+        a.calendars.some((c) => c.id === id)
+      );
+      if (account) {
+        setCalendarDragAccountId(account.id);
+        setCalendarDragOrder([...getOrderedCalendarIds(account.id)]);
+      }
+    }
   };
 
   const onDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event;
     if (!droppable) return;
 
-    const currentOrder = dragOrder();
-    if (!currentOrder) return;
+    const currentDragType = dragType();
 
-    const fromIndex = currentOrder.indexOf(draggable.id as string);
-    const toIndex = currentOrder.indexOf(droppable.id as string);
+    if (currentDragType === "account") {
+      // Account drag logic
+      const currentOrder = dragOrder();
+      if (!currentOrder) return;
 
-    if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
-      // Record this swap for hysteresis
-      const draggableY = draggable.transformed?.y ?? draggable.layout?.y ?? 0;
-      lastSwap = {
-        fromId: draggable.id as string,
-        toId: droppable.id as string,
-        pointerY: draggableY,
-        direction: fromIndex < toIndex ? "down" : "up",
-      };
+      const fromIndex = currentOrder.indexOf(draggable.id as string);
+      const toIndex = currentOrder.indexOf(droppable.id as string);
 
-      const newOrder = [...currentOrder];
-      const [removed] = newOrder.splice(fromIndex, 1);
-      newOrder.splice(toIndex, 0, removed);
-      setDragOrder(newOrder);
+      if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
+        const newOrder = [...currentOrder];
+        const [removed] = newOrder.splice(fromIndex, 1);
+        newOrder.splice(toIndex, 0, removed);
+        setDragOrder(newOrder);
+      }
+    } else if (currentDragType === "calendar") {
+      // Calendar drag logic - only within the same account
+      const currentOrder = calendarDragOrder();
+      if (!currentOrder) return;
+
+      const fromIndex = currentOrder.indexOf(draggable.id as string);
+      const toIndex = currentOrder.indexOf(droppable.id as string);
+
+      if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
+        const newOrder = [...currentOrder];
+        const [removed] = newOrder.splice(fromIndex, 1);
+        newOrder.splice(toIndex, 0, removed);
+        setCalendarDragOrder(newOrder);
+      }
     }
   };
 
   const onDragEnd = (_event: DragEvent) => {
-    const finalOrder = dragOrder();
+    const currentDragType = dragType();
 
-    // Persist the final order if it changed
-    if (finalOrder) {
-      const originalOrder = orderedAccountIds();
-      const orderChanged = finalOrder.some((id, i) => id !== originalOrder[i]);
-      if (orderChanged) {
-        setAccountOrderAndPersist(finalOrder);
+    if (currentDragType === "account") {
+      // Persist account order
+      const finalOrder = dragOrder();
+      if (finalOrder) {
+        const originalOrder = orderedAccountIds();
+        const orderChanged = finalOrder.some((id, i) => id !== originalOrder[i]);
+        if (orderChanged) {
+          setAccountOrderAndPersist(finalOrder);
+        }
       }
+      setDragOrder(null);
+    } else if (currentDragType === "calendar") {
+      // Persist calendar order for the account
+      const accountId = calendarDragAccountId();
+      const finalOrder = calendarDragOrder();
+      if (accountId && finalOrder) {
+        const originalOrder = getOrderedCalendarIds(accountId);
+        const orderChanged = finalOrder.some((id, i) => id !== originalOrder[i]);
+        if (orderChanged) {
+          setCalendarOrderAndPersist(accountId, finalOrder);
+        }
+      }
+      setCalendarDragAccountId(null);
+      setCalendarDragOrder(null);
     }
 
     setActiveId(null);
-    setDragOrder(null);
-    lastSwap = null;
+    setDragType(null);
   };
 
   return (
@@ -169,9 +267,13 @@ export function AccountsList() {
             handleRefreshAccount={handleRefreshAccount}
             handleRemoveAccount={handleRemoveAccount}
             handleToggleCalendarVisibility={handleToggleCalendarVisibility}
+            getCalendarDisplayOrder={getCalendarDisplayOrder}
+            getDisplayCalendars={getDisplayCalendars}
+            calendarDragOrder={calendarDragOrder}
           />
         </SortableProvider>
         <DragOverlay class="z-[9999]">
+          {/* Account drag overlay */}
           <Show when={activeAccount()}>
             {(account) => (
               <div class="opacity-60 bg-white rounded-md shadow-lg px-2 py-1.5 w-56 border border-[#e8e8e8]">
@@ -184,6 +286,49 @@ export function AccountsList() {
                 </div>
               </div>
             )}
+          </Show>
+          {/* Calendar drag overlay */}
+          <Show when={activeCalendarInfo()}>
+            {(info) => {
+              const calendar = () => info().calendar;
+              const isDefault = () => defaultCalendarId() === calendar().id;
+              return (
+                <div class="opacity-60 bg-white rounded-md shadow-lg px-2 py-1.5 w-52 border border-[#e8e8e8]">
+                  <div class="flex items-center gap-2">
+                    {/* Color swatch */}
+                    <div
+                      class="w-3 h-3 rounded flex-shrink-0"
+                      style={{
+                        "background-color": calendar().color,
+                        "box-shadow": isDefault()
+                          ? `0 0 0 2px white, 0 0 0 4px ${calendar().color}`
+                          : undefined,
+                      }}
+                    />
+                    {/* Calendar name */}
+                    <span
+                      class="flex-1 text-sm truncate"
+                      classList={{
+                        "text-[#37352f]": calendar().visible,
+                        "text-[#91918e] line-through": !calendar().visible,
+                      }}
+                    >
+                      {calendar().name}
+                    </span>
+                    {/* Default badge */}
+                    <Show when={isDefault()}>
+                      <span class="text-xs text-[#91918e]">Default</span>
+                    </Show>
+                    {/* Visibility icon */}
+                    {calendar().visible ? (
+                      <Eye size={SIDEBAR.ICON_MD} class="text-[#91918e] flex-shrink-0" />
+                    ) : (
+                      <EyeOff size={SIDEBAR.ICON_MD} class="text-[#91918e] flex-shrink-0" />
+                    )}
+                  </div>
+                </div>
+              );
+            }}
           </Show>
         </DragOverlay>
       </DragDropProvider>
@@ -201,6 +346,9 @@ interface SortableAccountsListProps {
     calendarId: string,
     currentVisible: boolean
   ) => void;
+  getCalendarDisplayOrder: (accountId: string) => string[];
+  getDisplayCalendars: (accountId: string) => Calendar[];
+  calendarDragOrder: () => string[] | null;
 }
 
 /**
@@ -220,7 +368,8 @@ function SortableAccountsList(props: SortableAccountsListProps) {
 
   // Recompute layouts when order changes to keep collision detection accurate
   createEffect(() => {
-    props.displayOrder(); // Track changes
+    props.displayOrder(); // Track account order changes
+    props.calendarDragOrder(); // Track calendar order changes during drag
     requestAnimationFrame(() => {
       recomputeLayouts();
     });
@@ -240,6 +389,8 @@ function SortableAccountsList(props: SortableAccountsListProps) {
             onRefresh={() => props.handleRefreshAccount(account.id)}
             onRemove={() => props.handleRemoveAccount(account.id)}
             onToggleCalendarVisibility={props.handleToggleCalendarVisibility}
+            orderedCalendarIds={props.getCalendarDisplayOrder(account.id)}
+            orderedCalendars={props.getDisplayCalendars(account.id)}
           />
         )}
       </For>

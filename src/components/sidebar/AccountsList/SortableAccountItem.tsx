@@ -1,9 +1,9 @@
 import { For, Show } from "solid-js";
-import { createSortable } from "@thisbeyond/solid-dnd";
+import { createSortable, SortableProvider } from "@thisbeyond/solid-dnd";
 import { ChevronDown, ChevronUp, MoreHorizontal, RefreshCw, Trash2 } from "lucide-solid";
-import type { CalendarAccount } from "../../../stores/accounts";
+import type { CalendarAccount, Calendar } from "../../../stores/accounts";
 import { SIDEBAR } from "../../../constants/sidebar";
-import { CalendarItem } from "./CalendarItem";
+import { SortableCalendarItem } from "./SortableCalendarItem";
 
 interface SortableAccountItemProps {
   account: CalendarAccount;
@@ -19,6 +19,8 @@ interface SortableAccountItemProps {
     calendarId: string,
     currentVisible: boolean
   ) => void;
+  orderedCalendarIds: string[];
+  orderedCalendars: Calendar[];
 }
 
 /**
@@ -35,14 +37,16 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
   };
 
   return (
-    <div ref={sortable} class="rounded-md">
-      {/* Show simple placeholder when dragging, otherwise show full content */}
-      <Show
-        when={!sortable.isActiveDraggable}
-        fallback={<div class="h-8 bg-[#f0f0ee] rounded-md" />}
-      >
-        {/* Account header - draggable row */}
-        <div class="group relative">
+    <div class="rounded-md">
+      {/* Show placeholder when account is being dragged */}
+      <Show when={sortable.isActiveDraggable}>
+        <div class="h-8 bg-[#f0f0ee] rounded-md" />
+      </Show>
+
+      {/* Show full content when not dragging */}
+      <Show when={!sortable.isActiveDraggable}>
+        {/* Account header - only this part has the sortable ref for account dragging */}
+        <div ref={sortable} class="group relative">
           <div
             onMouseDown={(e) => {
               // Prevent text selection
@@ -111,7 +115,7 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
           </Show>
         </div>
 
-        {/* Calendars - collapsible with animation */}
+        {/* Calendars - outside of account sortable ref, has its own SortableProvider */}
         <div
           class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
@@ -119,17 +123,19 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
             opacity: props.isCollapsed ? "0" : "1",
           }}
         >
-          <div class="space-y-0.5 pt-1">
-            <For each={props.account.calendars}>
-              {(calendar) => (
-                <CalendarItem
-                  calendar={calendar}
-                  accountId={props.account.id}
-                  onToggleVisibility={props.onToggleCalendarVisibility}
-                />
-              )}
-            </For>
-          </div>
+          <SortableProvider ids={props.orderedCalendarIds}>
+            <div class="space-y-0.5 pt-1">
+              <For each={props.orderedCalendars}>
+                {(calendar) => (
+                  <SortableCalendarItem
+                    calendar={calendar}
+                    accountId={props.account.id}
+                    onToggleVisibility={props.onToggleCalendarVisibility}
+                  />
+                )}
+              </For>
+            </div>
+          </SortableProvider>
         </div>
       </Show>
     </div>

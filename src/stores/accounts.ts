@@ -33,9 +33,15 @@ export const [defaultCalendarId, setDefaultCalendarId] = createSignal<
 
 const DEFAULT_CALENDAR_KEY = "default-calendar-id";
 const ACCOUNT_ORDER_KEY = "account-order";
+const CALENDAR_ORDER_KEY_PREFIX = "calendar-order-";
 
 // Account ordering state - stores account IDs in display order
 const [accountOrder, setAccountOrder] = createSignal<string[]>([]);
+
+// Calendar ordering state - stores calendar IDs per account
+const [calendarOrders, setCalendarOrders] = createSignal<
+  Record<string, string[]>
+>({});
 
 /**
  * Get accounts sorted by the user's preferred order
@@ -72,6 +78,48 @@ export const orderedAccountIds = createMemo(() =>
 export function setAccountOrderAndPersist(newOrder: string[]): void {
   setAccountOrder(newOrder);
   localStorage.setItem(ACCOUNT_ORDER_KEY, JSON.stringify(newOrder));
+}
+
+/**
+ * Get calendars for an account sorted by the user's preferred order
+ */
+export function getOrderedCalendars(accountId: string): Calendar[] {
+  const accounts = connectedAccounts();
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) return [];
+
+  const order = calendarOrders()[accountId];
+  if (!order || order.length === 0) return account.calendars;
+
+  // Sort calendars by their position in the order array
+  return [...account.calendars].sort((a, b) => {
+    const aIndex = order.indexOf(a.id);
+    const bIndex = order.indexOf(b.id);
+    const aPos = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+    const bPos = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
+    return aPos - bPos;
+  });
+}
+
+/**
+ * Get ordered calendar IDs for an account (for SortableProvider)
+ */
+export function getOrderedCalendarIds(accountId: string): string[] {
+  return getOrderedCalendars(accountId).map((c) => c.id);
+}
+
+/**
+ * Update calendar order within an account and persist to localStorage
+ */
+export function setCalendarOrderAndPersist(
+  accountId: string,
+  newOrder: string[]
+): void {
+  setCalendarOrders((prev) => ({ ...prev, [accountId]: newOrder }));
+  localStorage.setItem(
+    `${CALENDAR_ORDER_KEY_PREFIX}${accountId}`,
+    JSON.stringify(newOrder)
+  );
 }
 
 /**
@@ -126,6 +174,31 @@ export async function initializeAccounts(): Promise<void> {
       } catch {
         // Invalid JSON, ignore
       }
+    }
+
+    // Load calendar orders from localStorage for each account
+    const calOrders: Record<string, string[]> = {};
+    for (const account of accounts) {
+      const savedCalOrder = localStorage.getItem(
+        `${CALENDAR_ORDER_KEY_PREFIX}${account.id}`
+      );
+      if (savedCalOrder) {
+        try {
+          const order = JSON.parse(savedCalOrder);
+          // Filter to only include calendars that still exist
+          const validOrder = order.filter((id: string) =>
+            account.calendars.some((c) => c.id === id)
+          );
+          if (validOrder.length > 0) {
+            calOrders[account.id] = validOrder;
+          }
+        } catch {
+          // Invalid JSON, ignore
+        }
+      }
+    }
+    if (Object.keys(calOrders).length > 0) {
+      setCalendarOrders(calOrders);
     }
   } catch (error) {
     console.error("Failed to load accounts:", error);
