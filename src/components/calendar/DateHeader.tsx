@@ -23,7 +23,12 @@ export function DateHeader(props: DateHeaderProps) {
   let flashTimeout: number | undefined;
   createEffect(() => {
     const flash = flashDate();
-    const shouldFlash = flash && isSameDay(flash, props.date);
+
+    // Ignore null - only react to explicit flash requests
+    // This prevents canceling ongoing animations when flashDate is cleared
+    if (!flash) return;
+
+    const shouldFlash = isSameDay(flash, props.date);
 
     // Clear any existing timeout when flashDate changes
     if (flashTimeout) {
@@ -37,7 +42,7 @@ export function DateHeader(props: DateHeaderProps) {
         setShowFlash(false);
       }, 2000);
     } else {
-      // Reset if we were previously flashing but no longer match
+      // A different date was flashed, cancel our flash
       setShowFlash(false);
     }
   });

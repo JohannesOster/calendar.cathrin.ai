@@ -139,6 +139,8 @@ export function LeftSidebar() {
     const weekStart = getSundayOfWeek(today);
     setCenterDate(weekStart);
     setFlashDate(today);
+    // Clear after effects have captured the flash, prevents re-triggering on scroll
+    setTimeout(() => setFlashDate(null), 50);
   };
 
   const isTodayDate = (date: Date) => {
@@ -207,6 +209,8 @@ export function LeftSidebar() {
     const weekStart = getSundayOfWeek(dayInfo.date);
     setCenterDate(weekStart);
     setFlashDate(dayInfo.date);
+    // Clear after effects have captured the flash, prevents re-triggering on scroll
+    setTimeout(() => setFlashDate(null), 50);
   };
 
   // Track previous centerDate to detect external navigation changes

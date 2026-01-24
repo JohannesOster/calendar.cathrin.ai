@@ -63,6 +63,8 @@ export function CalendarHeader() {
     sunday.setDate(today.getDate() - dayOfWeek);
     setCenterDate(sunday);
     setFlashDate(today);
+    // Clear after effects have captured the flash, prevents re-triggering on scroll
+    setTimeout(() => setFlashDate(null), 50);
   };
 
   return (
