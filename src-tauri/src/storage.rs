@@ -1,0 +1,196 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tauri::{AppHandle, Wry};
+use tauri_plugin_store::StoreExt;
+use thiserror::Error;
+
+const STORE_PATH: &str = "accounts.json";
+const ACCOUNTS_KEY: &str = "accounts";
+
+#[derive(Error, Debug)]
+pub enum StorageError {
+    #[error("Store error: {0}")]
+    StoreError(String),
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
+    #[error("Account not found: {0}")]
+    AccountNotFound(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredCalendar {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub visible: bool,
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredAccount {
+    pub id: String,
+    pub email: String,
+    pub refresh_token: String,
+    pub access_token: Option<String>,
+    pub token_expires_at: Option<u64>,
+    pub calendars: Vec<StoredCalendar>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AccountsData {
+    accounts: Vec<StoredAccount>,
+}
+
+pub struct AccountStore;
+
+impl AccountStore {
+    /// Get all stored accounts
+    pub fn get_accounts(app: &AppHandle<Wry>) -> Result<Vec<StoredAccount>, StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        Ok(data.accounts)
+    }
+
+    /// Save a new account or update an existing one
+    pub fn save_account(app: &AppHandle<Wry>, account: StoredAccount) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let mut data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        // Update existing account or add new one
+        if let Some(existing) = data.accounts.iter_mut().find(|a| a.id == account.id) {
+            *existing = account;
+        } else {
+            data.accounts.push(account);
+        }
+
+        store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get a specific account by ID
+    pub fn get_account(app: &AppHandle<Wry>, account_id: &str) -> Result<StoredAccount, StorageError> {
+        let accounts = Self::get_accounts(app)?;
+        accounts
+            .into_iter()
+            .find(|a| a.id == account_id)
+            .ok_or_else(|| StorageError::AccountNotFound(account_id.to_string()))
+    }
+
+    /// Remove an account
+    pub fn remove_account(app: &AppHandle<Wry>, account_id: &str) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let mut data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        data.accounts.retain(|a| a.id != account_id);
+
+        store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update calendar visibility for a specific calendar
+    pub fn update_calendar_visibility(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+        calendar_id: &str,
+        visible: bool,
+    ) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let mut data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        if let Some(account) = data.accounts.iter_mut().find(|a| a.id == account_id) {
+            if let Some(calendar) = account.calendars.iter_mut().find(|c| c.id == calendar_id) {
+                calendar.visible = visible;
+            }
+        }
+
+        store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update the access token for an account
+    pub fn update_access_token(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+        access_token: String,
+        expires_at: u64,
+    ) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let mut data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        if let Some(account) = data.accounts.iter_mut().find(|a| a.id == account_id) {
+            account.access_token = Some(access_token);
+            account.token_expires_at = Some(expires_at);
+        }
+
+        store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update calendars for an account (preserving visibility preferences)
+    pub fn update_calendars(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+        new_calendars: Vec<StoredCalendar>,
+    ) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let mut data: AccountsData = store
+            .get(ACCOUNTS_KEY)
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
+
+        if let Some(account) = data.accounts.iter_mut().find(|a| a.id == account_id) {
+            // Build a map of existing visibility preferences
+            let visibility_prefs: HashMap<String, bool> = account
+                .calendars
+                .iter()
+                .map(|c| (c.id.clone(), c.visible))
+                .collect();
+
+            // Update calendars while preserving visibility preferences
+            account.calendars = new_calendars
+                .into_iter()
+                .map(|mut cal| {
+                    if let Some(&visible) = visibility_prefs.get(&cal.id) {
+                        cal.visible = visible;
+                    }
+                    cal
+                })
+                .collect();
+        }
+
+        store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+}

@@ -1,5 +1,5 @@
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
-import { centerDate, setCenterDate, setFlashDate, displayedMonth, visibleStartDate } from "../calendar/CalendarGrid";
+import { centerDate, setCenterDate, setFlashDate, visibleStartDate } from "../calendar/CalendarGrid";
 import {
   Search,
   ChevronLeft,
@@ -9,45 +9,28 @@ import {
   MoreHorizontal,
   Plus,
   RotateCcw,
+  Loader2,
+  RefreshCw,
+  Trash2,
+  X,
 } from "lucide-solid";
-
-interface CalendarAccount {
-  email: string;
-  calendars: Calendar[];
-}
-
-interface Calendar {
-  id: string;
-  name: string;
-  color: string;
-  visible: boolean;
-  isDefault?: boolean;
-}
-
-// Sample data
-const sampleAccounts: CalendarAccount[] = [
-  {
-    email: "user@example.com",
-    calendars: [
-      {
-        id: "1",
-        name: "Personal",
-        color: "#ff7b72",
-        visible: true,
-        isDefault: true,
-      },
-      { id: "2", name: "Work", color: "#79c0ff", visible: true },
-      { id: "3", name: "Family", color: "#a5d6ff", visible: true },
-    ],
-  },
-];
+import {
+  connectedAccounts,
+  isAuthenticating,
+  authError,
+  addAccount,
+  deleteAccount,
+  updateCalendarVisibility,
+  refreshAccount,
+  setAuthError,
+} from "../../stores/accounts";
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = createSignal("");
   const [currentMonth, setCurrentMonth] = createSignal(
     new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
   );
-  const [accounts, setAccounts] = createSignal(sampleAccounts);
+  const [accountMenuOpen, setAccountMenuOpen] = createSignal<string | null>(null);
 
   interface DayInfo {
     day: number;
@@ -167,23 +150,30 @@ export function LeftSidebar() {
     );
   };
 
-  const toggleCalendarVisibility = (accountEmail: string, calendarId: string) => {
-    setAccounts((prev) =>
-      prev.map((account) => {
-        if (account.email === accountEmail) {
-          return {
-            ...account,
-            calendars: account.calendars.map((cal) => {
-              if (cal.id === calendarId) {
-                return { ...cal, visible: !cal.visible };
-              }
-              return cal;
-            }),
-          };
-        }
-        return account;
-      })
-    );
+  const handleToggleCalendarVisibility = async (accountId: string, calendarId: string, currentVisible: boolean) => {
+    try {
+      await updateCalendarVisibility(accountId, calendarId, !currentVisible);
+    } catch (error) {
+      console.error("Failed to toggle calendar visibility:", error);
+    }
+  };
+
+  const handleRemoveAccount = async (accountId: string) => {
+    try {
+      await deleteAccount(accountId);
+      setAccountMenuOpen(null);
+    } catch (error) {
+      console.error("Failed to remove account:", error);
+    }
+  };
+
+  const handleRefreshAccount = async (accountId: string) => {
+    try {
+      await refreshAccount(accountId);
+      setAccountMenuOpen(null);
+    } catch (error) {
+      console.error("Failed to refresh account:", error);
+    }
   };
 
   // Get Sunday of any week
@@ -378,17 +368,63 @@ export function LeftSidebar() {
 
       {/* Calendar Accounts List */}
       <div class="flex-1 overflow-auto p-3">
-        <For each={accounts()}>
+        {/* Auth error message */}
+        <Show when={authError()}>
+          <div class="mb-3 p-2 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+            <span class="flex-1 text-xs text-red-600">{authError()}</span>
+            <button
+              onClick={() => setAuthError(null)}
+              class="p-0.5 rounded hover:bg-red-100 text-red-400"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </Show>
+
+        {/* Empty state */}
+        <Show when={connectedAccounts().length === 0 && !isAuthenticating()}>
+          <div class="text-center py-6">
+            <p class="text-sm text-[#91918e] mb-2">No calendars connected</p>
+            <p class="text-xs text-[#b8b8b5]">
+              Add a Google account to see your calendars
+            </p>
+          </div>
+        </Show>
+
+        <For each={connectedAccounts()}>
           {(account) => (
             <div class="mb-4">
               {/* Account header */}
-              <div class="flex items-center justify-between mb-2 group">
-                <span class="text-xs font-medium text-[#91918e] truncate">
+              <div class="flex items-center justify-between mb-2 group relative">
+                <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
                   {account.email}
                 </span>
-                <button class="p-1 rounded hover:bg-[#efefef] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => setAccountMenuOpen(accountMenuOpen() === account.id ? null : account.id)}
+                  class="p-1 rounded hover:bg-[#efefef] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
+                >
                   <MoreHorizontal size={14} />
                 </button>
+
+                {/* Account dropdown menu */}
+                <Show when={accountMenuOpen() === account.id}>
+                  <div class="absolute right-0 top-6 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
+                    <button
+                      onClick={() => handleRefreshAccount(account.id)}
+                      class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
+                    >
+                      <RefreshCw size={14} />
+                      Refresh
+                    </button>
+                    <button
+                      onClick={() => handleRemoveAccount(account.id)}
+                      class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
+                    >
+                      <Trash2 size={14} />
+                      Remove
+                    </button>
+                  </div>
+                </Show>
               </div>
 
               {/* Calendars */}
@@ -422,7 +458,7 @@ export function LeftSidebar() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleCalendarVisibility(account.email, calendar.id);
+                          handleToggleCalendarVisibility(account.id, calendar.id, calendar.visible);
                         }}
                         class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity"
                       >
@@ -443,9 +479,15 @@ export function LeftSidebar() {
 
       {/* Add calendar button */}
       <div class="p-3 border-t border-[#e8e8e8]">
-        <button class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors">
-          <Plus size={16} />
-          <span>Add calendar account</span>
+        <button
+          onClick={() => addAccount()}
+          disabled={isAuthenticating()}
+          class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Show when={isAuthenticating()} fallback={<Plus size={16} />}>
+            <Loader2 size={16} class="animate-spin" />
+          </Show>
+          <span>{isAuthenticating() ? "Connecting..." : "Add calendar account"}</span>
         </button>
       </div>
     </div>
