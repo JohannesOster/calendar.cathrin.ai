@@ -1,5 +1,15 @@
 use tauri::{Emitter, Manager};
 
+mod calendar_api;
+mod commands;
+mod oauth;
+mod storage;
+
+use commands::{
+    ensure_valid_token, get_connected_accounts, refresh_account_calendars, remove_account,
+    start_oauth_flow, toggle_calendar_visibility,
+};
+
 #[cfg(target_os = "macos")]
 use objc2::rc::Retained;
 #[cfg(target_os = "macos")]
@@ -199,8 +209,20 @@ fn register_fullscreen_observer(ns_window: *mut AnyObject, app_handle: tauri::Ap
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load environment variables from .env file (if it exists)
+    let _ = dotenvy::dotenv();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            start_oauth_flow,
+            get_connected_accounts,
+            remove_account,
+            toggle_calendar_visibility,
+            refresh_account_calendars,
+            ensure_valid_token,
+        ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
