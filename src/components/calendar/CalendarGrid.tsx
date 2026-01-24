@@ -3,6 +3,7 @@ import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
+import { addDays, getSundayOfWeek, isSameDay, formatMonthYear } from "../../lib/date-utils";
 
 // Sliding window: small buffer since we're not virtualizing
 const BUFFER_DAYS = 7; // Days on each side
@@ -26,29 +27,6 @@ export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
 export const [visibleStartDate, setVisibleStartDate] = createSignal(initialSunday);
 
-function formatMonthYear(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
-function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function getSundayOfWeek(date: Date): Date {
-  const result = new Date(date);
-  result.setDate(date.getDate() - date.getDay());
-  return result;
-}
-
-function isSameDay(date1: Date, date2: Date): boolean {
-  return (
-    date1.getDate() === date2.getDate() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getFullYear() === date2.getFullYear()
-  );
-}
 
 export function CalendarGrid() {
   let containerRef: HTMLDivElement | undefined;
