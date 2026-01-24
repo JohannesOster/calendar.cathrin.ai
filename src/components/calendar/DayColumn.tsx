@@ -1,7 +1,7 @@
 import { createSignal, createEffect, onCleanup, Show, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
-import { mockEvents } from "../../data/mockEvents";
+import { events } from "../../data/mockEvents";
 
 interface DayColumnProps {
   date: Date;
@@ -54,7 +54,7 @@ export function DayColumn(props: DayColumnProps) {
 
   // Filter events for this day
   const dayEvents = () => {
-    return mockEvents.filter((event) => isSameDay(event.start, props.date));
+    return events().filter((event) => isSameDay(event.start, props.date));
   };
 
   return (
