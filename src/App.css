@@ -75,6 +75,12 @@ button {
   cursor: pointer;
 }
 
+/* Force grabbing cursor during drag operations */
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
+}
+
 /* Flash highlight animation for mini-calendar navigation */
 @keyframes flash-highlight {
   0% {

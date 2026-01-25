@@ -1,12 +1,17 @@
 import { For, Show } from "solid-js";
-import { createSortable, SortableProvider } from "@thisbeyond/solid-dnd";
-import { createAutoAnimate } from "@formkit/auto-animate/solid";
-import { ChevronDown, ChevronUp, MoreHorizontal, RefreshCw, Trash2 } from "lucide-solid";
+import { SortableProvider } from "@thisbeyond/solid-dnd";
+import {
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
+  RefreshCw,
+  Trash2,
+} from "lucide-solid";
 import type { CalendarAccount, Calendar } from "../../../stores/accounts";
 import { SIDEBAR } from "../../../constants/sidebar";
 import { SortableCalendarItem } from "./SortableCalendarItem";
 
-interface SortableAccountItemProps {
+interface AccountItemProps {
   account: CalendarAccount;
   isCollapsed: boolean;
   toggleCollapse: () => void;
@@ -20,126 +25,88 @@ interface SortableAccountItemProps {
     calendarId: string,
     currentVisible: boolean
   ) => void;
-  // Reactive accessors for drag-and-drop reordering
-  orderedCalendarIds: () => string[];
-  orderedCalendars: () => Calendar[];
+  orderedCalendarIds: string[];
+  orderedCalendars: Calendar[];
 }
 
-/**
- * Individual sortable account item
- * Note: We don't use transforms for positioning - items actually reorder in the DOM
- * This approach handles variable-height items correctly
- */
-export function SortableAccountItem(props: SortableAccountItemProps) {
-  const sortable = createSortable(props.account.id);
-  const [animateCalendars] = createAutoAnimate({ duration: 150 });
-
-  // Compute the max-height for the calendars section
+export function AccountItem(props: AccountItemProps) {
   const calendarsMaxHeight = () => {
     return `${props.account.calendars.length * SIDEBAR.CALENDAR_ROW_HEIGHT + SIDEBAR.CALENDARS_PADDING}px`;
   };
 
   return (
     <div class="rounded-md">
-      {/* Account header - ref always attached, content conditionally shows placeholder */}
-      <div ref={sortable} class="group relative">
-        <Show
-          when={!sortable.isActiveDraggable}
-          fallback={<div class="h-8 bg-[#f0f0ee] rounded-md" />}
+      {/* Account Header */}
+      <div class="group relative">
+        <div
+          onClick={() => props.toggleCollapse()}
+          class="flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-[#efefef] transition-colors select-none"
         >
-          <div
-            onMouseDown={(e) => {
-              // Prevent text selection
-              if ((e.target as HTMLElement).tagName !== "BUTTON") {
-                e.preventDefault();
-              }
+          <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
+            {props.account.email}
+          </span>
+          <span class="text-[#91918e] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            {props.isCollapsed ? (
+              <ChevronUp size={SIDEBAR.ICON_MD} />
+            ) : (
+              <ChevronDown size={SIDEBAR.ICON_MD} />
+            )}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              props.toggleMenu();
             }}
-            onClick={() => {
-              // Don't trigger collapse while dragging
-              if (!sortable.isActiveDraggable) {
-                props.toggleCollapse();
-              }
-            }}
-            class="flex items-center gap-1 px-2 py-1 rounded cursor-grab hover:bg-[#efefef] transition-colors select-none"
-            classList={{
-              "cursor-grabbing": sortable.isActiveDraggable,
-            }}
+            class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
           >
-            <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
-              {props.account.email}
-            </span>
-            {/* Chevron indicator */}
-            <span class="text-[#91918e] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              {props.isCollapsed ? (
-                <ChevronUp size={SIDEBAR.ICON_MD} />
-              ) : (
-                <ChevronDown size={SIDEBAR.ICON_MD} />
-              )}
-            </span>
-            {/* More menu button - separate click zone */}
+            <MoreHorizontal size={SIDEBAR.ICON_MD} />
+          </button>
+        </div>
+
+        <Show when={props.menuOpen}>
+          <div class="absolute right-0 top-8 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                props.toggleMenu();
+              onClick={async () => {
+                await props.onRefresh();
+                props.closeMenu();
               }}
-              class="p-1 rounded hover:bg-[#d8d8d8] text-[#91918e] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
             >
-              <MoreHorizontal size={SIDEBAR.ICON_MD} />
+              <RefreshCw size={SIDEBAR.ICON_MD} />
+              Refresh
+            </button>
+            <button
+              onClick={async () => {
+                await props.onRemove();
+                props.closeMenu();
+              }}
+              class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
+            >
+              <Trash2 size={SIDEBAR.ICON_MD} />
+              Remove
             </button>
           </div>
-
-          {/* Account dropdown menu */}
-          <Show when={props.menuOpen}>
-            <div class="absolute right-0 top-8 z-10 bg-white border border-[#e8e8e8] rounded-md shadow-lg py-1 min-w-[140px]">
-              <button
-                onClick={async () => {
-                  await props.onRefresh();
-                  props.closeMenu();
-                }}
-                class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-[#37352f] hover:bg-[#efefef] text-left"
-              >
-                <RefreshCw size={SIDEBAR.ICON_MD} />
-                Refresh
-              </button>
-              <button
-                onClick={async () => {
-                  await props.onRemove();
-                  props.closeMenu();
-                }}
-                class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 text-left"
-              >
-                <Trash2 size={SIDEBAR.ICON_MD} />
-                Remove
-              </button>
-            </div>
-          </Show>
         </Show>
       </div>
 
-      {/* Calendars - separate from account header, has its own SortableProvider */}
-      {/* Note: Using CSS to hide instead of <Show> to preserve auto-animate ref */}
+      {/* Calendar List */}
       <div
         class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{
-          "max-height":
-            sortable.isActiveDraggable || props.isCollapsed
-              ? "0px"
-              : calendarsMaxHeight(),
-          opacity: sortable.isActiveDraggable || props.isCollapsed ? "0" : "1",
+          "max-height": props.isCollapsed ? "0px" : calendarsMaxHeight(),
+          opacity: props.isCollapsed ? "0" : "1",
         }}
       >
-        <SortableProvider ids={props.orderedCalendarIds()}>
-          <div ref={animateCalendars} class="space-y-0.5 pt-1">
-            <For each={props.orderedCalendars()}>
-              {(calendar) => (
-                <SortableCalendarItem
-                  calendar={calendar}
-                  accountId={props.account.id}
-                  onToggleVisibility={props.onToggleCalendarVisibility}
-                />
-              )}
-            </For>
-          </div>
+        <SortableProvider ids={props.orderedCalendarIds}>
+          <For each={props.orderedCalendars}>
+            {(calendar) => (
+              <SortableCalendarItem
+                calendar={calendar}
+                accountId={props.account.id}
+                onToggleVisibility={props.onToggleCalendarVisibility}
+              />
+            )}
+          </For>
         </SortableProvider>
       </div>
     </div>
