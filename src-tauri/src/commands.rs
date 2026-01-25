@@ -1,11 +1,10 @@
-use crate::calendar_api::{CalendarClient, GoogleCalendar, GoogleEvent};
+use crate::calendar_api::{CalendarClient, GoogleCalendar};
 use crate::oauth::{
     build_auth_url, build_redirect_uri, exchange_code_for_tokens, find_available_port,
     refresh_access_token, wait_for_callback, CallbackResult, OAuthConfig, PkceChallenge,
 };
-use crate::storage::{AccountStore, StoredAccount, StoredCalendar};
+use crate::storage::{AccountStore, EventStore, StoredAccount, StoredCalendar, StoredEvent};
 use serde::{Deserialize, Serialize};
-use chrono::{Duration, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_opener::OpenerExt;
@@ -266,52 +265,104 @@ pub async fn ensure_valid_token(app: AppHandle<Wry>, account_id: String) -> Resu
     }
 }
 
-/// TEST COMMAND: Fetch events for a calendar (for verifying the API works)
-/// This is temporary and will be replaced by a proper implementation in issue #20/#21
+/// Fetch events for all visible calendars in an account
+/// Caches results before returning for instant display on next app launch
 #[tauri::command]
-pub async fn test_fetch_events(
+pub async fn fetch_events(
     app: AppHandle<Wry>,
     account_id: String,
-    calendar_id: String,
-) -> Result<Vec<GoogleEvent>, String> {
-    // Get a valid access token
+    time_min: String,
+    time_max: String,
+) -> Result<Vec<StoredEvent>, String> {
+    // Get account and verify it exists
+    let account = AccountStore::get_account(&app, &account_id).map_err(|e| e.to_string())?;
+
+    // Get visible calendars
+    let visible_calendars: Vec<_> = account.calendars.iter().filter(|c| c.visible).collect();
+
+    // If no visible calendars, return empty and cache empty
+    if visible_calendars.is_empty() {
+        EventStore::save_events(
+            &app,
+            &account_id,
+            Vec::new(),
+            time_min.clone(),
+            time_max.clone(),
+        )
+        .map_err(|e| e.to_string())?;
+        return Ok(Vec::new());
+    }
+
+    // Ensure valid token (refresh if needed)
     let access_token = ensure_valid_token(app.clone(), account_id.clone()).await?;
 
-    // Calculate time window: 30 days before and after today (wider range for testing)
-    let now = Utc::now();
-    let time_min = (now - Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
-    let time_max = (now + Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
-
-    println!("\n========================================");
-    println!("=== TEST: Fetching events ===");
-    println!("========================================");
-    println!("Account ID: {}", account_id);
-    println!("Calendar ID: {}", calendar_id);
-    println!("Calendar ID (encoded): {}", urlencoding::encode(&calendar_id));
-    println!("Time range: {} to {}", time_min, time_max);
-    println!("Access token (first 20 chars): {}...", &access_token[..20.min(access_token.len())]);
-
-    // Fetch events
+    // Fetch events from all visible calendars
     let client = CalendarClient::new();
-    let events = client
-        .fetch_events(&access_token, &calendar_id, &time_min, &time_max)
-        .await
-        .map_err(|e| {
-            println!("=== ERROR: {} ===", e);
-            e.to_string()
-        })?;
+    let mut all_events: Vec<StoredEvent> = Vec::new();
 
-    println!("========================================");
-    println!("=== Found {} events ===", events.len());
-    println!("========================================");
-    for event in &events {
-        let start = event.start.date_time.as_ref()
-            .or(event.start.date.as_ref())
-            .map(|s| s.as_str())
-            .unwrap_or("no start");
-        println!("  - {} ({})", event.summary.as_deref().unwrap_or("(no title)"), start);
+    for calendar in visible_calendars {
+        let google_events = client
+            .fetch_events(&access_token, &calendar.id, &time_min, &time_max)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Convert GoogleEvent to StoredEvent with calendar color
+        for event in google_events {
+            let (start, is_all_day) = if let Some(ref dt) = event.start.date_time {
+                (dt.clone(), false)
+            } else if let Some(ref d) = event.start.date {
+                (d.clone(), true)
+            } else {
+                continue; // Skip events with no start time
+            };
+
+            let end = if let Some(ref dt) = event.end.date_time {
+                dt.clone()
+            } else if let Some(ref d) = event.end.date {
+                d.clone()
+            } else {
+                start.clone() // Fallback to start time
+            };
+
+            all_events.push(StoredEvent {
+                id: event.id,
+                calendar_id: calendar.id.clone(),
+                title: event.summary.unwrap_or_default(),
+                start,
+                end,
+                is_all_day,
+                color: calendar.color.clone(),
+            });
+        }
     }
-    println!("========================================\n");
 
-    Ok(events)
+    // Save to cache before returning
+    EventStore::save_events(
+        &app,
+        &account_id,
+        all_events.clone(),
+        time_min,
+        time_max,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(all_events)
+}
+
+/// Get cached events for an account (if available)
+#[tauri::command]
+pub async fn get_cached_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+) -> Result<Option<crate::storage::EventCache>, String> {
+    EventStore::get_cached_events(&app, &account_id).map_err(|e| e.to_string())
+}
+
+/// Clear cached events for an account
+#[tauri::command]
+pub async fn clear_cached_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+) -> Result<(), String> {
+    EventStore::clear_events(&app, &account_id).map_err(|e| e.to_string())
 }

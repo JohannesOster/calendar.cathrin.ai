@@ -1,5 +1,4 @@
 import { createSignal, createMemo } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
 import {
   getConnectedAccounts,
   removeAccount as removeAccountApi,
@@ -147,31 +146,6 @@ export async function initializeAccounts(): Promise<void> {
     // Load existing accounts from storage
     const accounts = await getConnectedAccounts();
     setConnectedAccounts(accounts);
-
-    // ============================================================
-    // TEST: Verify fetch_events API is working (issue #19)
-    // TODO: Remove this test code after issue #22 is complete
-    // ============================================================
-    if (accounts.length > 0 && accounts[0].calendars.length > 0) {
-      const testAccountId = accounts[0].id;
-      const testCalendarId = accounts[0].calendars[0].id;
-      console.log("=== TEST: Fetching events for first calendar ===");
-      console.log(`Account: ${accounts[0].email}`);
-      console.log(`Calendar: ${accounts[0].calendars[0].name}`);
-      try {
-        const events = await invoke("test_fetch_events", {
-          accountId: testAccountId,
-          calendarId: testCalendarId,
-        });
-        console.log(`=== TEST: Found ${(events as unknown[]).length} events ===`);
-        console.log(events);
-      } catch (testError) {
-        console.error("=== TEST: Failed to fetch events ===", testError);
-      }
-    }
-    // ============================================================
-    // END TEST
-    // ============================================================
 
     // Load default calendar from localStorage and validate it exists
     const savedDefaultId = localStorage.getItem(DEFAULT_CALENDAR_KEY);

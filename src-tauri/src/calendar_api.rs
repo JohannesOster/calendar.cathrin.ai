@@ -167,8 +167,6 @@ impl CalendarClient {
             urlencoding::encode(calendar_id)
         );
 
-        println!("[DEBUG] Base URL: {}", base_url);
-
         loop {
             let mut url = reqwest::Url::parse(&base_url).unwrap();
             url.query_pairs_mut()
@@ -182,8 +180,6 @@ impl CalendarClient {
                 url.query_pairs_mut().append_pair("pageToken", token);
             }
 
-            println!("[DEBUG] Full URL: {}", url);
-
             let response = self
                 .client
                 .get(url)
@@ -191,26 +187,16 @@ impl CalendarClient {
                 .send()
                 .await?;
 
-            println!("[DEBUG] Response status: {}", response.status());
-
             if response.status() == reqwest::StatusCode::UNAUTHORIZED {
                 return Err(CalendarApiError::Unauthorized);
             }
 
             if !response.status().is_success() {
                 let error_text = response.text().await.unwrap_or_default();
-                println!("[DEBUG] Error response: {}", error_text);
                 return Err(CalendarApiError::ApiError(error_text));
             }
 
-            // Get raw text first to debug
-            let response_text = response.text().await?;
-            println!("[DEBUG] Raw response (first 500 chars): {}", &response_text[..response_text.len().min(500)]);
-
-            let events_response: EventsListResponse = serde_json::from_str(&response_text)
-                .map_err(|e| CalendarApiError::ApiError(format!("JSON parse error: {}", e)))?;
-
-            println!("[DEBUG] Parsed {} items from response", events_response.items.len());
+            let events_response: EventsListResponse = response.json().await?;
 
             // Filter out cancelled events
             let active_events = events_response
