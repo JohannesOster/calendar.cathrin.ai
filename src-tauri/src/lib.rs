@@ -110,6 +110,26 @@ fn handle_did_enter_fullscreen_impl() {
 }
 
 #[cfg(target_os = "macos")]
+fn handle_did_become_main_impl() {
+    unsafe {
+        if let Some(ref ctx) = OBSERVER_CONTEXT {
+            // Window gained focus
+            let _ = ctx.app_handle.emit("window-focus-changed", true);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn handle_did_resign_main_impl() {
+    unsafe {
+        if let Some(ref ctx) = OBSERVER_CONTEXT {
+            // Window lost focus
+            let _ = ctx.app_handle.emit("window-focus-changed", false);
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
 define_class!(
     #[unsafe(super(NSObject))]
     #[name = "FullscreenObserver"]
@@ -137,6 +157,16 @@ define_class!(
         #[unsafe(method(windowDidEnterFullScreen:))]
         fn _window_did_enter_fullscreen(&self, _notification: *mut NSNotification) {
             handle_did_enter_fullscreen_impl();
+        }
+
+        #[unsafe(method(windowDidBecomeMain:))]
+        fn _window_did_become_main(&self, _notification: *mut NSNotification) {
+            handle_did_become_main_impl();
+        }
+
+        #[unsafe(method(windowDidResignMain:))]
+        fn _window_did_resign_main(&self, _notification: *mut NSNotification) {
+            handle_did_resign_main_impl();
         }
     }
 );
@@ -202,6 +232,24 @@ fn register_fullscreen_observer(ns_window: *mut AnyObject, app_handle: tauri::Ap
             observer_ref,
             sel!(windowDidEnterFullScreen:),
             Some(&did_enter_name),
+            Some(window_object),
+        );
+
+        // Window focus notifications
+        let did_become_main_name = NSString::from_str("NSWindowDidBecomeMainNotification");
+        let did_resign_main_name = NSString::from_str("NSWindowDidResignMainNotification");
+
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowDidBecomeMain:),
+            Some(&did_become_main_name),
+            Some(window_object),
+        );
+
+        notification_center.addObserver_selector_name_object(
+            observer_ref,
+            sel!(windowDidResignMain:),
+            Some(&did_resign_main_name),
             Some(window_object),
         );
     }

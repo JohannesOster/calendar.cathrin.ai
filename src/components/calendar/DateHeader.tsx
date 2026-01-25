@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onCleanup, Show } from "solid-js";
 import { flashDate } from "./CalendarGrid";
+import { isSameDay } from "../../lib/date-utils";
 
 interface DateHeaderProps {
   date: Date;
@@ -10,14 +11,6 @@ const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function DateHeader(props: DateHeaderProps) {
   const [showFlash, setShowFlash] = createSignal(false);
-
-  const isSameDay = (date1: Date, date2: Date): boolean => {
-    return (
-      date1.getDate() === date2.getDate() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getFullYear() === date2.getFullYear()
-    );
-  };
 
   // Flash effect when this day is selected from mini-calendar
   let flashTimeout: number | undefined;

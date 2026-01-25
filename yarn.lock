@@ -407,6 +407,11 @@
   resolved "https://registry.yarnpkg.com/@floating-ui/utils/-/utils-0.2.10.tgz#a2a1e3812d14525f725d011a73eceb41fef5bc1c"
   integrity sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==
 
+"@formkit/auto-animate@^0.9.0":
+  version "0.9.0"
+  resolved "https://registry.yarnpkg.com/@formkit/auto-animate/-/auto-animate-0.9.0.tgz#6fd9ecfe36ed88796cc8a07e6b44d7c9c7f61a47"
+  integrity sha512-VhP4zEAacXS3dfTpJpJ88QdLqMTcabMg0jwpOSxZ/VzfQVfl3GkZSCZThhGC5uhq/TxPHPzW0dzr4H9Bb1OgKA==
+
 "@internationalized/date@3.10.0":
   version "3.10.0"
   resolved "https://registry.yarnpkg.com/@internationalized/date/-/date-3.10.0.tgz#056db64a4facdf48c6937ad498a882a8151d640a"
@@ -821,6 +826,11 @@
   integrity sha512-0ClHS50Oq9HEvLPhNzTNFxbWVOqoAp3dRvtewQBeqfIQ0z5m3JRnOISIn2ZVPCrQC0MyGyhTS9DWhHjpigQE7A==
   dependencies:
     "@tauri-apps/api" "^2.8.0"
+
+"@thisbeyond/solid-dnd@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@thisbeyond/solid-dnd/-/solid-dnd-0.7.5.tgz#c7585511bc83b5b973315f956296431124b6562c"
+  integrity sha512-DfI5ff+yYGpK9M21LhYwIPlbP2msKxN2ARwuu6GF8tT1GgNVDTI8VCQvH4TJFoVApP9d44izmAcTh/iTCH2UUw==
 
 "@tybys/wasm-util@^0.10.1":
   version "0.10.1"

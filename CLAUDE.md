@@ -104,6 +104,61 @@ The calendar grid uses percentage-based flexbox widths (`width: ${(TOTAL_DAYS / 
 ### Scroll Synchronization
 The time column uses CSS transform (`translateY`) instead of a separate scrollable container for vertical sync with the main grid. This provides pixel-perfect alignment and avoids scroll event race conditions.
 
+### Drag-and-Drop with solid-dnd
+
+Uses `@thisbeyond/solid-dnd` for sortable lists.
+
+**Architecture** (`src/components/sidebar/AccountsList/`):
+- `AccountsList.tsx` - Main DnD orchestrator with single DragDropProvider
+- `SortableAccountItem.tsx` - Draggable account header (sortable)
+- `SortableCalendarItem.tsx` - Draggable calendar item (sortable)
+
+**Two-Level Drag System with Type Filtering**:
+- Both accounts and calendars use `createSortable()` with a `type` data attribute
+- Accounts: `createSortable(id, { type: "account" })`
+- Calendars: `createSortable(id, { type: "calendar" })`
+- Custom collision detector filters droppables by type — accounts only collide with accounts, calendars only with calendars
+
+**Sibling Structure for Variable Heights**:
+Account headers and their calendars are **siblings**, not parent-child:
+```tsx
+<For each={accounts}>
+  {(account) => (
+    <>
+      <SortableAccountItem />           {/* Sortable header */}
+      <Show when={!isDraggingAccounts}>
+        <SortableProvider ids={calendarIds}>
+          <For each={calendars}>
+            <SortableCalendarItem />
+          </For>
+        </SortableProvider>
+      </Show>
+    </>
+  )}
+</For>
+```
+This allows account headers to have uniform height for DnD while calendars can have variable heights.
+
+**Critical: Layout Remeasurement**:
+When dragging accounts, calendars hide via `<Show>`. This changes DOM positions, but solid-dnd has already measured. Solution: `LayoutRemeasurer` component calls `recomputeLayouts()` after calendars hide:
+```tsx
+function LayoutRemeasurer(props: { isDragging: () => boolean }) {
+  const [, { recomputeLayouts }] = useDragDropContext()!;
+  createEffect(() => {
+    if (props.isDragging()) {
+      queueMicrotask(() => recomputeLayouts());
+    }
+  });
+  return null;
+}
+```
+
+**Key Patterns**:
+- Use `use:sortable` directive (not `ref={sortable}`) for proper lifecycle handling
+- Always include a `DragOverlay` for the ghost element — it affects collision detection behavior
+- Tag sortables with `{ type: "..." }` data to enable type-filtered collision detection
+- Call `recomputeLayouts()` via `queueMicrotask` when DOM structure changes during drag
+
 ### TypeScript Configuration
 - Strict mode enabled
 - JSX preserved with `jsxImportSource: "solid-js"`

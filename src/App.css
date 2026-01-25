@@ -17,10 +17,12 @@ html, body {
   /* Colors - Notion-like palette */
   --color-text-primary: #37352f;
   --color-text-secondary: #91918e;
+  --color-text-muted: #b8b8b5;
   --color-border: #e8e8e8;
   --color-bg-primary: #ffffff;
   --color-bg-secondary: #fbfbfa;
   --color-bg-hover: #efefef;
+  --color-bg-button-hover: #d8d8d8;
   --color-accent: #2383e2;
   --color-today-indicator: #ea4335;
 }
@@ -73,6 +75,12 @@ button:focus-visible {
 
 button {
   cursor: pointer;
+}
+
+/* Force grabbing cursor during drag operations */
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
 }
 
 /* Flash highlight animation for mini-calendar navigation */

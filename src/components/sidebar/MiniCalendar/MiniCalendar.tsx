@@ -1,0 +1,209 @@
+import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
+import { centerDate, setCenterDate, setFlashDate, visibleStartDate } from "../../calendar/CalendarGrid";
+import { getSundayOfWeek, formatMonthYearLocale } from "../../../lib/date-utils";
+import { SIDEBAR, WEEKDAY_LABELS } from "../../../constants/sidebar";
+import { WeekRow, type DayInfo } from "./WeekRow";
+
+export function MiniCalendar() {
+  const [currentMonth, setCurrentMonth] = createSignal(
+    new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
+  );
+
+  // Memoize weeks computation
+  const weeksInMonth = createMemo(() => computeWeeksInMonth(currentMonth()));
+
+  // Compute the visible date range as timestamps for efficient comparison
+  const visibleRange = createMemo(() => {
+    const startDate = new Date(visibleStartDate());
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
+    return { start: startDate.getTime(), end: endDate.getTime() };
+  });
+
+  const prevMonth = () => {
+    const date = new Date(currentMonth());
+    date.setMonth(date.getMonth() - 1);
+    setCurrentMonth(date);
+  };
+
+  const nextMonth = () => {
+    const date = new Date(currentMonth());
+    date.setMonth(date.getMonth() + 1);
+    setCurrentMonth(date);
+  };
+
+  // Check if mini calendar is showing the current month
+  const isCurrentMonthView = () => {
+    const today = new Date();
+    return (
+      currentMonth().getMonth() === today.getMonth() &&
+      currentMonth().getFullYear() === today.getFullYear()
+    );
+  };
+
+  // Go to today - navigate to show this week (Sunday first), flash today
+  const goToToday = () => {
+    const today = new Date();
+    navigateToDate(today);
+  };
+
+  // Navigate main grid to show the week containing a date, flash that date
+  const navigateToDate = (date: Date) => {
+    const weekStart = getSundayOfWeek(date);
+    setCenterDate(weekStart);
+    setFlashDate(date);
+    setTimeout(() => setFlashDate(null), SIDEBAR.FLASH_CLEAR_DELAY);
+  };
+
+  const handleDayClick = (dayInfo: DayInfo) => {
+    navigateToDate(dayInfo.date);
+  };
+
+  // Track previous centerDate to detect external navigation changes
+  let prevCenterDate = centerDate();
+
+  // Sync mini calendar month only when centerDate changes (not on manual month browsing)
+  createEffect(() => {
+    const center = centerDate();
+    if (center.getTime() !== prevCenterDate.getTime()) {
+      prevCenterDate = center;
+      if (
+        center.getMonth() !== currentMonth().getMonth() ||
+        center.getFullYear() !== currentMonth().getFullYear()
+      ) {
+        setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+      }
+    }
+  });
+
+  return (
+    <div class="p-2 border-b border-[#e8e8e8]">
+      {/* Month navigation */}
+      <div class="flex items-center justify-between mb-2 px-1.5">
+        <span class="text-sm font-medium text-[#37352f]">
+          {formatMonthYearLocale(currentMonth())}
+        </span>
+        <div class="flex items-center gap-1">
+          <Show when={!isCurrentMonthView()}>
+            <button
+              onClick={goToToday}
+              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              title="Go to today"
+            >
+              <RotateCcw size={SIDEBAR.ICON_MD} />
+            </button>
+          </Show>
+          <button
+            onClick={prevMonth}
+            class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+          >
+            <ChevronLeft size={SIDEBAR.ICON_MD} />
+          </button>
+          <button
+            onClick={nextMonth}
+            class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+          >
+            <ChevronRight size={SIDEBAR.ICON_MD} />
+          </button>
+        </div>
+      </div>
+
+      {/* Weekday headers */}
+      <div class="grid grid-cols-7 mb-1">
+        <For each={WEEKDAY_LABELS}>
+          {(day) => (
+            <div class="w-7 text-center text-xs text-[#91918e]">{day}</div>
+          )}
+        </For>
+      </div>
+
+      {/* Calendar grid */}
+      <div class="flex flex-col gap-1">
+        <For each={weeksInMonth()}>
+          {(week) => (
+            <WeekRow
+              week={week}
+              visibleRange={visibleRange}
+              onDayClick={handleDayClick}
+            />
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compute weeks for the month view, including days from adjacent months
+ */
+function computeWeeksInMonth(date: Date): DayInfo[][] {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  const startingDay = firstDay.getDay(); // 0 = Sunday
+
+  const weeks: DayInfo[][] = [];
+  let currentWeek: DayInfo[] = [];
+
+  // Add days from previous month to fill the first week
+  if (startingDay > 0) {
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startingDay - 1; i >= 0; i--) {
+      const day = prevMonthLastDay - i;
+      currentWeek.push({
+        day,
+        date: new Date(year, month - 1, day),
+        isCurrentMonth: false,
+      });
+    }
+  }
+
+  // Add days of the current month
+  for (let i = 1; i <= daysInMonth; i++) {
+    currentWeek.push({
+      day: i,
+      date: new Date(year, month, i),
+      isCurrentMonth: true,
+    });
+
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  }
+
+  // Add days from next month to fill the last week
+  let nextMonthDay = 1;
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push({
+        day: nextMonthDay,
+        date: new Date(year, month + 1, nextMonthDay),
+        isCurrentMonth: false,
+      });
+      nextMonthDay++;
+    }
+    weeks.push(currentWeek);
+  }
+
+  // Always show 6 rows for consistent height
+  while (weeks.length < 6) {
+    const extraWeek: DayInfo[] = [];
+    for (let i = 0; i < 7; i++) {
+      extraWeek.push({
+        day: nextMonthDay,
+        date: new Date(year, month + 1, nextMonthDay),
+        isCurrentMonth: false,
+      });
+      nextMonthDay++;
+    }
+    weeks.push(extraWeek);
+  }
+
+  return weeks;
+}
