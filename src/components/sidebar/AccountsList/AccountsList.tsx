@@ -1,22 +1,24 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import {
   DragDropProvider,
   DragDropSensors,
   DragOverlay,
+  SortableProvider,
+  useDragDropContext,
   closestCenter,
   type DragEvent,
+  type CollisionDetector,
 } from "@thisbeyond/solid-dnd";
 import { Eye, EyeOff, X } from "lucide-solid";
 import {
   authError,
   setAuthError,
   orderedAccounts,
-  updateCalendarVisibility,
-  refreshAccount,
-  deleteAccount,
+  setAccountOrderAndPersist,
   getOrderedCalendars,
   getOrderedCalendarIds,
   setCalendarOrderAndPersist,
+  updateCalendarVisibility,
   defaultCalendarId,
   type Calendar,
 } from "../../../stores/accounts";
@@ -25,15 +27,53 @@ import {
   toggleAccountCollapse,
   getAccountMenuOpen,
   toggleAccountMenu,
-  closeAccountMenu,
 } from "../../../stores/sidebar-ui";
 import { SIDEBAR } from "../../../constants/sidebar";
-import { AccountItem } from "./SortableAccountItem";
+import { SortableAccountItem } from "./SortableAccountItem";
+import { SortableCalendarItem } from "./SortableCalendarItem";
+
+// Component that re-measures layouts when account dragging starts
+function LayoutRemeasurer(props: { isDragging: () => boolean }) {
+  const [, { recomputeLayouts }] = useDragDropContext()!;
+
+  createEffect(() => {
+    if (props.isDragging()) {
+      // Wait for DOM to update (calendars to hide), then re-measure
+      queueMicrotask(() => {
+        recomputeLayouts();
+      });
+    }
+  });
+
+  return null;
+}
 
 export function AccountsList() {
-  const [activeCalendar, setActiveCalendar] = createSignal<Calendar | null>(
-    null
-  );
+  const [activeItem, setActiveItem] = createSignal<string | null>(null);
+  const [activeCalendar, setActiveCalendar] = createSignal<Calendar | null>(null);
+  const [isDraggingAccounts, setIsDraggingAccounts] = createSignal(false);
+
+  // Simple ids accessor for accounts
+  const accountIds = () => orderedAccounts().map((a) => a.id);
+
+  // Check if an ID belongs to an account (vs a calendar)
+  const isAccountId = (id: string) =>
+    orderedAccounts().some((a) => a.id === id);
+
+  // Custom collision detector that only considers droppables of the same type
+  const typeFilteredCollisionDetector: CollisionDetector = (
+    draggable,
+    droppables,
+    context
+  ) => {
+    const draggableType = draggable.data?.type;
+    // Filter to only droppables matching the draggable's type
+    const validDroppables = droppables.filter(
+      (d) => d.data?.type === draggableType
+    );
+    if (validDroppables.length === 0) return null;
+    return closestCenter(draggable, validDroppables, context);
+  };
 
   const handleToggleCalendarVisibility = async (
     accountId: string,
@@ -47,62 +87,60 @@ export function AccountsList() {
     }
   };
 
-  const handleRemoveAccount = async (accountId: string) => {
-    try {
-      await deleteAccount(accountId);
-      closeAccountMenu();
-    } catch (error) {
-      console.error("Failed to remove account:", error);
-    }
-  };
-
-  const handleRefreshAccount = async (accountId: string) => {
-    try {
-      await refreshAccount(accountId);
-      closeAccountMenu();
-    } catch (error) {
-      console.error("Failed to refresh account:", error);
-    }
-  };
-
-  const onDragStart = (event: DragEvent) => {
-    // Force grabbing cursor globally during drag
+  const onDragStart = ({ draggable }: DragEvent) => {
     document.body.classList.add("dragging");
+    const id = draggable.id as string;
 
-    const id = event.draggable.id as string;
-    // Find the calendar being dragged
-    for (const account of orderedAccounts()) {
-      const calendar = account.calendars.find((c) => c.id === id);
-      if (calendar) {
-        setActiveCalendar(calendar);
-        break;
-      }
-    }
-  };
-
-  const onDragEnd = (event: DragEvent) => {
-    // Reset cursor
-    document.body.classList.remove("dragging");
-
-    const { draggable, droppable } = event;
-
-    if (draggable && droppable) {
-      // Find which account contains these calendars
+    // Check if dragging an account or a calendar
+    if (isAccountId(id)) {
+      setIsDraggingAccounts(true);
+      setActiveItem(id);
+    } else {
+      // Find the calendar being dragged
       for (const account of orderedAccounts()) {
-        const currentIds = getOrderedCalendarIds(account.id);
-        const fromIndex = currentIds.indexOf(draggable.id as string);
-        const toIndex = currentIds.indexOf(droppable.id as string);
-
-        if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-          const updatedIds = [...currentIds];
-          updatedIds.splice(toIndex, 0, ...updatedIds.splice(fromIndex, 1));
-          setCalendarOrderAndPersist(account.id, updatedIds);
+        const calendar = account.calendars.find((c) => c.id === id);
+        if (calendar) {
+          setActiveCalendar(calendar);
           break;
         }
       }
     }
+  };
 
+  const onDragEnd = ({ draggable, droppable }: DragEvent) => {
+    document.body.classList.remove("dragging");
+
+    if (draggable && droppable) {
+      if (isDraggingAccounts()) {
+        // Handle account reorder
+        const currentItems = accountIds();
+        const fromIndex = currentItems.indexOf(draggable.id as string);
+        const toIndex = currentItems.indexOf(droppable.id as string);
+        if (fromIndex !== toIndex) {
+          const updatedItems = currentItems.slice();
+          updatedItems.splice(toIndex, 0, ...updatedItems.splice(fromIndex, 1));
+          setAccountOrderAndPersist(updatedItems);
+        }
+      } else {
+        // Handle calendar reorder
+        for (const account of orderedAccounts()) {
+          const currentIds = getOrderedCalendarIds(account.id);
+          const fromIndex = currentIds.indexOf(draggable.id as string);
+          const toIndex = currentIds.indexOf(droppable.id as string);
+
+          if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+            const updatedIds = [...currentIds];
+            updatedIds.splice(toIndex, 0, ...updatedIds.splice(fromIndex, 1));
+            setCalendarOrderAndPersist(account.id, updatedIds);
+            break;
+          }
+        }
+      }
+    }
+
+    setActiveItem(null);
     setActiveCalendar(null);
+    setIsDraggingAccounts(false);
   };
 
   return (
@@ -133,29 +171,51 @@ export function AccountsList() {
       <DragDropProvider
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        collisionDetector={closestCenter}
+        collisionDetector={typeFilteredCollisionDetector}
       >
         <DragDropSensors />
-        <div class="flex flex-col gap-1">
-          <For each={orderedAccounts()}>
-            {(account) => (
-              <AccountItem
-                account={account}
-                isCollapsed={isAccountCollapsed(account.id)}
-                toggleCollapse={() => toggleAccountCollapse(account.id)}
-                menuOpen={getAccountMenuOpen() === account.id}
-                toggleMenu={() => toggleAccountMenu(account.id)}
-                closeMenu={closeAccountMenu}
-                onRefresh={() => handleRefreshAccount(account.id)}
-                onRemove={() => handleRemoveAccount(account.id)}
-                onToggleCalendarVisibility={handleToggleCalendarVisibility}
-                orderedCalendarIds={getOrderedCalendarIds(account.id)}
-                orderedCalendars={getOrderedCalendars(account.id)}
-              />
-            )}
-          </For>
+        <LayoutRemeasurer isDragging={isDraggingAccounts} />
+        <div class="flex flex-col">
+          <SortableProvider ids={accountIds()}>
+            <For each={orderedAccounts()}>
+              {(account) => (
+                <>
+                  {/* Sortable Account Header */}
+                  <SortableAccountItem
+                    account={account}
+                    isCollapsed={isAccountCollapsed(account.id)}
+                    toggleCollapse={() => toggleAccountCollapse(account.id)}
+                    menuOpen={getAccountMenuOpen() === account.id}
+                    toggleMenu={() => toggleAccountMenu(account.id)}
+                  />
+                  {/* Calendars - hidden during account drag */}
+                  <Show when={!isDraggingAccounts() && !isAccountCollapsed(account.id)}>
+                    <SortableProvider ids={getOrderedCalendarIds(account.id)}>
+                      <For each={getOrderedCalendars(account.id)}>
+                        {(calendar) => (
+                          <SortableCalendarItem
+                            calendar={calendar}
+                            accountId={account.id}
+                            onToggleVisibility={handleToggleCalendarVisibility}
+                          />
+                        )}
+                      </For>
+                    </SortableProvider>
+                  </Show>
+                </>
+              )}
+            </For>
+          </SortableProvider>
         </div>
+        {/* Drag overlay */}
         <DragOverlay class="z-[9999]">
+          <Show when={activeItem()}>
+            <div class="px-2 py-1 rounded bg-white border border-[#e8e8e8] shadow-lg">
+              <span class="text-xs font-medium text-[#91918e]">
+                {orderedAccounts().find((a) => a.id === activeItem())?.email}
+              </span>
+            </div>
+          </Show>
           <Show when={activeCalendar()}>
             {(calendar) => {
               const isDefault = () => defaultCalendarId() === calendar().id;
@@ -163,7 +223,7 @@ export function AccountsList() {
                 <div class="opacity-80 bg-white rounded-md shadow-lg px-2 py-1.5 w-52 border border-[#e8e8e8]">
                   <div class="flex items-center gap-2">
                     <div
-                      class="w-3 h-3 rounded flex-shrink-0"
+                      class="w-3 h-3 rounded shrink-0"
                       style={{
                         "background-color": calendar().color,
                         "box-shadow": isDefault()
@@ -184,15 +244,9 @@ export function AccountsList() {
                       <span class="text-xs text-[#91918e]">Default</span>
                     </Show>
                     {calendar().visible ? (
-                      <Eye
-                        size={SIDEBAR.ICON_MD}
-                        class="text-[#91918e] flex-shrink-0"
-                      />
+                      <Eye size={SIDEBAR.ICON_MD} class="text-[#91918e] shrink-0" />
                     ) : (
-                      <EyeOff
-                        size={SIDEBAR.ICON_MD}
-                        class="text-[#91918e] flex-shrink-0"
-                      />
+                      <EyeOff size={SIDEBAR.ICON_MD} class="text-[#91918e] shrink-0" />
                     )}
                   </div>
                 </div>

@@ -1,3 +1,3 @@
 export { AccountsList } from "./AccountsList";
-export { AccountItem } from "./SortableAccountItem";
+export { SortableAccountItem } from "./SortableAccountItem";
 export { SortableCalendarItem } from "./SortableCalendarItem";

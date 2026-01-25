@@ -19,13 +19,15 @@ interface SortableCalendarItemProps {
 }
 
 export function SortableCalendarItem(props: SortableCalendarItemProps) {
-  const sortable = createSortable(props.calendar.id);
+  // Tag as "calendar" type for collision filtering
+  const sortable = createSortable(props.calendar.id, { type: "calendar" });
   const [state] = useDragDropContext()!;
   const isDefault = () => defaultCalendarId() === props.calendar.id;
 
   return (
     <div
-      ref={sortable}
+      // @ts-ignore - use: directive
+      use:sortable
       class="rounded"
       classList={{
         "transition-transform": !!state.active.draggable,
@@ -37,26 +39,17 @@ export function SortableCalendarItem(props: SortableCalendarItemProps) {
           <div class="h-6 rounded bg-[#e8e8e8]" />
         </div>
       </Show>
-      <div
-        class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-grab select-none"
-        classList={{
-          "cursor-grabbing": sortable.isActiveDraggable,
-          hidden: sortable.isActiveDraggable,
-        }}
-        onMouseDown={(e) => {
-          // Prevent text selection during drag
-          if ((e.target as HTMLElement).tagName !== "BUTTON") {
-            e.preventDefault();
-          }
-        }}
-      >
+      <Show when={!sortable.isActiveDraggable}>
+        <div
+          class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#efefef] group cursor-grab select-none"
+        >
         {/* Color indicator - clickable to set as default */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             setDefaultCalendar(props.calendar.id);
           }}
-          class="w-3 h-3 rounded flex-shrink-0 cursor-pointer transition-transform hover:scale-110"
+          class="w-3 h-3 rounded shrink-0 cursor-pointer transition-transform hover:scale-110"
           style={{
             "background-color": props.calendar.color,
             "box-shadow": isDefault()
@@ -100,7 +93,8 @@ export function SortableCalendarItem(props: SortableCalendarItemProps) {
             <EyeOff size={SIDEBAR.ICON_MD} />
           )}
         </button>
-      </div>
+        </div>
+      </Show>
     </div>
   );
 }

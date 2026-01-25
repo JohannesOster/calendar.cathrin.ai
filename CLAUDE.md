@@ -106,37 +106,58 @@ The time column uses CSS transform (`translateY`) instead of a separate scrollab
 
 ### Drag-and-Drop with solid-dnd
 
-Uses `@thisbeyond/solid-dnd` for sortable lists with `@formkit/auto-animate` for smooth reorder animations.
+Uses `@thisbeyond/solid-dnd` for sortable lists.
 
 **Architecture** (`src/components/sidebar/AccountsList/`):
-- `AccountsList.tsx` - Main DnD orchestrator with nested drag contexts
-- `SortableAccountItem.tsx` - Draggable account with nested calendar list
-- `SortableCalendarItem.tsx` - Draggable calendar item
-- `collisionDetector.ts` - Custom collision detection with different strategies per item type
+- `AccountsList.tsx` - Main DnD orchestrator with single DragDropProvider
+- `SortableAccountItem.tsx` - Draggable account header (sortable)
+- `SortableCalendarItem.tsx` - Draggable calendar item (sortable)
 
-**Two-Level Drag System**:
-- **Accounts**: Use overlap + closest center + hysteresis collision detection
-- **Calendars**: Use trigger zones (top/bottom 30% of item) for precise control
+**Two-Level Drag System with Type Filtering**:
+- Both accounts and calendars use `createSortable()` with a `type` data attribute
+- Accounts: `createSortable(id, { type: "account" })`
+- Calendars: `createSortable(id, { type: "calendar" })`
+- Custom collision detector filters droppables by type — accounts only collide with accounts, calendars only with calendars
 
-**Collision Detection Strategies** (`collisionDetector.ts`):
-- Accounts use hysteresis to prevent jitter: tracks last swap and blocks immediate reverse swaps unless the draggable moves past a threshold (`HYSTERESIS_THRESHOLD: 10px`)
-- Calendars use trigger zones: swaps only occur when draggable center enters top/bottom 30% of target item
-- Both filter droppables by type (accounts only collide with accounts, calendars with calendars)
+**Sibling Structure for Variable Heights**:
+Account headers and their calendars are **siblings**, not parent-child:
+```tsx
+<For each={accounts}>
+  {(account) => (
+    <>
+      <SortableAccountItem />           {/* Sortable header */}
+      <Show when={!isDraggingAccounts}>
+        <SortableProvider ids={calendarIds}>
+          <For each={calendars}>
+            <SortableCalendarItem />
+          </For>
+        </SortableProvider>
+      </Show>
+    </>
+  )}
+</For>
+```
+This allows account headers to have uniform height for DnD while calendars can have variable heights.
 
-**Animation with auto-animate**:
-- `@formkit/auto-animate` provides FLIP animations when DOM order changes
-- Applied via `createAutoAnimate()` ref on container divs
-- **Important**: Use CSS hiding (`max-height: 0`) instead of `<Show>` for containers with auto-animate refs - unmounting destroys the ref connection
+**Critical: Layout Remeasurement**:
+When dragging accounts, calendars hide via `<Show>`. This changes DOM positions, but solid-dnd has already measured. Solution: `LayoutRemeasurer` component calls `recomputeLayouts()` after calendars hide:
+```tsx
+function LayoutRemeasurer(props: { isDragging: () => boolean }) {
+  const [, { recomputeLayouts }] = useDragDropContext()!;
+  createEffect(() => {
+    if (props.isDragging()) {
+      queueMicrotask(() => recomputeLayouts());
+    }
+  });
+  return null;
+}
+```
 
-**Reactivity Pattern for Nested Lists**:
-- Props for `orderedCalendarIds` and `orderedCalendars` must be passed as accessor functions (`() => value`)
-- Child components call them as functions (`props.orderedCalendars()`)
-- This ensures SolidJS reactivity propagates during drag reordering
-
-**Key Signals**:
-- `dragOrder` / `calendarDragOrder` - Temporary order during drag (not persisted until drag ends)
-- `displayOrder()` - Returns drag order if dragging, otherwise persisted order
-- `lastSwap` - Tracks last swap for hysteresis (accounts only)
+**Key Patterns**:
+- Use `use:sortable` directive (not `ref={sortable}`) for proper lifecycle handling
+- Always include a `DragOverlay` for the ghost element — it affects collision detection behavior
+- Tag sortables with `{ type: "..." }` data to enable type-filtered collision detection
+- Call `recomputeLayouts()` via `queueMicrotask` when DOM structure changes during drag
 
 ### TypeScript Configuration
 - Strict mode enabled
