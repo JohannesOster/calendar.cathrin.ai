@@ -1,10 +1,11 @@
-use crate::calendar_api::{CalendarClient, GoogleCalendar};
+use crate::calendar_api::{CalendarClient, GoogleCalendar, GoogleEvent};
 use crate::oauth::{
     build_auth_url, build_redirect_uri, exchange_code_for_tokens, find_available_port,
     refresh_access_token, wait_for_callback, CallbackResult, OAuthConfig, PkceChallenge,
 };
 use crate::storage::{AccountStore, StoredAccount, StoredCalendar};
 use serde::{Deserialize, Serialize};
+use chrono::{Duration, Utc};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_opener::OpenerExt;
@@ -263,4 +264,54 @@ pub async fn ensure_valid_token(app: AppHandle<Wry>, account_id: String) -> Resu
     } else {
         account.access_token.ok_or("No access token".to_string())
     }
+}
+
+/// TEST COMMAND: Fetch events for a calendar (for verifying the API works)
+/// This is temporary and will be replaced by a proper implementation in issue #20/#21
+#[tauri::command]
+pub async fn test_fetch_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+    calendar_id: String,
+) -> Result<Vec<GoogleEvent>, String> {
+    // Get a valid access token
+    let access_token = ensure_valid_token(app.clone(), account_id.clone()).await?;
+
+    // Calculate time window: 30 days before and after today (wider range for testing)
+    let now = Utc::now();
+    let time_min = (now - Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let time_max = (now + Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    println!("\n========================================");
+    println!("=== TEST: Fetching events ===");
+    println!("========================================");
+    println!("Account ID: {}", account_id);
+    println!("Calendar ID: {}", calendar_id);
+    println!("Calendar ID (encoded): {}", urlencoding::encode(&calendar_id));
+    println!("Time range: {} to {}", time_min, time_max);
+    println!("Access token (first 20 chars): {}...", &access_token[..20.min(access_token.len())]);
+
+    // Fetch events
+    let client = CalendarClient::new();
+    let events = client
+        .fetch_events(&access_token, &calendar_id, &time_min, &time_max)
+        .await
+        .map_err(|e| {
+            println!("=== ERROR: {} ===", e);
+            e.to_string()
+        })?;
+
+    println!("========================================");
+    println!("=== Found {} events ===", events.len());
+    println!("========================================");
+    for event in &events {
+        let start = event.start.date_time.as_ref()
+            .or(event.start.date.as_ref())
+            .map(|s| s.as_str())
+            .unwrap_or("no start");
+        println!("  - {} ({})", event.summary.as_deref().unwrap_or("(no title)"), start);
+    }
+    println!("========================================\n");
+
+    Ok(events)
 }

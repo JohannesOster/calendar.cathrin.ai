@@ -4,6 +4,7 @@ use thiserror::Error;
 
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_CALENDAR_LIST_URL: &str = "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const GOOGLE_CALENDAR_EVENTS_URL: &str = "https://www.googleapis.com/calendar/v3/calendars";
 
 #[derive(Error, Debug)]
 pub enum CalendarApiError {
@@ -41,6 +42,35 @@ struct CalendarListResponse {
     kind: String,
     etag: String,
     items: Vec<GoogleCalendar>,
+    next_page_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventDateTime {
+    pub date_time: Option<String>,
+    pub date: Option<String>,
+    pub time_zone: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleEvent {
+    pub id: String,
+    pub summary: Option<String>,
+    pub start: EventDateTime,
+    pub end: EventDateTime,
+    pub color_id: Option<String>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EventsListResponse {
+    kind: String,
+    etag: String,
+    #[serde(default)]
+    items: Vec<GoogleEvent>,
     next_page_token: Option<String>,
 }
 
@@ -118,6 +148,85 @@ impl CalendarClient {
         }
 
         Ok(all_calendars)
+    }
+
+    /// Fetch events for a calendar within a time range
+    pub async fn fetch_events(
+        &self,
+        access_token: &str,
+        calendar_id: &str,
+        time_min: &str,
+        time_max: &str,
+    ) -> Result<Vec<GoogleEvent>, CalendarApiError> {
+        let mut all_events = Vec::new();
+        let mut page_token: Option<String> = None;
+
+        let base_url = format!(
+            "{}/{}/events",
+            GOOGLE_CALENDAR_EVENTS_URL,
+            urlencoding::encode(calendar_id)
+        );
+
+        println!("[DEBUG] Base URL: {}", base_url);
+
+        loop {
+            let mut url = reqwest::Url::parse(&base_url).unwrap();
+            url.query_pairs_mut()
+                .append_pair("timeMin", time_min)
+                .append_pair("timeMax", time_max)
+                .append_pair("singleEvents", "true")
+                .append_pair("orderBy", "startTime")
+                .append_pair("maxResults", "2500");
+
+            if let Some(ref token) = page_token {
+                url.query_pairs_mut().append_pair("pageToken", token);
+            }
+
+            println!("[DEBUG] Full URL: {}", url);
+
+            let response = self
+                .client
+                .get(url)
+                .bearer_auth(access_token)
+                .send()
+                .await?;
+
+            println!("[DEBUG] Response status: {}", response.status());
+
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(CalendarApiError::Unauthorized);
+            }
+
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                println!("[DEBUG] Error response: {}", error_text);
+                return Err(CalendarApiError::ApiError(error_text));
+            }
+
+            // Get raw text first to debug
+            let response_text = response.text().await?;
+            println!("[DEBUG] Raw response (first 500 chars): {}", &response_text[..response_text.len().min(500)]);
+
+            let events_response: EventsListResponse = serde_json::from_str(&response_text)
+                .map_err(|e| CalendarApiError::ApiError(format!("JSON parse error: {}", e)))?;
+
+            println!("[DEBUG] Parsed {} items from response", events_response.items.len());
+
+            // Filter out cancelled events
+            let active_events = events_response
+                .items
+                .into_iter()
+                .filter(|event| event.status.as_deref() != Some("cancelled"));
+
+            all_events.extend(active_events);
+
+            page_token = events_response.next_page_token;
+            if page_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(all_events)
     }
 }
 
