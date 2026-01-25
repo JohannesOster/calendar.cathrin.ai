@@ -31,24 +31,10 @@ export function toggleAccountCollapse(accountId: string): void {
 }
 
 /**
- * Get the currently open account menu ID
- */
-export function getAccountMenuOpen(): string | null {
-  return accountMenuOpen();
-}
-
-/**
  * Toggle the account menu for a specific account
  */
 export function toggleAccountMenu(accountId: string): void {
   setAccountMenuOpen((prev) => (prev === accountId ? null : accountId));
-}
-
-/**
- * Close the account menu
- */
-export function closeAccountMenu(): void {
-  setAccountMenuOpen(null);
 }
 
 /**

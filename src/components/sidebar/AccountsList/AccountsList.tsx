@@ -9,7 +9,7 @@ import {
   type DragEvent,
   type CollisionDetector,
 } from "@thisbeyond/solid-dnd";
-import { Eye, EyeOff, X } from "lucide-solid";
+import { X } from "lucide-solid";
 import {
   authError,
   setAuthError,
@@ -25,12 +25,11 @@ import {
 import {
   isAccountCollapsed,
   toggleAccountCollapse,
-  getAccountMenuOpen,
   toggleAccountMenu,
 } from "../../../stores/sidebar-ui";
 import { SIDEBAR } from "../../../constants/sidebar";
 import { SortableAccountItem } from "./SortableAccountItem";
-import { SortableCalendarItem } from "./SortableCalendarItem";
+import { SortableCalendarItem, CalendarItemContent } from "./SortableCalendarItem";
 
 // Component that re-measures layouts when account dragging starts
 function LayoutRemeasurer(props: { isDragging: () => boolean }) {
@@ -161,8 +160,8 @@ export function AccountsList() {
       {/* Empty state */}
       <Show when={orderedAccounts().length === 0}>
         <div class="text-center py-6">
-          <p class="text-sm text-[#91918e] mb-2">No calendars connected</p>
-          <p class="text-xs text-[#b8b8b5]">
+          <p class="text-sm text-[var(--color-text-secondary)] mb-2">No calendars connected</p>
+          <p class="text-xs text-[var(--color-text-muted)]">
             Add a Google account to see your calendars
           </p>
         </div>
@@ -185,7 +184,6 @@ export function AccountsList() {
                     account={account}
                     isCollapsed={isAccountCollapsed(account.id)}
                     toggleCollapse={() => toggleAccountCollapse(account.id)}
-                    menuOpen={getAccountMenuOpen() === account.id}
                     toggleMenu={() => toggleAccountMenu(account.id)}
                   />
                   {/* Calendars - hidden during account drag */}
@@ -210,48 +208,21 @@ export function AccountsList() {
         {/* Drag overlay */}
         <DragOverlay class="z-[9999]">
           <Show when={activeItem()}>
-            <div class="px-2 py-1 rounded bg-white border border-[#e8e8e8] shadow-lg">
-              <span class="text-xs font-medium text-[#91918e]">
+            <div class="px-2 py-1 rounded bg-[var(--color-bg-primary)] border border-[var(--color-border)] shadow-lg">
+              <span class="text-xs font-medium text-[var(--color-text-secondary)]">
                 {orderedAccounts().find((a) => a.id === activeItem())?.email}
               </span>
             </div>
           </Show>
           <Show when={activeCalendar()}>
-            {(calendar) => {
-              const isDefault = () => defaultCalendarId() === calendar().id;
-              return (
-                <div class="opacity-80 bg-white rounded-md shadow-lg px-2 py-1.5 w-52 border border-[#e8e8e8]">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="w-3 h-3 rounded shrink-0"
-                      style={{
-                        "background-color": calendar().color,
-                        "box-shadow": isDefault()
-                          ? `0 0 0 2px white, 0 0 0 4px ${calendar().color}`
-                          : undefined,
-                      }}
-                    />
-                    <span
-                      class="flex-1 text-sm truncate"
-                      classList={{
-                        "text-[#37352f]": calendar().visible,
-                        "text-[#91918e] line-through": !calendar().visible,
-                      }}
-                    >
-                      {calendar().name}
-                    </span>
-                    <Show when={isDefault()}>
-                      <span class="text-xs text-[#91918e]">Default</span>
-                    </Show>
-                    {calendar().visible ? (
-                      <Eye size={SIDEBAR.ICON_MD} class="text-[#91918e] shrink-0" />
-                    ) : (
-                      <EyeOff size={SIDEBAR.ICON_MD} class="text-[#91918e] shrink-0" />
-                    )}
-                  </div>
-                </div>
-              );
-            }}
+            {(calendar) => (
+              <div class="opacity-80 bg-[var(--color-bg-primary)] rounded-md shadow-lg border border-[var(--color-border)]">
+                <CalendarItemContent
+                  calendar={calendar()}
+                  isDefault={defaultCalendarId() === calendar().id}
+                />
+              </div>
+            )}
           </Show>
         </DragOverlay>
       </DragDropProvider>
