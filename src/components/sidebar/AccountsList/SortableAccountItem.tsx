@@ -27,12 +27,12 @@ export function SortableAccountItem(props: AccountItemProps) {
     >
       <Show when={sortable.isActiveDraggable}>
         <div class="px-2 py-1">
-          <div class="h-6 rounded bg-[var(--color-border)]" />
+          <div class="h-7 rounded bg-[var(--color-border)]" />
         </div>
       </Show>
       <Show when={!sortable.isActiveDraggable}>
         <div
-          class="group px-2 py-1 rounded cursor-grab hover:bg-[var(--color-bg-hover)] select-none flex items-center gap-1"
+          class="group px-2 py-1 rounded cursor-pointer hover:bg-[var(--color-bg-hover)] select-none flex items-center gap-1"
           onClick={() => props.toggleCollapse()}
         >
           <span class="text-xs font-medium text-[var(--color-text-secondary)] truncate flex-1 min-w-0">

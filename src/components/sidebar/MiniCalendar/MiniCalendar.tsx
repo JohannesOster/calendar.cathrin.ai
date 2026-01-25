@@ -80,9 +80,9 @@ export function MiniCalendar() {
   });
 
   return (
-    <div class="p-2 border-b border-[#e8e8e8]">
+    <div class="p-2 border-b border-[#e8e8e8] select-none">
       {/* Month navigation */}
-      <div class="flex items-center justify-between mb-2 px-1.5">
+      <div class="flex items-center justify-between mb-2 px-1.5 cursor-default">
         <span class="text-sm font-medium text-[#37352f]">
           {formatMonthYearLocale(currentMonth())}
         </span>
@@ -112,7 +112,7 @@ export function MiniCalendar() {
       </div>
 
       {/* Weekday headers */}
-      <div class="grid grid-cols-7 mb-1">
+      <div class="grid grid-cols-7 mb-1 cursor-default">
         <For each={WEEKDAY_LABELS}>
           {(day) => (
             <div class="w-7 text-center text-xs text-[#91918e]">{day}</div>
