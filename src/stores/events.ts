@@ -38,6 +38,10 @@ interface EventCache {
   window_end: string;
 }
 
+// Time window for fetching events (days relative to now)
+const DAYS_BEFORE = 7;
+const DAYS_AFTER = 30;
+
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
 export const [isLoading, setIsLoading] = createSignal(false);
@@ -63,17 +67,16 @@ function convertToCalendarEvent(event: StoredEvent): CalendarEvent {
 
 /**
  * Get the time window for fetching events
- * Default: -7 days to +30 days from now
  */
 function getTimeWindow(): { timeMin: string; timeMax: string } {
   const now = new Date();
 
   const min = new Date(now);
-  min.setDate(min.getDate() - 7);
+  min.setDate(min.getDate() - DAYS_BEFORE);
   min.setHours(0, 0, 0, 0);
 
   const max = new Date(now);
-  max.setDate(max.getDate() + 30);
+  max.setDate(max.getDate() + DAYS_AFTER);
   max.setHours(23, 59, 59, 999);
 
   return {

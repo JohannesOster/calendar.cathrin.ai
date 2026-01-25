@@ -9,6 +9,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_opener::OpenerExt;
 
+/// Buffer time (seconds) before token expiration to trigger refresh
+const TOKEN_REFRESH_BUFFER_SECS: u64 = 60;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CalendarAccount {
     pub id: String,
@@ -188,7 +191,7 @@ pub async fn refresh_account_calendars(
     let now = current_timestamp();
     let needs_refresh = account
         .token_expires_at
-        .map(|exp| now >= exp - 60) // Refresh if less than 60 seconds until expiration
+        .map(|exp| now >= exp - TOKEN_REFRESH_BUFFER_SECS)
         .unwrap_or(true);
 
     if needs_refresh || account.access_token.is_none() {
@@ -242,7 +245,7 @@ pub async fn ensure_valid_token(app: AppHandle<Wry>, account_id: String) -> Resu
     let now = current_timestamp();
     let needs_refresh = account
         .token_expires_at
-        .map(|exp| now >= exp - 60)
+        .map(|exp| now >= exp - TOKEN_REFRESH_BUFFER_SECS)
         .unwrap_or(true);
 
     if needs_refresh || account.access_token.is_none() {
