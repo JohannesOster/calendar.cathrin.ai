@@ -32,17 +32,14 @@ export function SortableAccountItem(props: AccountItemProps) {
         </div>
       </Show>
       <Show when={!sortable.isActiveDraggable}>
-        <div class="group px-2 py-1 rounded cursor-grab hover:bg-[#efefef] select-none flex items-center gap-1">
+        <div
+          class="group px-2 py-1 rounded cursor-grab hover:bg-[#efefef] select-none flex items-center gap-1"
+          onClick={() => props.toggleCollapse()}
+        >
           <span class="text-xs font-medium text-[#91918e] truncate flex-1 min-w-0">
             {props.account.email}
           </span>
-          <span
-            class="text-[#91918e] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.toggleCollapse();
-            }}
-          >
+          <span class="text-[#91918e] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
             {props.isCollapsed ? (
               <ChevronUp size={SIDEBAR.ICON_MD} />
             ) : (
