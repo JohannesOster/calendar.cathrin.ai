@@ -1,7 +1,8 @@
 import { createSignal, createEffect, onCleanup, Show, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
-import { events } from "../../data/mockEvents";
+import { events } from "../../stores/events";
+import { connectedAccounts } from "../../stores/accounts";
 
 interface DayColumnProps {
   date: Date;
@@ -57,9 +58,25 @@ export function DayColumn(props: DayColumnProps) {
     return day === 0 || day === 6;
   };
 
-  // Filter events for this day
+  // Get visible calendar IDs
+  const visibleCalendarIds = () => {
+    return new Set(
+      connectedAccounts()
+        .flatMap((a) => a.calendars)
+        .filter((c) => c.visible)
+        .map((c) => c.id)
+    );
+  };
+
+  // Filter events for this day: must be on this day, from a visible calendar, and not all-day
   const dayEvents = () => {
-    return events().filter((event) => isSameDay(event.start, props.date));
+    const visible = visibleCalendarIds();
+    return events().filter(
+      (event) =>
+        isSameDay(event.start, props.date) &&
+        visible.has(event.calendarId) &&
+        !event.isAllDay
+    );
   };
 
   return (

@@ -27,6 +27,25 @@ pub struct StoredCalendar {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredEvent {
+    pub id: String,
+    pub calendar_id: String,
+    pub title: String,
+    pub start: String,     // ISO 8601 / RFC3339
+    pub end: String,
+    pub is_all_day: bool,
+    pub color: String,     // Hex color from calendar
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventCache {
+    pub events: Vec<StoredEvent>,
+    pub last_fetched_at: u64,  // Unix timestamp
+    pub window_start: String,  // ISO 8601
+    pub window_end: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredAccount {
     pub id: String,
     pub email: String,
@@ -189,6 +208,65 @@ impl AccountStore {
         }
 
         store.set(ACCOUNTS_KEY, serde_json::to_value(&data)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+}
+
+pub struct EventStore;
+
+impl EventStore {
+    /// Build the storage key for an account's event cache
+    fn events_key(account_id: &str) -> String {
+        format!("events_{}", account_id)
+    }
+
+    /// Save events to cache for an account
+    pub fn save_events(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+        events: Vec<StoredEvent>,
+        window_start: String,
+        window_end: String,
+    ) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let cache = EventCache {
+            events,
+            last_fetched_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            window_start,
+            window_end,
+        };
+
+        store.set(Self::events_key(account_id), serde_json::to_value(&cache)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get cached events for an account
+    pub fn get_cached_events(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+    ) -> Result<Option<EventCache>, StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        let cache: Option<EventCache> = store
+            .get(Self::events_key(account_id))
+            .and_then(|v| serde_json::from_value(v).ok());
+
+        Ok(cache)
+    }
+
+    /// Clear cached events for an account
+    pub fn clear_events(app: &AppHandle<Wry>, account_id: &str) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        store.delete(Self::events_key(account_id));
         store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
 
         Ok(())

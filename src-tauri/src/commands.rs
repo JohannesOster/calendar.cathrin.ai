@@ -3,11 +3,14 @@ use crate::oauth::{
     build_auth_url, build_redirect_uri, exchange_code_for_tokens, find_available_port,
     refresh_access_token, wait_for_callback, CallbackResult, OAuthConfig, PkceChallenge,
 };
-use crate::storage::{AccountStore, StoredAccount, StoredCalendar};
+use crate::storage::{AccountStore, EventStore, StoredAccount, StoredCalendar, StoredEvent};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Wry};
 use tauri_plugin_opener::OpenerExt;
+
+/// Buffer time (seconds) before token expiration to trigger refresh
+const TOKEN_REFRESH_BUFFER_SECS: u64 = 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CalendarAccount {
@@ -188,7 +191,7 @@ pub async fn refresh_account_calendars(
     let now = current_timestamp();
     let needs_refresh = account
         .token_expires_at
-        .map(|exp| now >= exp - 60) // Refresh if less than 60 seconds until expiration
+        .map(|exp| now >= exp - TOKEN_REFRESH_BUFFER_SECS)
         .unwrap_or(true);
 
     if needs_refresh || account.access_token.is_none() {
@@ -242,7 +245,7 @@ pub async fn ensure_valid_token(app: AppHandle<Wry>, account_id: String) -> Resu
     let now = current_timestamp();
     let needs_refresh = account
         .token_expires_at
-        .map(|exp| now >= exp - 60)
+        .map(|exp| now >= exp - TOKEN_REFRESH_BUFFER_SECS)
         .unwrap_or(true);
 
     if needs_refresh || account.access_token.is_none() {
@@ -263,4 +266,106 @@ pub async fn ensure_valid_token(app: AppHandle<Wry>, account_id: String) -> Resu
     } else {
         account.access_token.ok_or("No access token".to_string())
     }
+}
+
+/// Fetch events for all visible calendars in an account
+/// Caches results before returning for instant display on next app launch
+#[tauri::command]
+pub async fn fetch_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+    time_min: String,
+    time_max: String,
+) -> Result<Vec<StoredEvent>, String> {
+    // Get account and verify it exists
+    let account = AccountStore::get_account(&app, &account_id).map_err(|e| e.to_string())?;
+
+    // Get visible calendars
+    let visible_calendars: Vec<_> = account.calendars.iter().filter(|c| c.visible).collect();
+
+    // If no visible calendars, return empty and cache empty
+    if visible_calendars.is_empty() {
+        EventStore::save_events(
+            &app,
+            &account_id,
+            Vec::new(),
+            time_min.clone(),
+            time_max.clone(),
+        )
+        .map_err(|e| e.to_string())?;
+        return Ok(Vec::new());
+    }
+
+    // Ensure valid token (refresh if needed)
+    let access_token = ensure_valid_token(app.clone(), account_id.clone()).await?;
+
+    // Fetch events from all visible calendars
+    let client = CalendarClient::new();
+    let mut all_events: Vec<StoredEvent> = Vec::new();
+
+    for calendar in visible_calendars {
+        let google_events = client
+            .fetch_events(&access_token, &calendar.id, &time_min, &time_max)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Convert GoogleEvent to StoredEvent with calendar color
+        for event in google_events {
+            let (start, is_all_day) = if let Some(ref dt) = event.start.date_time {
+                (dt.clone(), false)
+            } else if let Some(ref d) = event.start.date {
+                (d.clone(), true)
+            } else {
+                continue; // Skip events with no start time
+            };
+
+            let end = if let Some(ref dt) = event.end.date_time {
+                dt.clone()
+            } else if let Some(ref d) = event.end.date {
+                d.clone()
+            } else {
+                start.clone() // Fallback to start time
+            };
+
+            all_events.push(StoredEvent {
+                id: event.id,
+                calendar_id: calendar.id.clone(),
+                title: event.summary.unwrap_or_default(),
+                start,
+                end,
+                is_all_day,
+                color: calendar.color.clone(),
+            });
+        }
+    }
+
+    // Save to cache before returning
+    EventStore::save_events(
+        &app,
+        &account_id,
+        all_events.clone(),
+        time_min,
+        time_max,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(all_events)
+}
+
+/// Get cached events for an account (if available)
+#[tauri::command]
+pub async fn get_cached_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+) -> Result<Option<crate::storage::EventCache>, String> {
+    EventStore::get_cached_events(&app, &account_id).map_err(|e| e.to_string())
+}
+
+/// Clear cached events for an account
+#[tauri::command]
+pub async fn clear_cached_events(
+    app: AppHandle<Wry>,
+    account_id: String,
+) -> Result<(), String> {
+    EventStore::clear_events(&app, &account_id).map_err(|e| e.to_string())
 }
