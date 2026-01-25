@@ -105,13 +105,38 @@ The calendar grid uses percentage-based flexbox widths (`width: ${(TOTAL_DAYS / 
 The time column uses CSS transform (`translateY`) instead of a separate scrollable container for vertical sync with the main grid. This provides pixel-perfect alignment and avoids scroll event race conditions.
 
 ### Drag-and-Drop with solid-dnd
-Uses `@thisbeyond/solid-dnd` for sortable lists. Pattern:
-1. Wrap with `<DragDropProvider>` and `<DragDropSensors>`
-2. Use `<SortableProvider ids={orderedIds()}>` with reactive ID array
-3. Each item uses `createSortable(id)` returning `{ ref, transform, isActiveDraggable }`
-4. Apply `transformStyle(sortable.transform)` for smooth animations
-5. Use `<DragOverlay>` for custom drag ghost (renders above everything)
-6. Handle `onDragEnd` to persist new order
+
+Uses `@thisbeyond/solid-dnd` for sortable lists with `@formkit/auto-animate` for smooth reorder animations.
+
+**Architecture** (`src/components/sidebar/AccountsList/`):
+- `AccountsList.tsx` - Main DnD orchestrator with nested drag contexts
+- `SortableAccountItem.tsx` - Draggable account with nested calendar list
+- `SortableCalendarItem.tsx` - Draggable calendar item
+- `collisionDetector.ts` - Custom collision detection with different strategies per item type
+
+**Two-Level Drag System**:
+- **Accounts**: Use overlap + closest center + hysteresis collision detection
+- **Calendars**: Use trigger zones (top/bottom 30% of item) for precise control
+
+**Collision Detection Strategies** (`collisionDetector.ts`):
+- Accounts use hysteresis to prevent jitter: tracks last swap and blocks immediate reverse swaps unless the draggable moves past a threshold (`HYSTERESIS_THRESHOLD: 10px`)
+- Calendars use trigger zones: swaps only occur when draggable center enters top/bottom 30% of target item
+- Both filter droppables by type (accounts only collide with accounts, calendars with calendars)
+
+**Animation with auto-animate**:
+- `@formkit/auto-animate` provides FLIP animations when DOM order changes
+- Applied via `createAutoAnimate()` ref on container divs
+- **Important**: Use CSS hiding (`max-height: 0`) instead of `<Show>` for containers with auto-animate refs - unmounting destroys the ref connection
+
+**Reactivity Pattern for Nested Lists**:
+- Props for `orderedCalendarIds` and `orderedCalendars` must be passed as accessor functions (`() => value`)
+- Child components call them as functions (`props.orderedCalendars()`)
+- This ensures SolidJS reactivity propagates during drag reordering
+
+**Key Signals**:
+- `dragOrder` / `calendarDragOrder` - Temporary order during drag (not persisted until drag ends)
+- `displayOrder()` - Returns drag order if dragging, otherwise persisted order
+- `lastSwap` - Tracks last swap for hysteresis (accounts only)
 
 ### TypeScript Configuration
 - Strict mode enabled

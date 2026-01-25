@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { createSortable, SortableProvider } from "@thisbeyond/solid-dnd";
+import { createAutoAnimate } from "@formkit/auto-animate/solid";
 import { ChevronDown, ChevronUp, MoreHorizontal, RefreshCw, Trash2 } from "lucide-solid";
 import type { CalendarAccount, Calendar } from "../../../stores/accounts";
 import { SIDEBAR } from "../../../constants/sidebar";
@@ -19,8 +20,9 @@ interface SortableAccountItemProps {
     calendarId: string,
     currentVisible: boolean
   ) => void;
-  orderedCalendarIds: string[];
-  orderedCalendars: Calendar[];
+  // Reactive accessors for drag-and-drop reordering
+  orderedCalendarIds: () => string[];
+  orderedCalendars: () => Calendar[];
 }
 
 /**
@@ -30,6 +32,7 @@ interface SortableAccountItemProps {
  */
 export function SortableAccountItem(props: SortableAccountItemProps) {
   const sortable = createSortable(props.account.id);
+  const [animateCalendars] = createAutoAnimate({ duration: 150 });
 
   // Compute the max-height for the calendars section
   const calendarsMaxHeight = () => {
@@ -114,29 +117,31 @@ export function SortableAccountItem(props: SortableAccountItemProps) {
       </div>
 
       {/* Calendars - separate from account header, has its own SortableProvider */}
-      <Show when={!sortable.isActiveDraggable}>
-        <div
-          class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
-          style={{
-            "max-height": props.isCollapsed ? "0px" : calendarsMaxHeight(),
-            opacity: props.isCollapsed ? "0" : "1",
-          }}
-        >
-          <SortableProvider ids={props.orderedCalendarIds}>
-            <div class="space-y-0.5 pt-1">
-              <For each={props.orderedCalendars}>
-                {(calendar) => (
-                  <SortableCalendarItem
-                    calendar={calendar}
-                    accountId={props.account.id}
-                    onToggleVisibility={props.onToggleCalendarVisibility}
-                  />
-                )}
-              </For>
-            </div>
-          </SortableProvider>
-        </div>
-      </Show>
+      {/* Note: Using CSS to hide instead of <Show> to preserve auto-animate ref */}
+      <div
+        class="overflow-hidden transition-[max-height,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{
+          "max-height":
+            sortable.isActiveDraggable || props.isCollapsed
+              ? "0px"
+              : calendarsMaxHeight(),
+          opacity: sortable.isActiveDraggable || props.isCollapsed ? "0" : "1",
+        }}
+      >
+        <SortableProvider ids={props.orderedCalendarIds()}>
+          <div ref={animateCalendars} class="space-y-0.5 pt-1">
+            <For each={props.orderedCalendars()}>
+              {(calendar) => (
+                <SortableCalendarItem
+                  calendar={calendar}
+                  accountId={props.account.id}
+                  onToggleVisibility={props.onToggleCalendarVisibility}
+                />
+              )}
+            </For>
+          </div>
+        </SortableProvider>
+      </div>
     </div>
   );
 }

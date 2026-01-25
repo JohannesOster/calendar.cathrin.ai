@@ -13,8 +13,11 @@ export const SIDEBAR = {
   // Animation timings
   FLASH_CLEAR_DELAY: 50,
 
-  // Drag and drop - trigger zone is top/bottom X% of each item
-  TRIGGER_ZONE_PERCENT: 0.15,
+  // Drag and drop
+  // Accounts: hysteresis threshold in pixels (prevents jitter on reverse swaps)
+  HYSTERESIS_THRESHOLD: 10,
+  // Calendars: trigger zone is top/bottom X% of each item
+  TRIGGER_ZONE_PERCENT: 0.30,
 } as const;
 
 export const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;

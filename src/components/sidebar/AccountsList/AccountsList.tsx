@@ -8,6 +8,7 @@ import {
   type Id,
   type DragEvent,
 } from "@thisbeyond/solid-dnd";
+import { createAutoAnimate } from "@formkit/auto-animate/solid";
 import { ChevronDown, Eye, EyeOff, MoreHorizontal, X } from "lucide-solid";
 import {
   authError,
@@ -33,7 +34,7 @@ import {
   closeAccountMenu,
 } from "../../../stores/sidebar-ui";
 import { SIDEBAR } from "../../../constants/sidebar";
-import { createTriggerZoneCollisionDetector } from "./collisionDetector";
+import { createTriggerZoneCollisionDetector, type SwapRecord } from "./collisionDetector";
 import { SortableAccountItem } from "./SortableAccountItem";
 
 // Type to track what kind of item is being dragged
@@ -56,6 +57,8 @@ export function AccountsList() {
   const [calendarDragOrder, setCalendarDragOrder] = createSignal<
     string[] | null
   >(null);
+  // Track the last swap to implement hysteresis for accounts
+  let lastSwap: SwapRecord | null = null;
 
   // Use drag order during drag, otherwise use persisted order
   const displayOrder = () => dragOrder() ?? orderedAccountIds();
@@ -105,8 +108,11 @@ export function AccountsList() {
     return { accountId, calendar };
   };
 
-  // Create trigger zone collision detector (no hysteresis needed)
-  const collisionDetector = createTriggerZoneCollisionDetector(isAccountId);
+  // Create collision detector with hysteresis for accounts
+  const collisionDetector = createTriggerZoneCollisionDetector(
+    isAccountId,
+    () => lastSwap
+  );
 
   const handleToggleCalendarVisibility = async (
     accountId: string,
@@ -141,6 +147,7 @@ export function AccountsList() {
   const onDragStart = (event: DragEvent) => {
     const id = event.draggable.id as string;
     setActiveId(id);
+    lastSwap = null; // Reset hysteresis on drag start
 
     if (isAccountId(id)) {
       // Dragging an account
@@ -174,6 +181,15 @@ export function AccountsList() {
       const toIndex = currentOrder.indexOf(droppable.id as string);
 
       if (fromIndex !== toIndex && fromIndex !== -1 && toIndex !== -1) {
+        // Record this swap for hysteresis
+        const draggableY = draggable.transformed?.y ?? draggable.layout?.y ?? 0;
+        lastSwap = {
+          fromId: draggable.id as string,
+          toId: droppable.id as string,
+          pointerY: draggableY,
+          direction: fromIndex < toIndex ? "down" : "up",
+        };
+
         const newOrder = [...currentOrder];
         const [removed] = newOrder.splice(fromIndex, 1);
         newOrder.splice(toIndex, 0, removed);
@@ -227,6 +243,7 @@ export function AccountsList() {
 
     setActiveId(null);
     setDragType(null);
+    lastSwap = null; // Reset hysteresis on drag end
   };
 
   return (
@@ -356,6 +373,7 @@ interface SortableAccountsListProps {
  */
 function SortableAccountsList(props: SortableAccountsListProps) {
   const [, { recomputeLayouts }] = useDragDropContext()!;
+  const [animateParent] = createAutoAnimate({ duration: 150 });
 
   // Get accounts in display order
   const displayAccounts = () => {
@@ -376,7 +394,7 @@ function SortableAccountsList(props: SortableAccountsListProps) {
   });
 
   return (
-    <div class="flex flex-col gap-1">
+    <div ref={animateParent} class="flex flex-col gap-1">
       <For each={displayAccounts()}>
         {(account) => (
           <SortableAccountItem
@@ -389,8 +407,8 @@ function SortableAccountsList(props: SortableAccountsListProps) {
             onRefresh={() => props.handleRefreshAccount(account.id)}
             onRemove={() => props.handleRemoveAccount(account.id)}
             onToggleCalendarVisibility={props.handleToggleCalendarVisibility}
-            orderedCalendarIds={props.getCalendarDisplayOrder(account.id)}
-            orderedCalendars={props.getDisplayCalendars(account.id)}
+            orderedCalendarIds={() => props.getCalendarDisplayOrder(account.id)}
+            orderedCalendars={() => props.getDisplayCalendars(account.id)}
           />
         )}
       </For>
