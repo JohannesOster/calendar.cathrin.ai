@@ -1,16 +1,25 @@
 import type { CalendarEvent } from "../stores/events";
-
-// Threshold for "same start time" - events starting within this many minutes are considered simultaneous
-// Notion uses ~30 minutes - if events start closer than this, they get separate columns
-const SAME_START_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
-
-// Cascade indent for staggered events (percentage points)
-const CASCADE_INDENT_PERCENT = 5;
+import {
+  SAME_START_THRESHOLD_MS,
+  CASCADE_INDENT_PERCENT,
+  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_TOTAL_PX,
+} from "../constants/calendar";
 
 export interface EventLayoutInfo {
   left: string;
   width: string;
   zIndex: number;
+}
+
+/**
+ * Sort comparator for events: by start time, then by duration (longer first)
+ */
+function compareEvents(a: CalendarEvent, b: CalendarEvent): number {
+  const startDiff = a.start.getTime() - b.start.getTime();
+  if (startDiff !== 0) return startDiff;
+  // Same start time: longer events first (they go behind shorter ones)
+  return b.end.getTime() - a.end.getTime();
 }
 
 /**
@@ -22,9 +31,10 @@ function eventsOverlap(a: CalendarEvent, b: CalendarEvent): boolean {
 
 /**
  * Build clusters of overlapping events (connected components)
+ * Input should already be sorted by compareEvents
  */
-function buildClusters(events: CalendarEvent[]): CalendarEvent[][] {
-  if (events.length === 0) return [];
+function buildClusters(sortedEvents: CalendarEvent[]): CalendarEvent[][] {
+  if (sortedEvents.length === 0) return [];
 
   const visited = new Set<string>();
   const clusters: CalendarEvent[][] = [];
@@ -34,18 +44,20 @@ function buildClusters(events: CalendarEvent[]): CalendarEvent[][] {
     visited.add(event.id);
     cluster.push(event);
 
-    for (const other of events) {
+    for (const other of sortedEvents) {
       if (!visited.has(other.id) && eventsOverlap(event, other)) {
         dfs(other, cluster);
       }
     }
   }
 
-  for (const event of events) {
+  for (const event of sortedEvents) {
     if (!visited.has(event.id)) {
       const cluster: CalendarEvent[] = [];
       dfs(event, cluster);
-      cluster.sort((a, b) => a.start.getTime() - b.start.getTime());
+      // Cluster inherits sorted order from input, but DFS may add out of order
+      // Re-sort to ensure correct order within cluster
+      cluster.sort(compareEvents);
       clusters.push(cluster);
     }
   }
@@ -54,37 +66,31 @@ function buildClusters(events: CalendarEvent[]): CalendarEvent[][] {
 }
 
 /**
- * Layout a cluster using Notion Calendar's actual algorithm:
- * - Events starting at same time define columns
+ * Layout a cluster using Notion Calendar's algorithm:
+ * - Events starting within SAME_START_THRESHOLD define base columns
  * - Later events cascade on top of rightmost overlapping column
- * - Column 0 events: reduced width to show space for overlapping events
- * - Later column events: fill to 100% from their left position
+ * - Column 0 gets reduced width; others fill to 100%
+ *
+ * Input must be sorted by compareEvents
  */
-function layoutCluster(cluster: CalendarEvent[]): Map<string, EventLayoutInfo> {
+function layoutCluster(sortedCluster: CalendarEvent[]): Map<string, EventLayoutInfo> {
   const layouts = new Map<string, EventLayoutInfo>();
 
-  if (cluster.length === 1) {
-    layouts.set(cluster[0].id, {
-      left: "4px",
-      width: "calc(100% - 8px)",
+  if (sortedCluster.length === 1) {
+    layouts.set(sortedCluster[0].id, {
+      left: `${EVENT_MARGIN_X_PX}px`,
+      width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: 1,
     });
     return layouts;
   }
 
-  // Sort by start time, then by duration (longer first)
-  const sorted = [...cluster].sort((a, b) => {
-    const startDiff = a.start.getTime() - b.start.getTime();
-    if (startDiff !== 0) return startDiff;
-    return b.end.getTime() - a.end.getTime();
-  });
-
-  // Identify base events (earliest starters) and cascade events
+  // Categorize into base events (simultaneous) and cascade events (later)
+  const earliestStart = sortedCluster[0].start.getTime();
   const baseEvents: CalendarEvent[] = [];
   const cascadeEvents: CalendarEvent[] = [];
-  const earliestStart = sorted[0].start.getTime();
 
-  for (const event of sorted) {
+  for (const event of sortedCluster) {
     if (event.start.getTime() - earliestStart <= SAME_START_THRESHOLD_MS) {
       baseEvents.push(event);
     } else {
@@ -92,44 +98,53 @@ function layoutCluster(cluster: CalendarEvent[]): Map<string, EventLayoutInfo> {
     }
   }
 
-  // Assign columns to base events
+  // Assign columns to base events (they're already sorted)
   const columnAssignments = new Map<string, number>();
-  const numBaseColumns = baseEvents.length;
-
   for (let i = 0; i < baseEvents.length; i++) {
     columnAssignments.set(baseEvents[i].id, i);
   }
 
   // Assign cascade events to the rightmost column they overlap with
+  // cascadeEvents maintain sorted order from sortedCluster
   for (const event of cascadeEvents) {
     let bestColumn = 0;
+
+    // Check overlap with base events
     for (const baseEvent of baseEvents) {
       if (eventsOverlap(event, baseEvent)) {
         const col = columnAssignments.get(baseEvent.id)!;
         if (col >= bestColumn) bestColumn = col;
       }
     }
+
+    // Check overlap with previously assigned cascade events
     for (const other of cascadeEvents) {
-      if (other.id !== event.id && eventsOverlap(event, other) && columnAssignments.has(other.id)) {
+      if (other.id === event.id) break; // Only check events before this one
+      if (eventsOverlap(event, other) && columnAssignments.has(other.id)) {
         const col = columnAssignments.get(other.id)!;
         if (col >= bestColumn) bestColumn = col;
       }
     }
+
     columnAssignments.set(event.id, bestColumn);
   }
 
   // Calculate cascade levels within each column
   const cascadeLevels = new Map<string, number>();
+
+  // Base events are level 0
   for (const event of baseEvents) {
     cascadeLevels.set(event.id, 0);
   }
 
-  cascadeEvents.sort((a, b) => a.start.getTime() - b.start.getTime());
-
+  // Cascade events get level based on how many earlier events they overlap in same column
   for (const event of cascadeEvents) {
     const column = columnAssignments.get(event.id)!;
     let level = 0;
-    for (const other of [...baseEvents, ...cascadeEvents]) {
+
+    // Check all events in the same column that started before this one
+    const allEvents = [...baseEvents, ...cascadeEvents];
+    for (const other of allEvents) {
       if (other.id === event.id) continue;
       if (
         columnAssignments.get(other.id) === column &&
@@ -140,43 +155,33 @@ function layoutCluster(cluster: CalendarEvent[]): Map<string, EventLayoutInfo> {
         level = Math.max(level, otherLevel + 1);
       }
     }
+
     cascadeLevels.set(event.id, level);
   }
 
-  // Calculate max concurrent events (for width calculation)
-  // This includes cascade events as additional "layers"
+  // Calculate total layers for width distribution
   const maxCascadeLevel = Math.max(0, ...Array.from(cascadeLevels.values()));
-  const totalLayers = numBaseColumns + maxCascadeLevel;
-
-  // Calculate layouts using Notion's formula:
-  // - columnWidth = 100 / totalLayers
-  // - Column 0: width = 100 - (columnWidth / 2) to leave room
-  // - Other columns: fill to 100% from left position
+  const totalLayers = baseEvents.length + maxCascadeLevel;
   const columnWidth = 100 / totalLayers;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const event = sorted[i];
+  // Generate final layouts
+  for (let i = 0; i < sortedCluster.length; i++) {
+    const event = sortedCluster[i];
     const column = columnAssignments.get(event.id)!;
     const cascadeLevel = cascadeLevels.get(event.id) ?? 0;
 
-    // Calculate left position
     const baseLeft = column * columnWidth;
     const cascadeIndent = cascadeLevel * CASCADE_INDENT_PERCENT;
     const left = baseLeft + cascadeIndent;
 
-    // Calculate width
-    let width: number;
-    if (column === 0 && cascadeLevel === 0) {
-      // First column base event: reduced width to show overlapping events
-      width = 100 - columnWidth / 2;
-    } else {
-      // All other events: fill to 100% from left position
-      width = 100 - left;
-    }
+    // Column 0 base event gets reduced width; others fill to edge
+    const width = (column === 0 && cascadeLevel === 0)
+      ? 100 - columnWidth / 2
+      : 100 - left;
 
     layouts.set(event.id, {
-      left: `calc(${left}% + 4px)`,
-      width: `calc(${width}% - 8px)`,
+      left: `calc(${left}% + ${EVENT_MARGIN_X_PX}px)`,
+      width: `calc(${width}% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: i + 1,
     });
   }
@@ -194,10 +199,10 @@ export function calculateEventLayouts(
 
   if (events.length === 0) return allLayouts;
 
-  const sorted = [...events].sort(
-    (a, b) => a.start.getTime() - b.start.getTime()
-  );
+  // Sort once at the entry point
+  const sorted = [...events].sort(compareEvents);
 
+  // Build clusters and layout each
   const clusters = buildClusters(sorted);
 
   for (const cluster of clusters) {

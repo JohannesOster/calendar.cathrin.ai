@@ -3,22 +3,29 @@ import { burnElement } from "../../hooks/useBurnAnimation";
 import { deleteEvent } from "../../data/mockEvents";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
+import type { CalendarEvent } from "../../stores/events";
 
-export interface CalendarEvent {
-  id: string;
-  title: string;
-  start: Date;
-  end: Date;
-  color: string;
-}
+// Re-export for backward compatibility
+export type { CalendarEvent };
+import {
+  HOUR_HEIGHT_PX,
+  EVENT_MARGIN_BOTTOM_PX,
+  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_TOTAL_PX,
+  MIN_EVENT_HEIGHT_PX,
+  SINGLE_LINE_THRESHOLD_PX,
+  SHORT_TIME_THRESHOLD_PX,
+  TITLE_LINE_HEIGHT_PX,
+  TIME_ROW_HEIGHT_PX,
+  EVENT_PADDING_Y_PX,
+  FOCUSED_Z_INDEX,
+  MS_PER_HOUR,
+} from "../../constants/calendar";
 
 interface CalendarEventProps {
   event: CalendarEvent;
   layout?: EventLayoutInfo;
 }
-
-const HOUR_HEIGHT = 48; // matches --grid-hour-height
-const CHIP_MARGIN_BOTTOM = 4; // gap at bottom of events
 
 function formatTime(date: Date): string {
   const hours = date.getHours();
@@ -45,23 +52,20 @@ export function CalendarEvent(props: CalendarEventProps) {
   const getPosition = () => {
     const startHours = props.event.start.getHours();
     const startMinutes = props.event.start.getMinutes();
-    return (startHours + startMinutes / 60) * HOUR_HEIGHT;
+    return (startHours + startMinutes / 60) * HOUR_HEIGHT_PX;
   };
 
   const getHeight = () => {
     const startMs = props.event.start.getTime();
     const endMs = props.event.end.getTime();
-    const durationHours = (endMs - startMs) / (1000 * 60 * 60);
-    const rawHeight = durationHours * HOUR_HEIGHT - CHIP_MARGIN_BOTTOM;
-    return Math.max(rawHeight, 24); // minimum height of 24px
+    const durationMs = endMs - startMs;
+    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+    return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
   };
 
-  // Calculate max lines for title based on available height
-  // Height minus padding (8px top+bottom) minus time row (~14px) = title area
-  // Line height for text-xs leading-tight ≈ 15px
   const getTitleMaxLines = () => {
-    const titleAreaHeight = getHeight() - 8 - 14;
-    return Math.max(1, Math.floor(titleAreaHeight / 15));
+    const titleAreaHeight = getHeight() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX;
+    return Math.max(1, Math.floor(titleAreaHeight / TITLE_LINE_HEIGHT_PX));
   };
 
   // Exposed method to trigger the burn animation
@@ -83,9 +87,9 @@ export function CalendarEvent(props: CalendarEventProps) {
   };
 
   // Get layout-aware positioning
-  const getLeft = () => props.layout?.left ?? "4px";
-  const getWidth = () => props.layout?.width ?? "calc(100% - 8px)";
-  const getZIndex = () => (isFocused() ? 100 : (props.layout?.zIndex ?? 1));
+  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_X_PX}px`;
+  const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
+  const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
 
   return (
     // Outer wrapper - positioned, not clipped
@@ -115,7 +119,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         onBlur={() => setIsFocused(false)}
       >
         <Show
-          when={getHeight() >= 28}
+          when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
           fallback={
             <div class="truncate text-xs leading-tight font-medium">
               {props.event.title}
@@ -133,7 +137,7 @@ export function CalendarEvent(props: CalendarEventProps) {
             {props.event.title}
           </div>
           <div class="text-[10px] font-light mt-0.5 opacity-80 whitespace-nowrap">
-            {getHeight() < 32 ? formatTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
+            {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
           </div>
         </Show>
       </div>

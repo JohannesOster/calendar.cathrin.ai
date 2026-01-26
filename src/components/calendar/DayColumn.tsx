@@ -4,13 +4,11 @@ import { CalendarEvent } from "./CalendarEvent";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
+import { TOTAL_GRID_HEIGHT_PX } from "../../constants/calendar";
 
 interface DayColumnProps {
   date: Date;
 }
-
-// Total height: 24 hours × 48px = 1152px
-const TOTAL_HEIGHT = 24 * 48;
 
 export function DayColumn(props: DayColumnProps) {
   const [showFlash, setShowFlash] = createSignal(false);
@@ -86,7 +84,7 @@ export function DayColumn(props: DayColumnProps) {
   return (
     <div
       class="relative [contain:strict]"
-      style={{ height: `${TOTAL_HEIGHT}px` }}
+      style={{ height: `${TOTAL_GRID_HEIGHT_PX}px` }}
       classList={{
         "bg-[#fafafa]": isWeekend(),
       }}
