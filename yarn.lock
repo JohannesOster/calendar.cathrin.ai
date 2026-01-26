@@ -594,7 +594,7 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.56.0.tgz#9eec0212732a432c71bde0350bc40b673d15b2db"
   integrity sha512-H8AE9Ur/t0+1VXujj90w0HrSOuv0Nq9r1vSZF2t5km20NTfosQsGGUXDaKdQZzwuLts7IyL1fYT4hM95TI9c4g==
 
-"@solid-primitives/keyed@^1.5.2":
+"@solid-primitives/keyed@^1.5.2", "@solid-primitives/keyed@^1.5.3":
   version "1.5.3"
   resolved "https://registry.yarnpkg.com/@solid-primitives/keyed/-/keyed-1.5.3.tgz#df60e7a079cc99ef80d22e4c03bb80eabc106392"
   integrity sha512-zNadtyYBhJSOjXtogkGHmRxjGdz9KHc8sGGVAGlUABkE8BED2tbIZoxkwSqzOwde8OcUEH0bb5DLZUWIMvyBSA==
