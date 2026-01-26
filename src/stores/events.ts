@@ -88,10 +88,17 @@ function getTimeWindow(): { timeMin: string; timeMax: string } {
 /**
  * Deduplicate and sort events by start time
  */
-function processEvents(allEvents: CalendarEvent[]): CalendarEvent[] {
+function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent[] = []): CalendarEvent[] {
   // Deduplicate by event id
   const uniqueEvents = new Map<string, CalendarEvent>();
-  for (const event of allEvents) {
+  
+  // Add existing events first
+  for (const event of existingEvents) {
+    uniqueEvents.set(event.id, event);
+  }
+  
+  // Add/overwrite with new events
+  for (const event of newEvents) {
     uniqueEvents.set(event.id, event);
   }
 
@@ -134,9 +141,13 @@ export async function loadCachedEvents(): Promise<void> {
 /**
  * Refresh events from Google Calendar API
  * Shows loading state and surfaces errors
+ * @param window Optional time window to fetch events for. Defaults to initial window.
  */
-export async function refreshEvents(): Promise<void> {
-  setIsLoading(true);
+export async function refreshEvents(window?: { start: Date; end: Date }): Promise<void> {
+  // Only set global loading on initial fetch or full refresh
+  if (!window) {
+    setIsLoading(true);
+  }
   setEventsError(null);
 
   try {
@@ -147,8 +158,19 @@ export async function refreshEvents(): Promise<void> {
       return;
     }
 
-    const { timeMin, timeMax } = getTimeWindow();
-    const allEvents: CalendarEvent[] = [];
+    let timeMin: string;
+    let timeMax: string;
+
+    if (window) {
+      timeMin = window.start.toISOString();
+      timeMax = window.end.toISOString();
+    } else {
+      const defaultWindow = getTimeWindow();
+      timeMin = defaultWindow.timeMin;
+      timeMax = defaultWindow.timeMax;
+    }
+
+    const newEvents: CalendarEvent[] = [];
 
     for (const account of accounts) {
       const accountEvents = await invoke<StoredEvent[]>("fetch_events", {
@@ -157,10 +179,25 @@ export async function refreshEvents(): Promise<void> {
         timeMax,
       });
 
-      allEvents.push(...accountEvents.map(convertToCalendarEvent));
+      newEvents.push(...accountEvents.map(convertToCalendarEvent));
     }
 
-    setEvents(processEvents(allEvents));
+    // Merge new events with existing ones
+    // If no window was provided (initial load/refresh), we might want to replace everything?
+    // But for safety and simplicity, merging is usually properly safe if we trust deduplication.
+    // However, if we do a full refresh (no window), we probably expect to clear stale events that might have been deleted?
+    // For now, let's assume 'processEvents' handles merging.
+    // If window is NOT provided, it effectively acts as a "reset" or "initial load" logic in original code.
+    // To support "replace all", we would pass empty array to processEvents second arg.
+    
+    // If window IS provided, we merge.
+    // If window IS NOT provided (refresh button or init), we probably want to keep existing events that are OUTSIDE the default window?
+    // Or maybe we want to reset? The original code replaced EVERYTHING.
+    // Let's preserve original behavior: if no window, replace everything (implied by passing empty array as existing).
+    // actually, let's keep all events to be safe, so we don't lose scrolled-to events.
+    
+    setEvents((prev) => processEvents(newEvents, window ? prev : []));
+    
     setLastRefreshed(new Date());
   } catch (error) {
     const errorMessage =

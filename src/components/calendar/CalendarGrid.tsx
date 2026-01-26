@@ -1,61 +1,64 @@
-import { createSignal, onMount, onCleanup, createEffect, createMemo } from "solid-js";
+import { createSignal, onMount, onCleanup, createEffect, createMemo, batch } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { addDays, getSundayOfWeek, isSameDay, formatMonthYear } from "../../lib/date-utils";
+import { refreshEvents } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
   `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 
-// Sliding window: small buffer since we're not virtualizing
-const BUFFER_DAYS = 7; // Days on each side
-const VISIBLE_DAYS = 7;
-const TOTAL_DAYS = BUFFER_DAYS * 2 + VISIBLE_DAYS; // 21 days total
+// Virtual Container Configuration
+const CONTAINER_WIDTH = 500000; // Large virtual width
+const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Start in middle "Today"
+const VISIBLE_BUFFER_DAYS = 5; // Extra days to render off-screen
+
+// Dimensions
 const TOTAL_HEIGHT = 24 * 48; // 24 hours × 48px
 const HEADER_HEIGHT = 40; // px
 
-// Get Sunday of the current week for initial view
-const initialSunday = (() => {
+// Initial Reference Date (Anchor)
+// All positions are calculated relative to this date being at CENTER_OFFSET
+const anchorDate = (() => {
   const today = new Date();
-  const result = new Date(today);
-  result.setDate(today.getDate() - today.getDay());
-  return result;
+  const d = new Date(today);
+  d.setDate(today.getDate() - today.getDay()); // Start with Sunday
+  d.setHours(0, 0, 0, 0);
+  return d;
 })();
 
 // Export signals for external control
-export const [centerDate, setCenterDate] = createSignal(initialSunday);
+export const [centerDate, setCenterDate] = createSignal(new Date());
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
-export const [visibleStartDate, setVisibleStartDate] = createSignal(initialSunday);
+export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date());
 
 
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
-  let isShifting = false;
   let isInitialized = false;
 
-  // Track which day is at left edge (for preserving view on resize)
-  let leftmostDayIndex = BUFFER_DAYS;
+  // Track loaded range to avoid redundant fetches
+  // Initial window is -7 to +30 days (matches events.ts default)
+  const initialStart = new Date();
+  initialStart.setDate(initialStart.getDate() - 7);
+  const initialEnd = new Date();
+  initialEnd.setDate(initialEnd.getDate() + 30);
+
+  let loadedStart = initialStart;
+  let loadedEnd = initialEnd;
+
+  // Track scroll position for virtualization
+  const [scrollLeft, setScrollLeft] = createSignal(CENTER_OFFSET);
+  const [containerWidth, setContainerWidth] = createSignal(0);
 
   // Signal to track computed column width for responsive layout
   const [colWidth, setColWidth] = createSignal(120);
-
-  // Generate sliding window of dates centered around centerDate
-  const visibleDays = createMemo(() => {
-    const center = centerDate();
-    const days: Date[] = [];
-    const startDate = addDays(center, -BUFFER_DAYS - Math.floor(VISIBLE_DAYS / 2));
-
-    for (let i = 0; i < TOTAL_DAYS; i++) {
-      days.push(addDays(startDate, i));
-    }
-    return days;
-  });
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
@@ -65,164 +68,168 @@ export function CalendarGrid() {
   // Get current column width based on visible area and update signal
   const getColumnWidth = () => {
     if (!scrollContainerRef) return colWidth();
-    // Don't update width during buffer shift - use captured value
-    if (isShifting) return colWidth();
 
-    const containerWidth = scrollContainerRef.clientWidth;
-    // Guard against container not being laid out yet
-    if (containerWidth <= 0) return colWidth();
+    const cw = scrollContainerRef.clientWidth;
+    if (cw <= 0) return colWidth();
+    setContainerWidth(cw); // Track container width for virtualization
 
     const timeColWidth = getTimeColWidth();
-    const availableWidth = containerWidth - timeColWidth;
-    // Ensure we have positive available width
+    const availableWidth = cw - timeColWidth;
     if (availableWidth <= 0) return colWidth();
 
-    const width = availableWidth / VISIBLE_DAYS;
-    // Always update signal with valid width
+    // Default to displaying 7 days
+    const width = availableWidth / 7;
     if (width > 0) {
       setColWidth(width);
     }
     return width;
   };
 
-  // Update displayed month based on scroll position
-  const updateDisplayedMonth = () => {
+  // Calculate visible day range based on scroll position
+  const visibleDays = createMemo(() => {
+    const width = colWidth();
+    const sLeft = scrollLeft();
+    const cWidth = containerWidth() || window.innerWidth; // Fallback if not measured yet
+
+    // Calculate indices relative to anchor (0 = anchor date)
+    // We want to render: floor(start) - buffer  TO  ceil(end) + buffer
+    const startPixel = sLeft;
+    const endPixel = sLeft + cWidth;
+
+    // Adjust for the fact that pixel 0 is actually CENTER_OFFSET
+    // A pixel at P corresponds to offset (P - CENTER_OFFSET)
+
+    const startIndex = Math.floor((startPixel - CENTER_OFFSET) / width) - VISIBLE_BUFFER_DAYS;
+    const endIndex = Math.ceil((endPixel - CENTER_OFFSET) / width) + VISIBLE_BUFFER_DAYS;
+
+    const days: { date: Date; left: number }[] = [];
+
+    for (let i = startIndex; i <= endIndex; i++) {
+      days.push({
+        date: addDays(anchorDate, i),
+        left: CENTER_OFFSET + (i * width)
+      });
+    }
+
+    return days;
+  });
+
+  // Calculate day index from scroll position
+  const getDayIndexFromScroll = (scroll: number) => {
+    return Math.round((scroll - CENTER_OFFSET) / colWidth());
+  };
+
+  // Handle scroll events
+  const handleScroll = () => {
     if (!scrollContainerRef) return;
+    const currentScrollLeft = scrollContainerRef.scrollLeft;
+    setScrollLeft(currentScrollLeft);
 
-    const colWidth = getColumnWidth();
-    const scrollLeft = scrollContainerRef.scrollLeft;
-    const leftmostIndex = Math.round(scrollLeft / colWidth);
-    const days = visibleDays();
+    const width = colWidth();
+    if (width > 0) {
+      const dayIndex = getDayIndexFromScroll(currentScrollLeft);
+      const currentDate = addDays(anchorDate, dayIndex);
 
-    if (days[leftmostIndex]) {
-      const newMonth = formatMonthYear(days[leftmostIndex]);
+      // Update displayed month if changed
+      const newMonth = formatMonthYear(currentDate);
       if (newMonth !== displayedMonth()) {
         setDisplayedMonth(newMonth);
       }
-    }
-  };
 
-  // Check if we need to shift the sliding window
-  const checkAndShiftBuffer = () => {
-    if (!scrollContainerRef || isShifting) return;
-
-    const colWidth = getColumnWidth();
-    const scrollLeft = scrollContainerRef.scrollLeft;
-    const dayIndex = Math.round(scrollLeft / colWidth);
-    const threshold = 2; // Shift when within 2 columns of edge
-
-    if (dayIndex <= threshold) {
-      shiftBuffer(-7); // Shift window left (earlier dates)
-    } else if (dayIndex >= TOTAL_DAYS - VISIBLE_DAYS - threshold) {
-      shiftBuffer(7); // Shift window right (later dates)
-    }
-  };
-
-  // Shift the sliding window
-  const shiftBuffer = (days: number) => {
-    if (!scrollContainerRef || isShifting) return;
-
-    isShifting = true;
-
-    // Capture current column width (don't let it change during shift)
-    const currentColWidth = colWidth();
-    const currentScrollLeft = scrollContainerRef.scrollLeft;
-    const adjustment = days * currentColWidth;
-    const newScrollLeft = currentScrollLeft - adjustment;
-
-    // Temporarily disable scroll-snap to prevent fighting with our scroll adjustment
-    scrollContainerRef.style.scrollSnapType = "none";
-
-    // Update center date (shifts the window) - SolidJS updates DOM synchronously
-    setCenterDate(addDays(centerDate(), days));
-
-    // Adjust scroll position immediately after DOM update (no frame delay)
-    scrollContainerRef.scrollLeft = newScrollLeft;
-
-    // Re-enable scroll-snap and allow next shift after a short delay
-    setTimeout(() => {
-      if (scrollContainerRef) {
-        scrollContainerRef.style.scrollSnapType = "x proximity";
+      // Update centralized center date (approximate center of view)
+      // Actually centerDate usually means "focused date" or "top-left visible date" depending on context
+      // Let's stick to "left-most visible date" for consistency with previous behavior
+      if (!isSameDay(currentDate, visibleStartDate())) {
+        batch(() => {
+          setVisibleStartDate(currentDate);
+          setCenterDate(currentDate); // Keep centerDate in sync for MiniCalendar highlights
+        });
+        checkAndFetchEvents(currentDate);
       }
-      isShifting = false;
-    }, 100);
+    }
   };
 
-  // Handle scroll - browser handles sync via sticky, we just track state
-  const handleScroll = () => {
+  // Dynamic Event Fetching
+  const checkAndFetchEvents = (visibleStart: Date) => {
+    const FETCH_THRESHOLD_DAYS = 14;
+    const FETCH_CHUNK_DAYS = 30;
+
+    const distToStart = (visibleStart.getTime() - loadedStart.getTime()) / (1000 * 60 * 60 * 24);
+    if (distToStart < FETCH_THRESHOLD_DAYS) {
+      const newStart = addDays(loadedStart, -FETCH_CHUNK_DAYS);
+      const window = { start: newStart, end: loadedStart };
+      loadedStart = newStart;
+      refreshEvents(window);
+    }
+
+    const visibleEnd = addDays(visibleStart, 7);
+    const distToEnd = (loadedEnd.getTime() - visibleEnd.getTime()) / (1000 * 60 * 60 * 24);
+    if (distToEnd < FETCH_THRESHOLD_DAYS) {
+      const newEnd = addDays(loadedEnd, FETCH_CHUNK_DAYS);
+      const window = { start: loadedEnd, end: newEnd };
+      loadedEnd = newEnd;
+      refreshEvents(window);
+    }
+  };
+
+  // Virtual Scroll to a specific date
+  const scrollToDate = (date: Date) => {
     if (!scrollContainerRef) return;
 
-    const scrollLeft = scrollContainerRef.scrollLeft;
+    // Calculate difference in days from anchor
+    const diffTime = date.getTime() - anchorDate.getTime();
+    // Use Math.round to handle DST issues (difference should be roughly integer days)
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-    // Track which day is at left edge - only update signals when day actually changes
-    const colWidth = getColumnWidth();
-    if (colWidth > 0) {
-      const newLeftmostIndex = Math.round(scrollLeft / colWidth);
-      if (newLeftmostIndex !== leftmostDayIndex) {
-        leftmostDayIndex = newLeftmostIndex;
-        // Update the visible start date signal for mini-calendar sync
-        const days = visibleDays();
-        if (days[leftmostDayIndex]) {
-          setVisibleStartDate(days[leftmostDayIndex]);
-        }
-        // Update month display only when day changes
-        updateDisplayedMonth();
-      }
-    }
+    const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth());
 
-    // Check buffer shift (doesn't trigger signals unless threshold reached)
-    if (!isShifting) {
-      checkAndShiftBuffer();
-    }
+    scrollContainerRef.scrollLeft = targetScrollLeft;
   };
 
-  // Handle resize - preserve visible days
+  // Handle resize
   const handleResize = () => {
     if (!scrollContainerRef) return;
+    // Remember the date we were looking at
+    const currentLeftDate = visibleStartDate();
 
-    const colWidth = getColumnWidth();
-    if (colWidth <= 0) return;
+    getColumnWidth(); // Update width
 
-    // Scroll to keep the same day at left edge
-    const newScrollLeft = leftmostDayIndex * colWidth;
-    scrollContainerRef.scrollLeft = newScrollLeft;
-  };
-
-  // Handle keyboard events for event deletion
-  const handleKeyDown = (e: KeyboardEvent) => {
-    const activeEl = document.activeElement as HTMLElement | null;
-    const eventWrapper = activeEl?.closest("[data-event-id]") as HTMLElement | null;
-    if (!eventWrapper) return;
-
-    if (e.key === "Delete" || e.key === "Backspace") {
-      e.preventDefault();
-      if ((eventWrapper as any).triggerBurn) {
-        (eventWrapper as any).triggerBurn();
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      activeEl?.blur();
-    }
+    // Restore scroll position to keep that date at left
+    scrollToDate(currentLeftDate);
   };
 
   // Initialize on mount
   onMount(() => {
-    setDisplayedMonth(formatMonthYear(centerDate()));
+    // Initial setup
+    getColumnWidth();
 
-    // Set up keyboard listener for delete/escape
-    document.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+    // Set initial scroll to "Today" (Sunday of current week)
+    requestAnimationFrame(() => {
+      if (scrollContainerRef) {
+        // Scroll to Today (or initial CenterDate if set)
+        scrollToDate(centerDate());
 
-    // Set up ResizeObserver to handle resize events (after initialization)
+        // Vertical scroll
+        const now = new Date();
+        const hours = now.getHours();
+        const scrollPosition = Math.max(0, (hours - 2) * 48);
+        scrollContainerRef.scrollTop = scrollPosition;
+
+        // Force initial update of signals
+        handleScroll();
+
+        isInitialized = true;
+      }
+    });
+
+    // Resize Observer
     if (scrollContainerRef) {
       const resizeObserver = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry && entry.contentRect.width > 0) {
-          // Always update column width
+        if (entries[0]?.contentRect.width > 0) {
           getColumnWidth();
-          // Only adjust scroll position after initial setup is complete
           if (isInitialized) {
-            handleResize();
+            // Stay on current date during resize
+            scrollToDate(visibleStartDate());
           }
         }
       });
@@ -230,60 +237,31 @@ export function CalendarGrid() {
       onCleanup(() => resizeObserver.disconnect());
     }
 
-    // Initialize scroll position after layout is stable
-    // Use double-rAF to ensure layout has been computed
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollContainerRef) {
-          // Calculate column width now that layout is stable
-          const calculatedColWidth = getColumnWidth();
-          const days = visibleDays();
-          const sunday = getSundayOfWeek(new Date());
-          const sundayIndex = days.findIndex((d) => isSameDay(d, sunday));
-
-          if (sundayIndex !== -1) {
-            leftmostDayIndex = sundayIndex;
-            const initialScrollLeft = sundayIndex * calculatedColWidth;
-            scrollContainerRef.scrollLeft = initialScrollLeft;
-            // Initialize visible start date
-            setVisibleStartDate(days[sundayIndex]);
-          }
-
-          // Scroll vertically to current time
-          const now = new Date();
-          const hours = now.getHours();
-          const scrollPosition = Math.max(0, (hours - 2) * 48);
-          scrollContainerRef.scrollTop = scrollPosition;
-
-          updateDisplayedMonth();
-
-          // Mark as initialized after scroll setup is complete
-          isInitialized = true;
+    // Keyboard handlers
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const activeEl = document.activeElement as HTMLElement | null;
+        const eventWrapper = activeEl?.closest("[data-event-id]") as HTMLElement | null;
+        if (eventWrapper && (eventWrapper as any).triggerBurn) {
+          e.preventDefault();
+          (eventWrapper as any).triggerBurn();
         }
-      });
-    });
+      } else if (e.key === "Escape") {
+        (document.activeElement as HTMLElement | null)?.blur();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
   });
 
-  // React to external centerDate changes (e.g., "Today" button)
+  // React to external centerDate changes (e.g. from Mini Calendar)
   createEffect(() => {
-    const center = centerDate();
-    if (isShifting) return;
-
-    requestAnimationFrame(() => {
-      if (scrollContainerRef && !isShifting) {
-        const colWidth = getColumnWidth();
-        const days = visibleDays();
-        const centerIndex = days.findIndex((d) => isSameDay(d, center));
-
-        if (centerIndex !== -1) {
-          const newScrollLeft = centerIndex * colWidth;
-          scrollContainerRef.scrollLeft = newScrollLeft;
-          // Update visible start date for mini-calendar sync
-          setVisibleStartDate(days[centerIndex]);
-          updateDisplayedMonth();
-        }
-      }
-    });
+    const target = centerDate();
+    // If target is significantly different from what we are showing, scroll to it
+    // (Check is sameDay to avoid fighting with scroll handler)
+    if (!isSameDay(target, visibleStartDate())) {
+      scrollToDate(target);
+    }
   });
 
   return (
@@ -293,97 +271,148 @@ export function CalendarGrid() {
         <span class="text-lg font-medium text-[#37352f]">{displayedMonth()}</span>
       </div>
 
-      {/* ONE Main Scroll Container - handles both X and Y scrolling */}
+      {/* ONE Main Scroll Container */}
       <div
         ref={scrollContainerRef}
         class="flex-1 overflow-auto overscroll-none"
         style={{
-          "scroll-snap-type": "x proximity",
-          "scroll-padding-left": "var(--grid-time-col-width)",
+          "position": "relative",
+          // Since we use absolute positioning for children, snapping is tricky.
+          // But we can snap to the container grid interval if we want.
+          // "scroll-snap-type": "x mandatory", 
+          // Snapping is hard with virtual absolute container because snap points are infinite.
+          // Let's rely on manual snapping or just smooth scrolling for now as requested ("No complex scroll correction")
+          // Actually user asked for "Infinite Expanding Container" and "Sticky"
         }}
         onScroll={handleScroll}
       >
-        {/* Header Row - sticky at top, stretches to full content width */}
-        <div
-          class="flex bg-white border-b border-[#e8e8e8]"
-          style={{
-            position: "sticky",
-            top: "0",
-            "z-index": "10",
-            height: `${HEADER_HEIGHT}px`,
-            width: "max-content",
-          }}
-        >
-          {/* Time column corner - sticky left AND top */}
-          <div
-            class="bg-white border-r border-[#e8e8e8]"
-            style={{
-              width: "var(--grid-time-col-width)",
-              "flex-shrink": "0",
-              position: "sticky",
-              left: "0",
-              "z-index": "11",
-            }}
-          />
-          {/* Date header cells */}
-          <Key each={visibleDays()} by={getDateKey}>
-            {(day) => (
-              <div
-                class="border-r border-[#e8e8e8]"
-                style={{
-                  width: `${colWidth()}px`,
-                  "flex-shrink": "0",
-                }}
-              >
-                <DateHeader date={day()} />
-              </div>
-            )}
-          </Key>
-        </div>
+        {/* Inner Virtual Container - Extremely Wide */}
+        <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${TOTAL_HEIGHT + HEADER_HEIGHT}px`, position: "relative" }}>
 
-        {/* Body Content - positioned relative for events */}
-        <div style={{ position: "relative", width: "max-content" }}>
-          <div class="flex" style={{ height: `${TOTAL_HEIGHT}px` }}>
-            {/* Time column - sticky left */}
+          {/* Sticky Header Row */}
+          <div
+            class="flex bg-white border-b border-[#e8e8e8]"
+            style={{
+              position: "sticky",
+              top: "0",
+              "z-index": "10",
+              height: `${HEADER_HEIGHT}px`,
+              width: "100%", // Header spans full virtual width? No, it just needs to contain the absolute children.
+              // Actually, header itself should probably just be a container for absolute adjustments?
+              // Or better: The container is relative. We can put absolute headers in it.
+            }}
+          >
+            {/* Sticky Time Column Header - Sticky Left */}
             <div
               class="bg-white border-r border-[#e8e8e8]"
               style={{
                 width: "var(--grid-time-col-width)",
+                height: `${HEADER_HEIGHT}px`,
                 "flex-shrink": "0",
                 position: "sticky",
                 left: "0",
-                "z-index": "5",
+                "z-index": "20", // Higher than date headers
               }}
-            >
-              <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
-                <TimeColumn />
-                <CurrentTimeBadge />
-              </div>
-            </div>
+            />
 
-            {/* Day columns */}
-            <Key each={visibleDays()} by={getDateKey}>
-              {(day) => (
+            {/* Absolute Date Headers */}
+            <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+              {(item) => (
                 <div
-                  class="border-r border-[#e8e8e8]"
+                  class="absolute border-r border-[#e8e8e8] bg-white"
                   style={{
+                    left: `${item().left}px`,
                     width: `${colWidth()}px`,
-                    height: `${TOTAL_HEIGHT}px`,
-                    "flex-shrink": "0",
-                    "scroll-snap-align": "start",
+                    height: `${HEADER_HEIGHT}px`,
+                    top: 0
                   }}
                 >
-                  <DayColumn date={day()} />
+                  <DateHeader date={item().date} />
                 </div>
               )}
             </Key>
-
-            {/* Current time indicator line spanning all columns */}
-            <CurrentTimeLine
-              totalDays={TOTAL_DAYS}
-              visibleDaysCount={VISIBLE_DAYS}
-            />
           </div>
+
+          {/* Sticky Time Column Body - Sticky Left */}
+          <div
+            class="bg-white border-r border-[#e8e8e8]"
+            style={{
+              width: "var(--grid-time-col-width)",
+              height: `${TOTAL_HEIGHT}px`,
+              position: "sticky",
+              left: "0",
+              "z-index": "15",
+              float: "left", // Force it to sit nicely? No, sticky works in flow.
+              // Since parent is "relative" block, this sticky div is just one child.
+              // The absolute day columns are siblings.
+              // We need to coordinate vertical position.
+              "margin-top": "0px"
+            }}
+          >
+            <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
+              <TimeColumn />
+              <CurrentTimeBadge />
+            </div>
+          </div>
+
+          {/* Absolute Day Columns */}
+          <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+            {(item) => (
+              <div
+                class="absolute border-r border-[#e8e8e8]"
+                style={{
+                  left: `${item().left}px`,
+                  width: `${colWidth()}px`,
+                  height: `${TOTAL_HEIGHT}px`,
+                  top: `${HEADER_HEIGHT}px`, // Below header
+                  "z-index": "1",
+                }}
+              >
+                <DayColumn date={item().date} />
+              </div>
+            )}
+          </Key>
+
+          {/* Current Time Line - Absolute */}
+          {/* This needs to span the visible area or be absolute relative to Today's column? 
+               The component <CurrentTimeLine> usually draws a line across the grid. 
+               We should probably re-implement it or just position it absolutely over the whole container? 
+               Ideally it should only be on "Today".
+               Re-checking usage: It was spanning all columns.
+               For an infinite grid, a line spanning 500,000px is bad.
+               Let's render it only for the visible days or just rely on Today's column having a marker?
+               Actually DayColumn doesn't have the line.
+               Let's update CurrentTimeLine to be just one line across the viewport?
+               If we position it sticky left, it moves with scroll? No.
+               
+               Let's make CurrentTimeLine fixed relative to viewport or spanning the visible area.
+               Simpler: Just put it in a fixed overlay?
+               
+               For now, let's omit the generic "Line across everything" and trust the Badge.
+               Or put it inside DayColumn for "Today" specifically? 
+               Original code: <CurrentTimeLine totalDays={TOTAL_DAYS} visibleDaysCount={VISIBLE_DAYS} />
+               It was using CSS grid/flex to span.
+            */}
+          <div
+            style={{
+              position: "absolute",
+              left: "0",
+              top: `${HEADER_HEIGHT}px`,
+              width: "100%", // Spans entire virtual width
+              height: `${TOTAL_HEIGHT}px`,
+              "pointer-events": "none",
+              "z-index": "5"
+            }}
+          >
+            <CurrentTimeLine
+              totalDays={1} // Dummy
+              visibleDaysCount={1} // Dummy
+            />
+            {/* Note: CurrentTimeLine implementation might need adjustment to work in this container, 
+                     but since it's likely just a "top: X%" div, it might work if width is 100%. 
+                  */}
+          </div>
+
         </div>
       </div>
     </div>

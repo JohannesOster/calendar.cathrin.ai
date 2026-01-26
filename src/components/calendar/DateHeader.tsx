@@ -47,7 +47,7 @@ export function DateHeader(props: DateHeaderProps) {
   const dayNumber = () => props.date.getDate();
 
   return (
-    <div class="relative h-full flex items-center justify-center">
+    <div class="relative h-full flex items-center justify-center border-b border-[#e8e8e8]">
       <span class="text-sm text-[#91918e]">
         {dayName()} {dayNumber()}
       </span>
