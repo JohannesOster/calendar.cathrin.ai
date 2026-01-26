@@ -48,8 +48,15 @@ export function DateHeader(props: DateHeaderProps) {
 
   return (
     <div class="relative h-full flex items-center justify-center border-b border-[#e8e8e8]">
-      <span class="text-sm text-[#91918e]">
-        {dayName()} {dayNumber()}
+      <span class="text-sm text-[#91918e]">{dayName()}</span>
+      <span
+        class="text-sm ml-1 w-6 h-6 flex items-center justify-center rounded"
+        classList={{
+          "bg-[#2383e2] text-white": props.isToday,
+          "text-[#91918e]": !props.isToday,
+        }}
+      >
+        {dayNumber()}
       </span>
 
       {/* Flash highlight overlay */}

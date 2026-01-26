@@ -1,13 +1,13 @@
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
-import { centerDate, setCenterDate, setFlashDate, visibleStartDate } from "../../calendar/CalendarGrid";
+import { setCenterDate, setFlashDate, visibleStartDate } from "../../calendar/CalendarGrid";
 import { getSundayOfWeek, formatMonthYearLocale } from "../../../lib/date-utils";
 import { SIDEBAR, WEEKDAY_LABELS } from "../../../constants/sidebar";
 import { WeekRow, type DayInfo } from "./WeekRow";
 
 export function MiniCalendar() {
   const [currentMonth, setCurrentMonth] = createSignal(
-    new Date(centerDate().getFullYear(), centerDate().getMonth(), 1)
+    new Date(visibleStartDate().getFullYear(), visibleStartDate().getMonth(), 1)
   );
 
   // Memoize weeks computation
@@ -62,19 +62,19 @@ export function MiniCalendar() {
     navigateToDate(dayInfo.date);
   };
 
-  // Track previous centerDate to detect external navigation changes
-  let prevCenterDate = centerDate();
+  // Track previous visible date to detect scroll navigation changes
+  let prevVisibleDate = visibleStartDate();
 
-  // Sync mini calendar month only when centerDate changes (not on manual month browsing)
+  // Sync mini calendar month when scroll position changes to a different month
   createEffect(() => {
-    const center = centerDate();
-    if (center.getTime() !== prevCenterDate.getTime()) {
-      prevCenterDate = center;
+    const visible = visibleStartDate();
+    if (visible.getTime() !== prevVisibleDate.getTime()) {
+      prevVisibleDate = visible;
       if (
-        center.getMonth() !== currentMonth().getMonth() ||
-        center.getFullYear() !== currentMonth().getFullYear()
+        visible.getMonth() !== currentMonth().getMonth() ||
+        visible.getFullYear() !== currentMonth().getFullYear()
       ) {
-        setCurrentMonth(new Date(center.getFullYear(), center.getMonth(), 1));
+        setCurrentMonth(new Date(visible.getFullYear(), visible.getMonth(), 1));
       }
     }
   });

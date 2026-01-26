@@ -7,7 +7,7 @@ import {
   PanelRightClose,
 } from "lucide-solid";
 import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
-import { centerDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
+import { visibleStartDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
 
 type ViewType = "Day" | "Week" | "Month";
 
@@ -23,7 +23,7 @@ export function CalendarHeader() {
   const [viewDropdownOpen, setViewDropdownOpen] = createSignal(false);
 
   const navigatePrev = () => {
-    const date = centerDate();
+    const date = visibleStartDate();
     switch (currentView()) {
       case "Day":
         setCenterDate(addDays(date, -1));
@@ -40,7 +40,7 @@ export function CalendarHeader() {
   };
 
   const navigateNext = () => {
-    const date = centerDate();
+    const date = visibleStartDate();
     switch (currentView()) {
       case "Day":
         setCenterDate(addDays(date, 1));

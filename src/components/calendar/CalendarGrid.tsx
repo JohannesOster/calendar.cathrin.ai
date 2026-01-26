@@ -1,10 +1,10 @@
-import { createSignal, onMount, onCleanup, createEffect, createMemo, batch } from "solid-js";
+import { createSignal, onMount, onCleanup, createEffect, createMemo, on } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { addDays, getSundayOfWeek, isSameDay, formatMonthYear } from "../../lib/date-utils";
+import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear } from "../../lib/date-utils";
 import { refreshEvents } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
@@ -31,12 +31,13 @@ const anchorDate = (() => {
 })();
 
 // Export signals for external control
-export const [centerDate, setCenterDate] = createSignal(new Date());
+// Initialize to anchor (Sunday of current week) for consistent startup
+export const [centerDate, setCenterDate] = createSignal(new Date(anchorDate));
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
-export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date());
+export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
 
 
 export function CalendarGrid() {
@@ -115,8 +116,10 @@ export function CalendarGrid() {
   });
 
   // Calculate day index from scroll position
+  // Account for sticky time column - the visible day starts after the time column
   const getDayIndexFromScroll = (scroll: number) => {
-    return Math.round((scroll - CENTER_OFFSET) / colWidth());
+    const timeColWidth = getTimeColWidth();
+    return Math.round((scroll + timeColWidth - CENTER_OFFSET) / colWidth());
   };
 
   // Handle scroll events
@@ -136,14 +139,11 @@ export function CalendarGrid() {
         setDisplayedMonth(newMonth);
       }
 
-      // Update centralized center date (approximate center of view)
-      // Actually centerDate usually means "focused date" or "top-left visible date" depending on context
-      // Let's stick to "left-most visible date" for consistency with previous behavior
+      // Update visible start date for mini-calendar highlighting
+      // Note: centerDate is only set externally (e.g., from mini-calendar clicks)
+      // to avoid feedback loops with the scroll effect
       if (!isSameDay(currentDate, visibleStartDate())) {
-        batch(() => {
-          setVisibleStartDate(currentDate);
-          setCenterDate(currentDate); // Keep centerDate in sync for MiniCalendar highlights
-        });
+        setVisibleStartDate(currentDate);
         checkAndFetchEvents(currentDate);
       }
     }
@@ -176,12 +176,18 @@ export function CalendarGrid() {
   const scrollToDate = (date: Date) => {
     if (!scrollContainerRef) return;
 
+    // Normalize to midnight to avoid time component affecting day calculation
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
+
     // Calculate difference in days from anchor
-    const diffTime = date.getTime() - anchorDate.getTime();
+    const diffTime = normalizedDate.getTime() - anchorDate.getTime();
     // Use Math.round to handle DST issues (difference should be roughly integer days)
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-    const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth());
+    // Account for sticky time column - position the target day right after the time column
+    const timeColWidth = getTimeColWidth();
+    const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth()) - timeColWidth;
 
     scrollContainerRef.scrollLeft = targetScrollLeft;
   };
@@ -255,14 +261,13 @@ export function CalendarGrid() {
   });
 
   // React to external centerDate changes (e.g. from Mini Calendar)
-  createEffect(() => {
-    const target = centerDate();
-    // If target is significantly different from what we are showing, scroll to it
-    // (Check is sameDay to avoid fighting with scroll handler)
-    if (!isSameDay(target, visibleStartDate())) {
+  // Using on() with defer to only scroll when centerDate actually changes,
+  // not on initial mount (handled by onMount) or when comparing to visibleStartDate
+  createEffect(
+    on(centerDate, (target) => {
       scrollToDate(target);
-    }
-  });
+    }, { defer: true })
+  );
 
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
@@ -327,7 +332,7 @@ export function CalendarGrid() {
                     top: 0
                   }}
                 >
-                  <DateHeader date={item().date} />
+                  <DateHeader date={item().date} isToday={isToday(item().date)} />
                 </div>
               )}
             </Key>

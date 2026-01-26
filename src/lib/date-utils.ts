@@ -1,9 +1,11 @@
 /**
  * Get the Sunday (start of week) for any given date
+ * Always normalized to midnight to avoid time-based calculation issues
  */
 export function getSundayOfWeek(date: Date): Date {
   const result = new Date(date);
   result.setDate(date.getDate() - date.getDay());
+  result.setHours(0, 0, 0, 0);
   return result;
 }
 
