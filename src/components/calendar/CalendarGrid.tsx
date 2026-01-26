@@ -142,7 +142,7 @@ export function CalendarGrid() {
     // Re-enable scroll-snap and allow next shift after a short delay
     setTimeout(() => {
       if (scrollContainerRef) {
-        scrollContainerRef.style.scrollSnapType = "x mandatory";
+        scrollContainerRef.style.scrollSnapType = "x proximity";
       }
       isShifting = false;
     }, 100);
@@ -297,7 +297,10 @@ export function CalendarGrid() {
       <div
         ref={scrollContainerRef}
         class="flex-1 overflow-auto overscroll-none"
-        style={{ "scroll-snap-type": "x mandatory" }}
+        style={{
+          "scroll-snap-type": "x proximity",
+          "scroll-padding-left": "var(--grid-time-col-width)",
+        }}
         onScroll={handleScroll}
       >
         {/* Header Row - sticky at top, stretches to full content width */}
@@ -330,7 +333,6 @@ export function CalendarGrid() {
                 style={{
                   width: `${colWidth()}px`,
                   "flex-shrink": "0",
-                  "scroll-snap-align": "start",
                 }}
               >
                 <DateHeader date={day()} />
