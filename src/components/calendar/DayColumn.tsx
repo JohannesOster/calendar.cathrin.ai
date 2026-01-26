@@ -3,6 +3,7 @@ import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
+import { calculateEventLayouts } from "../../utils/eventLayout";
 
 interface DayColumnProps {
   date: Date;
@@ -79,6 +80,9 @@ export function DayColumn(props: DayColumnProps) {
     );
   };
 
+  // Calculate layout info for overlapping events
+  const eventLayouts = () => calculateEventLayouts(dayEvents());
+
   return (
     <div
       class="relative [contain:strict]"
@@ -100,7 +104,9 @@ export function DayColumn(props: DayColumnProps) {
 
       {/* Calendar events */}
       <For each={dayEvents()}>
-        {(event) => <CalendarEvent event={event} />}
+        {(event) => (
+          <CalendarEvent event={event} layout={eventLayouts().get(event.id)} />
+        )}
       </For>
 
       {/* Flash highlight overlay */}
