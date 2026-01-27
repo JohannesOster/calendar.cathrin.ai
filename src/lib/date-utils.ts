@@ -1,3 +1,7 @@
+// Constants
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DAYS_PER_WEEK = 7;
+
 /**
  * Get the Sunday (start of week) for any given date
  * Always normalized to midnight to avoid time-based calculation issues
@@ -63,10 +67,8 @@ export function getWeekId(date: Date): string {
   const jan1 = new Date(thursday.getFullYear(), 0, 1);
 
   // Calculate week number
-  const dayOfYear = Math.floor(
-    (thursday.getTime() - jan1.getTime()) / (24 * 60 * 60 * 1000)
-  );
-  const weekNum = Math.floor(dayOfYear / 7) + 1;
+  const dayOfYear = Math.floor((thursday.getTime() - jan1.getTime()) / MS_PER_DAY);
+  const weekNum = Math.floor(dayOfYear / DAYS_PER_WEEK) + 1;
 
   return `${thursday.getFullYear()}-W${weekNum.toString().padStart(2, "0")}`;
 }
@@ -113,6 +115,8 @@ export function getWeekBounds(weekId: string): { start: Date; end: Date } {
 
 /**
  * Get all week IDs that overlap with a date range
+ * Note: Uses day-by-day iteration because ISO weeks (Mon-Sun) don't align
+ * with our calendar weeks (Sun-Sat), making skip-by-7 unreliable
  */
 export function getWeeksInRange(start: Date, end: Date): string[] {
   const weeks: string[] = [];
@@ -133,12 +137,15 @@ export function getWeeksInRange(start: Date, end: Date): string[] {
 }
 
 /**
- * Get the next week's ID (7 days forward)
+ * Get the next week's ID
+ * Note: Uses end of week + 2 days to land on Monday, avoiding the
+ * ISO week boundary issue where Sunday is the last day of an ISO week
  */
 export function getNextWeek(weekId: string): string {
-  const { start } = getWeekBounds(weekId);
-  const nextWeekDate = addDays(start, 7);
-  return getWeekId(nextWeekDate);
+  const { end } = getWeekBounds(weekId);
+  // end is Saturday 23:59:59, add 2 days to reach Monday (definitely in next ISO week)
+  const nextWeekMonday = addDays(end, 2);
+  return getWeekId(nextWeekMonday);
 }
 
 /**

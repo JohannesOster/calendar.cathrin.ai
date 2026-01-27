@@ -41,6 +41,12 @@ const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Anchor point in middle
 // ============================================================================
 const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor for snap points
 
+// ============================================================================
+// Constants - Scroll Direction Tracking (for prefetching)
+// ============================================================================
+const DIRECTION_THRESHOLD_PX = 10; // Minimum movement to register direction change
+const DIRECTION_RESET_DELAY_MS = 2000; // Reset to null after idle period
+
 // Initial Reference Date (Anchor)
 // All positions are calculated relative to this date being at CENTER_OFFSET
 const anchorDate = (() => {
@@ -92,8 +98,6 @@ export function CalendarGrid() {
   // Track scroll direction for prefetching
   let lastScrollLeft = CENTER_OFFSET;
   let directionResetTimer: ReturnType<typeof setTimeout> | undefined;
-  const DIRECTION_THRESHOLD = 10; // px - minimum movement to register direction
-  const DIRECTION_RESET_DELAY = 2000; // ms - reset to null after idle
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
@@ -172,20 +176,23 @@ export function CalendarGrid() {
     setScrollLeft(currentScrollLeft);
 
     // Track scroll direction for prefetching
-    if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD) {
-      setScrollDirection('right'); // Scrolling toward future
-    } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD) {
-      setScrollDirection('left'); // Scrolling toward past
+    // Skip during programmatic scrolls (when snap is disabled) to avoid incorrect direction
+    if (snapEnabled()) {
+      if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD_PX) {
+        setScrollDirection('right'); // Scrolling toward future
+      } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD_PX) {
+        setScrollDirection('left'); // Scrolling toward past
+      }
+
+      // Reset direction to null after period of no scrolling
+      if (directionResetTimer) {
+        clearTimeout(directionResetTimer);
+      }
+      directionResetTimer = setTimeout(() => {
+        setScrollDirection(null);
+      }, DIRECTION_RESET_DELAY_MS);
     }
     lastScrollLeft = currentScrollLeft;
-
-    // Reset direction to null after period of no scrolling
-    if (directionResetTimer) {
-      clearTimeout(directionResetTimer);
-    }
-    directionResetTimer = setTimeout(() => {
-      setScrollDirection(null);
-    }, DIRECTION_RESET_DELAY);
 
     const width = colWidth();
     if (width > 0) {

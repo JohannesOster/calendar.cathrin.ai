@@ -214,50 +214,50 @@ impl AccountStore {
     }
 }
 
+/// Parse a date string (ISO 8601) to NaiveDate
+/// Handles various formats: full datetime with Z, datetime with timezone, date only
+fn parse_date_string(date_str: &str) -> Option<chrono::NaiveDate> {
+    use chrono::{NaiveDate, NaiveDateTime};
+
+    // Try parsing as full datetime first
+    if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        return Some(dt.date());
+    }
+    if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%:z") {
+        return Some(dt.date());
+    }
+    if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        return Some(d);
+    }
+    // Try parsing just the date portion
+    let date_part = date_str.split('T').next()?;
+    NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()
+}
+
+/// Convert a NaiveDate to an ISO week ID ("YYYY-Wnn")
+fn date_to_week_id_internal(date: chrono::NaiveDate) -> String {
+    use chrono::Datelike;
+    let iso_week = date.iso_week();
+    format!("{}-W{:02}", iso_week.year(), iso_week.week())
+}
+
 /// Convert a date string (ISO 8601) to an ISO week ID ("YYYY-Wnn")
 /// Returns None if the date string can't be parsed
 pub fn date_to_week_id(date_str: &str) -> Option<String> {
-    use chrono::{Datelike, NaiveDate, NaiveDateTime};
-
-    // Try parsing as full datetime first
-    let date = if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.fZ") {
-        dt.date()
-    } else if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%:z") {
-        dt.date()
-    } else if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-        d
-    } else {
-        // Try parsing just the date portion
-        let date_part = date_str.split('T').next()?;
-        NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()?
-    };
-
-    let iso_week = date.iso_week();
-    Some(format!("{}-W{:02}", iso_week.year(), iso_week.week()))
+    parse_date_string(date_str).map(date_to_week_id_internal)
 }
 
 /// Get all week IDs between two dates (inclusive)
+/// Note: Uses day-by-day iteration because ISO weeks (Mon-Sun) don't align
+/// perfectly, making skip-by-7 unreliable for small ranges
 pub fn weeks_in_range(start: &str, end: &str) -> Vec<String> {
-    use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
+    use chrono::Duration;
 
-    let parse_date = |s: &str| -> Option<NaiveDate> {
-        if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.fZ") {
-            Some(dt.date())
-        } else if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%:z") {
-            Some(dt.date())
-        } else if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-            Some(d)
-        } else {
-            let date_part = s.split('T').next()?;
-            NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()
-        }
-    };
-
-    let start_date = match parse_date(start) {
+    let start_date = match parse_date_string(start) {
         Some(d) => d,
         None => return Vec::new(),
     };
-    let end_date = match parse_date(end) {
+    let end_date = match parse_date_string(end) {
         Some(d) => d,
         None => return Vec::new(),
     };
@@ -266,8 +266,7 @@ pub fn weeks_in_range(start: &str, end: &str) -> Vec<String> {
     let mut current = start_date;
 
     while current <= end_date {
-        let iso_week = current.iso_week();
-        let week_id = format!("{}-W{:02}", iso_week.year(), iso_week.week());
+        let week_id = date_to_week_id_internal(current);
         if weeks.last() != Some(&week_id) {
             weeks.push(week_id);
         }

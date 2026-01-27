@@ -280,7 +280,6 @@ export function isLoadingWeeks(): boolean {
  */
 export function updateVisibleWeeks(weeks: string[]): void {
   const newVisible = new Set(weeks);
-  const oldVisible = currentVisibleWeeks;
 
   // Check if any in-flight fetches are now non-visible
   const fetching = fetchingWeeks();
