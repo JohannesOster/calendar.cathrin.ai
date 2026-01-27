@@ -10,6 +10,7 @@ import {
   getEventsForRange,
   fetchEventsForWeek,
   getWeekBounds,
+  updateVisibleWeeks,
 } from "./stores/events";
 
 // Debounce delay for fetch trigger (ms)
@@ -34,6 +35,9 @@ function App() {
   createEffect(
     on(visibleWeeks, (weeks) => {
       if (weeks.length === 0) return;
+
+      // Update visible weeks immediately (triggers cancellation of non-visible fetches)
+      updateVisibleWeeks(weeks);
 
       // Clear any pending debounce
       if (debounceTimer) {

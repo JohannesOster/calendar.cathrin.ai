@@ -63,6 +63,17 @@ const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
 
 /**
+ * Request ID for cancellation pattern
+ * Incremented when visible weeks change to invalidate in-flight requests
+ */
+let currentRequestId = 0;
+
+/**
+ * Track which weeks are currently visible (for cancellation)
+ */
+let currentVisibleWeeks: Set<string> = new Set();
+
+/**
  * Convert backend StoredEvent to frontend CalendarEvent
  */
 function convertToCalendarEvent(event: StoredEvent): CalendarEvent {
@@ -256,9 +267,46 @@ export function getFetchingWeeks(): Set<string> {
 }
 
 /**
+ * Update visible weeks and cancel fetches for non-visible weeks
+ * Call this when visible weeks change to invalidate stale requests
+ */
+export function updateVisibleWeeks(weeks: string[]): void {
+  const newVisible = new Set(weeks);
+  const oldVisible = currentVisibleWeeks;
+
+  // Check if any in-flight fetches are now non-visible
+  const fetching = fetchingWeeks();
+  const staleFetches: string[] = [];
+  for (const week of fetching) {
+    if (!newVisible.has(week)) {
+      staleFetches.push(week);
+    }
+  }
+
+  if (staleFetches.length > 0) {
+    console.log(`[events] Cancelling stale fetches:`, staleFetches);
+    // Increment request ID to invalidate pending responses
+    currentRequestId++;
+    // Remove stale weeks from fetchingWeeks
+    setFetchingWeeks((prev) => {
+      const next = new Set<string>();
+      for (const week of prev) {
+        if (newVisible.has(week)) {
+          next.add(week);
+        }
+      }
+      return next;
+    });
+  }
+
+  currentVisibleWeeks = newVisible;
+}
+
+/**
  * Fetch events for a specific week (for all accounts)
  * Merges into existing cache rather than replacing
  * Tracks in-flight state to prevent duplicate requests
+ * Supports cancellation via request ID pattern
  */
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
   // Skip if already fetching this week
@@ -275,6 +323,9 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
 
   const accounts = connectedAccounts();
   if (accounts.length === 0) return;
+
+  // Capture request ID at start
+  const requestId = currentRequestId;
 
   // Mark as fetching
   setFetchingWeeks((prev) => {
@@ -293,6 +344,12 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const newEvents: CalendarEvent[] = [];
 
     for (const account of accounts) {
+      // Check if request was cancelled before each account fetch
+      if (requestId !== currentRequestId) {
+        console.log(`[events] Discarding stale fetch for ${weekId} (cancelled during fetch)`);
+        return;
+      }
+
       try {
         const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
           accountId: account.id,
@@ -307,6 +364,12 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
       }
     }
 
+    // Check if this request is still relevant before updating state
+    if (requestId !== currentRequestId) {
+      console.log(`[events] Discarding stale fetch for ${weekId} (cancelled after fetch)`);
+      return;
+    }
+
     // Merge new events with existing
     setEvents((prev) => processEvents(newEvents, prev));
 
@@ -319,7 +382,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
 
     console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
   } finally {
-    // Clear fetching state
+    // Clear fetching state (only if not already cleared by cancellation)
     setFetchingWeeks((prev) => {
       const updated = new Set(prev);
       updated.delete(weekId);
