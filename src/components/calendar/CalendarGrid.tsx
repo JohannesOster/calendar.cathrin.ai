@@ -14,14 +14,32 @@ const getDateKey = (date: Date): string =>
 // Helper to check if a date is a week start (Sunday)
 const isWeekStart = (date: Date): boolean => date.getDay() === 0;
 
-// Virtual Container Configuration
-const CONTAINER_WIDTH = 500000; // Large virtual width
-const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Start in middle "Today"
-const VISIBLE_BUFFER_DAYS = 5; // Extra days to render off-screen
+// ============================================================================
+// Constants - Grid Dimensions
+// These should match CSS variables in App.css where applicable
+// ============================================================================
+const HOURS_PER_DAY = 24;
+const HOUR_HEIGHT = 48; // px - matches --grid-hour-height
+const HEADER_HEIGHT = 53; // px - matches --grid-header-height
+const TIME_COL_WIDTH_FALLBACK = 64; // px - fallback for --grid-time-col-width
+const VISIBLE_DAYS_COUNT = 7; // Number of day columns visible at once
+const VISIBLE_BUFFER_DAYS = 5; // Extra days to render off-screen for smooth scrolling
+const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on initial load
 
-// Dimensions
-const TOTAL_HEIGHT = 24 * 48; // 24 hours × 48px
-const HEADER_HEIGHT = 40; // px
+// Derived dimensions
+const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
+const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT;
+
+// ============================================================================
+// Constants - Virtual Scroll Container
+// ============================================================================
+const CONTAINER_WIDTH = 500000; // Large virtual width for infinite scroll
+const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Anchor point in middle
+
+// ============================================================================
+// Constants - Scroll Snap
+// ============================================================================
+const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor for snap points
 
 // Initial Reference Date (Anchor)
 // All positions are calculated relative to this date being at CENTER_OFFSET
@@ -69,74 +87,65 @@ export function CalendarGrid() {
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
-    return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--grid-time-col-width')) || 64;
+    const cssValue = getComputedStyle(document.documentElement).getPropertyValue('--grid-time-col-width');
+    return parseInt(cssValue) || TIME_COL_WIDTH_FALLBACK;
   };
 
   // Get current column width based on visible area and update signal
   const getColumnWidth = () => {
     if (!scrollContainerRef) return colWidth();
 
-    const cw = scrollContainerRef.clientWidth;
-    if (cw <= 0) return colWidth();
-    setContainerWidth(cw); // Track container width for virtualization
+    const currentContainerWidth = scrollContainerRef.clientWidth;
+    if (currentContainerWidth <= 0) return colWidth();
+    setContainerWidth(currentContainerWidth);
 
     const timeColWidth = getTimeColWidth();
-    const availableWidth = cw - timeColWidth;
+    const availableWidth = currentContainerWidth - timeColWidth;
     if (availableWidth <= 0) return colWidth();
 
-    // Default to displaying 7 days
-    const width = availableWidth / 7;
+    const width = availableWidth / VISIBLE_DAYS_COUNT;
     if (width > 0) {
       setColWidth(width);
     }
     return width;
   };
 
+  // Calculate pixel position for a day index relative to anchor
+  const getDayLeftPosition = (dayIndex: number, width: number) =>
+    CENTER_OFFSET + (dayIndex * width);
+
   // Calculate visible day range based on scroll position
   const visibleDays = createMemo(() => {
     const width = colWidth();
-    const sLeft = scrollLeft();
-    const cWidth = containerWidth() || window.innerWidth; // Fallback if not measured yet
+    const currentScrollLeft = scrollLeft();
+    const currentContainerWidth = containerWidth() || window.innerWidth;
 
-    // Calculate indices relative to anchor (0 = anchor date)
-    // We want to render: floor(start) - buffer  TO  ceil(end) + buffer
-    const startPixel = sLeft;
-    const endPixel = sLeft + cWidth;
-
-    // Adjust for the fact that pixel 0 is actually CENTER_OFFSET
-    // A pixel at P corresponds to offset (P - CENTER_OFFSET)
+    // Calculate day indices relative to anchor (0 = anchor date)
+    const startPixel = currentScrollLeft;
+    const endPixel = currentScrollLeft + currentContainerWidth;
 
     const startIndex = Math.floor((startPixel - CENTER_OFFSET) / width) - VISIBLE_BUFFER_DAYS;
     const endIndex = Math.ceil((endPixel - CENTER_OFFSET) / width) + VISIBLE_BUFFER_DAYS;
 
     const days: { date: Date; left: number }[] = [];
-
     for (let i = startIndex; i <= endIndex; i++) {
       days.push({
         date: addDays(anchorDate, i),
-        left: CENTER_OFFSET + (i * width)
+        left: getDayLeftPosition(i, width)
       });
     }
 
     return days;
   });
 
-  // Snap track days - large static range for scroll snapping (Notion approach)
-  // Unlike visibleDays which virtualizes, this renders hundreds of invisible anchors
-  // so the browser always has stable snap points to target
-  const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor
-  const snapTrackDays = createMemo(() => {
-    const width = colWidth();
-    const days: { date: Date; left: number }[] = [];
-
+  // Snap track: day indices for scroll snapping (Notion approach)
+  // Returns indices only - position computed inline to avoid recreating objects on resize
+  const snapTrackIndices = createMemo(() => {
+    const indices: number[] = [];
     for (let i = -SNAP_TRACK_RANGE; i <= SNAP_TRACK_RANGE; i++) {
-      days.push({
-        date: addDays(anchorDate, i),
-        left: CENTER_OFFSET + (i * width)
-      });
+      indices.push(i);
     }
-
-    return days;
+    return indices;
   });
 
   // Calculate day index from scroll position
@@ -186,7 +195,7 @@ export function CalendarGrid() {
       refreshEvents(window);
     }
 
-    const visibleEnd = addDays(visibleStart, 7);
+    const visibleEnd = addDays(visibleStart, VISIBLE_DAYS_COUNT);
     const distToEnd = (loadedEnd.getTime() - visibleEnd.getTime()) / (1000 * 60 * 60 * 24);
     if (distToEnd < FETCH_THRESHOLD_DAYS) {
       const newEnd = addDays(loadedEnd, FETCH_CHUNK_DAYS);
@@ -247,10 +256,9 @@ export function CalendarGrid() {
         // Scroll to Today (or initial CenterDate if set)
         scrollToDate(centerDate());
 
-        // Vertical scroll
-        const now = new Date();
-        const hours = now.getHours();
-        const scrollPosition = Math.max(0, (hours - 2) * 48);
+        // Vertical scroll to show current time with some context above
+        const currentHour = new Date().getHours();
+        const scrollPosition = Math.max(0, (currentHour - INITIAL_SCROLL_OFFSET_HOURS) * HOUR_HEIGHT);
         scrollContainerRef.scrollTop = scrollPosition;
 
         // Force initial update of signals
@@ -320,7 +328,7 @@ export function CalendarGrid() {
         onScroll={handleScroll}
       >
         {/* Inner Virtual Container - Extremely Wide */}
-        <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${TOTAL_HEIGHT + HEADER_HEIGHT}px`, position: "relative" }}>
+        <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTENT_HEIGHT}px`, position: "relative" }}>
 
           {/* Sticky Header Row */}
           <div
@@ -330,9 +338,7 @@ export function CalendarGrid() {
               top: "0",
               "z-index": "10",
               height: `${HEADER_HEIGHT}px`,
-              width: "100%", // Header spans full virtual width? No, it just needs to contain the absolute children.
-              // Actually, header itself should probably just be a container for absolute adjustments?
-              // Or better: The container is relative. We can put absolute headers in it.
+              width: "100%",
             }}
           >
             {/* Sticky Time Column Header - Sticky Left */}
@@ -375,11 +381,6 @@ export function CalendarGrid() {
               position: "sticky",
               left: "0",
               "z-index": "15",
-              float: "left", // Force it to sit nicely? No, sticky works in flow.
-              // Since parent is "relative" block, this sticky div is just one child.
-              // The absolute day columns are siblings.
-              // We need to coordinate vertical position.
-              "margin-top": "0px"
             }}
           >
             <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
@@ -406,65 +407,42 @@ export function CalendarGrid() {
             )}
           </Key>
 
-          {/* Current Time Line - Absolute */}
-          {/* This needs to span the visible area or be absolute relative to Today's column? 
-               The component <CurrentTimeLine> usually draws a line across the grid. 
-               We should probably re-implement it or just position it absolutely over the whole container? 
-               Ideally it should only be on "Today".
-               Re-checking usage: It was spanning all columns.
-               For an infinite grid, a line spanning 500,000px is bad.
-               Let's render it only for the visible days or just rely on Today's column having a marker?
-               Actually DayColumn doesn't have the line.
-               Let's update CurrentTimeLine to be just one line across the viewport?
-               If we position it sticky left, it moves with scroll? No.
-               
-               Let's make CurrentTimeLine fixed relative to viewport or spanning the visible area.
-               Simpler: Just put it in a fixed overlay?
-               
-               For now, let's omit the generic "Line across everything" and trust the Badge.
-               Or put it inside DayColumn for "Today" specifically? 
-               Original code: <CurrentTimeLine totalDays={TOTAL_DAYS} visibleDaysCount={VISIBLE_DAYS} />
-               It was using CSS grid/flex to span.
-            */}
+          {/* Current Time Line - spans full width at current time position */}
           <div
             style={{
               position: "absolute",
               left: "0",
               top: `${HEADER_HEIGHT}px`,
-              width: "100%", // Spans entire virtual width
+              width: "100%",
               height: `${TOTAL_HEIGHT}px`,
               "pointer-events": "none",
               "z-index": "5"
             }}
           >
-            <CurrentTimeLine
-              totalDays={1} // Dummy
-              visibleDaysCount={1} // Dummy
-            />
-            {/* Note: CurrentTimeLine implementation might need adjustment to work in this container,
-                     but since it's likely just a "top: X%" div, it might work if width is 100%.
-                  */}
+            <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
           </div>
 
-          {/* Phantom Snap Track - invisible anchors for scroll snapping */}
-          {/* Renders hundreds of empty divs (Notion approach) - not virtualized */}
-          {/* Must span full height so they intersect viewport at any vertical scroll */}
-          <Key each={snapTrackDays()} by={(d) => getDateKey(d.date)}>
-            {(item) => (
-              <div
-                class="pointer-events-none"
-                style={{
-                  position: "absolute",
-                  top: "0",
-                  left: `${item().left}px`,
-                  width: `${colWidth()}px`,
-                  height: `${TOTAL_HEIGHT + HEADER_HEIGHT}px`,
-                  "z-index": "-1",
-                  "scroll-snap-align": "start",
-                  "scroll-snap-stop": isWeekStart(item().date) ? "always" : "normal",
-                }}
-              />
-            )}
+          {/* Phantom Snap Track - invisible anchors for scroll snapping (Notion approach) */}
+          {/* Renders 731 empty divs as stable snap points - must span full height */}
+          <Key each={snapTrackIndices()} by={(i) => i}>
+            {(dayIndex) => {
+              const date = addDays(anchorDate, dayIndex());
+              return (
+                <div
+                  class="pointer-events-none"
+                  style={{
+                    position: "absolute",
+                    top: "0",
+                    left: `${getDayLeftPosition(dayIndex(), colWidth())}px`,
+                    width: `${colWidth()}px`,
+                    height: `${CONTENT_HEIGHT}px`,
+                    "z-index": "-1",
+                    "scroll-snap-align": "start",
+                    "scroll-snap-stop": isWeekStart(date) ? "always" : "normal",
+                  }}
+                />
+              );
+            }}
           </Key>
 
         </div>
