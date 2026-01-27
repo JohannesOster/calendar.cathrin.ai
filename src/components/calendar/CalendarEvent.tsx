@@ -106,10 +106,10 @@ export function CalendarEvent(props: CalendarEventProps) {
         "z-index": getZIndex(),
       }}
     >
-      {/* Content - this gets clipped during burn */}
+      {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-lg border-l-4 px-1 py-1 cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""}`}
+        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""}`}
         style={{
           "--event-color": props.event.color,
         }}
@@ -119,28 +119,36 @@ export function CalendarEvent(props: CalendarEventProps) {
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
       >
-        <Show
-          when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
-          fallback={
-            <div class="truncate text-xs leading-tight font-medium">
-              {props.event.title}
-            </div>
-          }
-        >
-          <div
-            class="text-xs font-medium leading-tight overflow-hidden"
-            style={{
-              display: "-webkit-box",
-              "-webkit-box-orient": "vertical",
-              "-webkit-line-clamp": getTitleMaxLines(),
-            }}
-          >
-            {props.event.title}
+        {/* Inner layout - ribbon + content side by side */}
+        <div class="flex h-full">
+          {/* Ribbon - solid color bar on the left */}
+          <div class="calendar-event__ribbon w-1 shrink-0" />
+          {/* Content - straight edges, gets clipped by outer container's border-radius */}
+          <div class="flex-1 min-w-0 px-1 py-1">
+            <Show
+              when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
+              fallback={
+                <div class="truncate text-xs leading-tight font-medium">
+                  {props.event.title}
+                </div>
+              }
+            >
+              <div
+                class="text-xs font-medium leading-tight overflow-hidden"
+                style={{
+                  display: "-webkit-box",
+                  "-webkit-box-orient": "vertical",
+                  "-webkit-line-clamp": getTitleMaxLines(),
+                }}
+              >
+                {props.event.title}
+              </div>
+              <div class="text-[10px] font-light mt-0.5 opacity-80 whitespace-nowrap">
+                {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
+              </div>
+            </Show>
           </div>
-          <div class="text-[10px] font-light mt-0.5 opacity-80 whitespace-nowrap">
-            {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
-          </div>
-        </Show>
+        </div>
       </div>
 
       {/* Fire GIF overlay - sibling to content, not clipped */}

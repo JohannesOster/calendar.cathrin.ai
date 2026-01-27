@@ -107,13 +107,17 @@ body.dragging * {
 /* Calendar event states */
 .calendar-event {
   background-color: color-mix(in srgb, var(--event-color) 20%, white);
-  border-color: var(--event-color);
   color: var(--event-color);
 }
 
-/* Dark ring for visual separation - only applied to overlapping events */
+/* Ribbon - solid color bar on the left edge */
+.calendar-event__ribbon {
+  background-color: var(--event-color);
+}
+
+/* Box-shadow border for visual separation - only applied to overlapping events */
 .calendar-event--overlapping {
-  box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 1px 0.25px rgba(0, 0, 0, 0.1);
 }
 
 .calendar-event:hover {
@@ -125,6 +129,10 @@ body.dragging * {
   outline: none;
   background-color: var(--event-color);
   color: white;
+}
+
+.calendar-event:focus .calendar-event__ribbon {
+  background-color: color-mix(in srgb, var(--event-color), white 30%);
 }
 
 /* Paper burning animation - video-based fire effect */
