@@ -36,6 +36,17 @@ yarn tauri dev
 yarn tauri build
 ```
 
+### Testing
+```bash
+# Run tests in watch mode
+yarn test
+
+# Run tests once (CI mode)
+yarn test:run
+```
+
+Uses Vitest with configuration in `vite.config.ts`. Tests are in `*.test.ts` files alongside source.
+
 ## Architecture
 
 ### Component Structure
@@ -163,6 +174,19 @@ function LayoutRemeasurer(props: { isDragging: () => boolean }) {
 - Strict mode enabled
 - JSX preserved with `jsxImportSource: "solid-js"`
 - No emitted files (Vite handles bundling)
+
+### Progressive Event Loading
+
+Events are fetched progressively as users scroll, using week-based caching:
+- `src/stores/events.ts` - Week-based fetching, cache queries, loading state
+- `src/lib/date-utils.ts` - Week ID calculation (`getWeekId`, `getWeekBounds`, etc.)
+- `src-tauri/src/storage.rs` - Backend cache with `fetched_weeks` tracking
+
+**ISO Week vs Calendar Week Gotcha**:
+The calendar displays Sunday-Saturday weeks, but uses ISO 8601 week IDs (YYYY-Wnn) which are Monday-Sunday. This causes edge cases:
+- Sunday is the **last** day of an ISO week, not the first
+- When navigating weeks, use mid-week dates (Wednesday) or the week's end + 2 days to avoid boundary issues
+- See `getNextWeek()` implementation for the correct pattern
 
 ## Rust Backend
 
