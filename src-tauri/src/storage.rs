@@ -41,8 +41,8 @@ pub struct StoredEvent {
 pub struct EventCache {
     pub events: Vec<StoredEvent>,
     pub last_fetched_at: u64,  // Unix timestamp
-    pub window_start: String,  // ISO 8601
-    pub window_end: String,
+    #[serde(default)]
+    pub fetched_weeks: Vec<String>,  // ISO week format: "YYYY-Wnn"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +214,69 @@ impl AccountStore {
     }
 }
 
+/// Convert a date string (ISO 8601) to an ISO week ID ("YYYY-Wnn")
+/// Returns None if the date string can't be parsed
+pub fn date_to_week_id(date_str: &str) -> Option<String> {
+    use chrono::{Datelike, NaiveDate, NaiveDateTime};
+
+    // Try parsing as full datetime first
+    let date = if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.fZ") {
+        dt.date()
+    } else if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%:z") {
+        dt.date()
+    } else if let Ok(d) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        d
+    } else {
+        // Try parsing just the date portion
+        let date_part = date_str.split('T').next()?;
+        NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()?
+    };
+
+    let iso_week = date.iso_week();
+    Some(format!("{}-W{:02}", iso_week.year(), iso_week.week()))
+}
+
+/// Get all week IDs between two dates (inclusive)
+pub fn weeks_in_range(start: &str, end: &str) -> Vec<String> {
+    use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
+
+    let parse_date = |s: &str| -> Option<NaiveDate> {
+        if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+            Some(dt.date())
+        } else if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%:z") {
+            Some(dt.date())
+        } else if let Ok(d) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+            Some(d)
+        } else {
+            let date_part = s.split('T').next()?;
+            NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()
+        }
+    };
+
+    let start_date = match parse_date(start) {
+        Some(d) => d,
+        None => return Vec::new(),
+    };
+    let end_date = match parse_date(end) {
+        Some(d) => d,
+        None => return Vec::new(),
+    };
+
+    let mut weeks = Vec::new();
+    let mut current = start_date;
+
+    while current <= end_date {
+        let iso_week = current.iso_week();
+        let week_id = format!("{}-W{:02}", iso_week.year(), iso_week.week());
+        if weeks.last() != Some(&week_id) {
+            weeks.push(week_id);
+        }
+        current += Duration::days(1);
+    }
+
+    weeks
+}
+
 pub struct EventStore;
 
 impl EventStore {
@@ -227,8 +290,7 @@ impl EventStore {
         app: &AppHandle<Wry>,
         account_id: &str,
         events: Vec<StoredEvent>,
-        window_start: String,
-        window_end: String,
+        fetched_weeks: Vec<String>,
     ) -> Result<(), StorageError> {
         let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
 
@@ -238,8 +300,7 @@ impl EventStore {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-            window_start,
-            window_end,
+            fetched_weeks,
         };
 
         store.set(Self::events_key(account_id), serde_json::to_value(&cache)?);

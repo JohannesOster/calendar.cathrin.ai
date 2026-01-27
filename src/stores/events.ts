@@ -34,8 +34,7 @@ interface StoredEvent {
 interface EventCache {
   events: StoredEvent[];
   last_fetched_at: number;
-  window_start: string;
-  window_end: string;
+  fetched_weeks: string[];  // ISO week format: "YYYY-Wnn"
 }
 
 // Time window for fetching events (days relative to now)

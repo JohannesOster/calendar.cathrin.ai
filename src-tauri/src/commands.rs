@@ -3,7 +3,7 @@ use crate::oauth::{
     build_auth_url, build_redirect_uri, exchange_code_for_tokens, find_available_port,
     refresh_access_token, wait_for_callback, CallbackResult, OAuthConfig, PkceChallenge,
 };
-use crate::storage::{AccountStore, EventStore, StoredAccount, StoredCalendar, StoredEvent};
+use crate::storage::{AccountStore, EventStore, StoredAccount, StoredCalendar, StoredEvent, weeks_in_range};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Wry};
@@ -283,14 +283,16 @@ pub async fn fetch_events(
     // Get visible calendars
     let visible_calendars: Vec<_> = account.calendars.iter().filter(|c| c.visible).collect();
 
+    // Calculate which weeks are covered by this fetch
+    let fetched_weeks = weeks_in_range(&time_min, &time_max);
+
     // If no visible calendars, return empty and cache empty
     if visible_calendars.is_empty() {
         EventStore::save_events(
             &app,
             &account_id,
             Vec::new(),
-            time_min.clone(),
-            time_max.clone(),
+            fetched_weeks,
         )
         .map_err(|e| e.to_string())?;
         return Ok(Vec::new());
@@ -344,8 +346,7 @@ pub async fn fetch_events(
         &app,
         &account_id,
         all_events.clone(),
-        time_min,
-        time_max,
+        fetched_weeks,
     )
     .map_err(|e| e.to_string())?;
 
