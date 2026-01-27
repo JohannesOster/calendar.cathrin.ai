@@ -332,4 +332,62 @@ impl EventStore {
 
         Ok(())
     }
+
+    /// Merge new events into the cache for an account
+    /// Deduplicates by event ID (new events overwrite existing)
+    /// Adds new weeks to fetched_weeks list
+    pub fn merge_events(
+        app: &AppHandle<Wry>,
+        account_id: &str,
+        new_events: Vec<StoredEvent>,
+        new_weeks: Vec<String>,
+    ) -> Result<(), StorageError> {
+        let store = app.store(STORE_PATH).map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        // Load existing cache
+        let existing: Option<EventCache> = store
+            .get(Self::events_key(account_id))
+            .and_then(|v| serde_json::from_value(v).ok());
+
+        let (mut events, mut fetched_weeks) = match existing {
+            Some(cache) => (cache.events, cache.fetched_weeks),
+            None => (Vec::new(), Vec::new()),
+        };
+
+        // Deduplicate events by ID (new events overwrite existing)
+        let mut event_map: std::collections::HashMap<String, StoredEvent> = events
+            .into_iter()
+            .map(|e| (e.id.clone(), e))
+            .collect();
+
+        for event in new_events {
+            event_map.insert(event.id.clone(), event);
+        }
+
+        events = event_map.into_values().collect();
+
+        // Add new weeks to fetched_weeks (deduplicated)
+        for week in new_weeks {
+            if !fetched_weeks.contains(&week) {
+                fetched_weeks.push(week);
+            }
+        }
+
+        // Sort fetched_weeks for consistency
+        fetched_weeks.sort();
+
+        let cache = EventCache {
+            events,
+            last_fetched_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            fetched_weeks,
+        };
+
+        store.set(Self::events_key(account_id), serde_json::to_value(&cache)?);
+        store.save().map_err(|e| StorageError::StoreError(e.to_string()))?;
+
+        Ok(())
+    }
 }

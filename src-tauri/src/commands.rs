@@ -370,3 +370,76 @@ pub async fn clear_cached_events(
 ) -> Result<(), String> {
     EventStore::clear_events(&app, &account_id).map_err(|e| e.to_string())
 }
+
+/// Fetch events for a specific week and merge into cache
+/// Returns the events fetched for this week
+#[tauri::command]
+pub async fn fetch_events_for_week(
+    app: AppHandle<Wry>,
+    account_id: String,
+    week_id: String,
+    time_min: String,
+    time_max: String,
+) -> Result<Vec<StoredEvent>, String> {
+    // Get account and verify it exists
+    let account = AccountStore::get_account(&app, &account_id).map_err(|e| e.to_string())?;
+
+    // Get visible calendars
+    let visible_calendars: Vec<_> = account.calendars.iter().filter(|c| c.visible).collect();
+
+    // If no visible calendars, merge empty and return
+    if visible_calendars.is_empty() {
+        EventStore::merge_events(&app, &account_id, Vec::new(), vec![week_id])
+            .map_err(|e| e.to_string())?;
+        return Ok(Vec::new());
+    }
+
+    // Ensure valid token (refresh if needed)
+    let access_token = ensure_valid_token(app.clone(), account_id.clone()).await?;
+
+    // Fetch events from all visible calendars
+    let client = CalendarClient::new();
+    let mut all_events: Vec<StoredEvent> = Vec::new();
+
+    for calendar in visible_calendars {
+        let google_events = client
+            .fetch_events(&access_token, &calendar.id, &time_min, &time_max)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Convert GoogleEvent to StoredEvent with calendar color
+        for event in google_events {
+            let (start, is_all_day) = if let Some(ref dt) = event.start.date_time {
+                (dt.clone(), false)
+            } else if let Some(ref d) = event.start.date {
+                (d.clone(), true)
+            } else {
+                continue; // Skip events with no start time
+            };
+
+            let end = if let Some(ref dt) = event.end.date_time {
+                dt.clone()
+            } else if let Some(ref d) = event.end.date {
+                d.clone()
+            } else {
+                start.clone() // Fallback to start time
+            };
+
+            all_events.push(StoredEvent {
+                id: event.id,
+                calendar_id: calendar.id.clone(),
+                title: event.summary.unwrap_or_default(),
+                start,
+                end,
+                is_all_day,
+                color: calendar.color.clone(),
+            });
+        }
+    }
+
+    // Merge into cache (preserves existing events, adds new week)
+    EventStore::merge_events(&app, &account_id, all_events.clone(), vec![week_id])
+        .map_err(|e| e.to_string())?;
+
+    Ok(all_events)
+}
