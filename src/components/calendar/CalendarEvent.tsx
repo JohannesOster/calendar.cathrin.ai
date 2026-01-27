@@ -90,6 +90,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_X_PX}px`;
   const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
   const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
+  const hasOverlap = () => props.layout?.overlaps ?? false;
 
   return (
     // Outer wrapper - positioned, not clipped
@@ -108,7 +109,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Content - this gets clipped during burn */}
       <div
         ref={contentRef}
-        class="absolute inset-0 rounded-lg border-l-4  px-1 py-1 cursor-pointer transition-colors duration-75 calendar-event overflow-hidden"
+        class={`absolute inset-0 rounded-lg border-l-4 px-1 py-1 cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""}`}
         style={{
           "--event-color": props.event.color,
         }}

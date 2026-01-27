@@ -10,6 +10,7 @@ export interface EventLayoutInfo {
   left: string;
   width: string;
   zIndex: number;
+  overlaps: boolean;
 }
 
 /**
@@ -81,6 +82,7 @@ function layoutCluster(sortedCluster: CalendarEvent[]): Map<string, EventLayoutI
       left: `${EVENT_MARGIN_X_PX}px`,
       width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: 1,
+      overlaps: false,
     });
     return layouts;
   }
@@ -179,10 +181,14 @@ function layoutCluster(sortedCluster: CalendarEvent[]): Map<string, EventLayoutI
       ? 100 - columnWidth / 2
       : 100 - left;
 
+    // Check if this event has any event beneath it (lower zIndex that it overlaps with)
+    const hasEventBeneath = sortedCluster.slice(0, i).some(other => eventsOverlap(event, other));
+
     layouts.set(event.id, {
       left: `calc(${left}% + ${EVENT_MARGIN_X_PX}px)`,
       width: `calc(${width}% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: i + 1,
+      overlaps: hasEventBeneath,
     });
   }
 

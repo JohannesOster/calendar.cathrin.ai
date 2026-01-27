@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-html, body {
+html,
+body {
   max-height: 100vh;
   max-width: 100vw;
   overflow: hidden;
@@ -13,7 +14,7 @@ html, body {
   --grid-hour-height: 48px;
   --grid-time-col-width: 64px;
   --grid-all-day-chip-height: 20px;
-  
+
   /* Colors - Notion-like palette */
   --color-text-primary: #37352f;
   --color-text-secondary: #91918e;
@@ -108,6 +109,11 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 20%, white);
   border-color: var(--event-color);
   color: var(--event-color);
+}
+
+/* Dark ring for visual separation - only applied to overlapping events */
+.calendar-event--overlapping {
+  box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.1);
 }
 
 .calendar-event:hover {
