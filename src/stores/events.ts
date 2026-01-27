@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { connectedAccounts } from "./accounts";
+import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 
 /**
  * Event data from the backend, with dates parsed to JS Date objects
@@ -34,8 +35,7 @@ interface StoredEvent {
 interface EventCache {
   events: StoredEvent[];
   last_fetched_at: number;
-  window_start: string;
-  window_end: string;
+  fetched_weeks: string[];  // ISO week format: "YYYY-Wnn"
 }
 
 // Time window for fetching events (days relative to now)
@@ -49,6 +49,29 @@ export const [lastRefreshed, setLastRefreshed] = createSignal<Date | null>(
   null
 );
 export const [eventsError, setEventsError] = createSignal<string | null>(null);
+
+/**
+ * Track which weeks have been fetched (across all accounts)
+ * This is a local cache of the union of all accounts' fetched_weeks
+ */
+const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
+
+/**
+ * Track which weeks are currently being fetched (in-flight requests)
+ * Prevents duplicate fetches for the same week
+ */
+const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
+
+/**
+ * Request ID for cancellation pattern
+ * Incremented when visible weeks change to invalidate in-flight requests
+ */
+let currentRequestId = 0;
+
+/**
+ * Track which weeks are currently visible (for cancellation)
+ */
+let currentVisibleWeeks: Set<string> = new Set();
 
 /**
  * Convert backend StoredEvent to frontend CalendarEvent
@@ -111,16 +134,19 @@ function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent
 /**
  * Load events from cache (fast, no network)
  * Silently fails if no cache exists - empty state is fine
+ * Also syncs the fetched weeks tracker
  */
 export async function loadCachedEvents(): Promise<void> {
   try {
     const accounts = connectedAccounts();
     if (accounts.length === 0) {
       setEvents([]);
+      setFetchedWeeks(new Set());
       return;
     }
 
     const allEvents: CalendarEvent[] = [];
+    const allWeeks = new Set<string>();
 
     for (const account of accounts) {
       const cache = await invoke<EventCache | null>("get_cached_events", {
@@ -130,11 +156,19 @@ export async function loadCachedEvents(): Promise<void> {
       if (cache?.events) {
         allEvents.push(...cache.events.map(convertToCalendarEvent));
       }
+
+      if (cache?.fetched_weeks) {
+        for (const week of cache.fetched_weeks) {
+          allWeeks.add(week);
+        }
+      }
     }
 
     setEvents(processEvents(allEvents));
+    setFetchedWeeks(allWeeks);
   } catch {
     setEvents([]);
+    setFetchedWeeks(new Set());
   }
 }
 
@@ -217,3 +251,206 @@ export async function initializeEvents(): Promise<void> {
   // Refresh in background (no await) - stale-while-revalidate pattern
   refreshEvents();
 }
+
+/**
+ * Get the set of weeks that have been fetched
+ */
+export function getFetchedWeeks(): Set<string> {
+  return fetchedWeeks();
+}
+
+/**
+ * Get the set of weeks currently being fetched
+ */
+export function getFetchingWeeks(): Set<string> {
+  return fetchingWeeks();
+}
+
+/**
+ * Check if any weeks are currently being fetched
+ * Reactive signal for UI to show loading state
+ */
+export function isLoadingWeeks(): boolean {
+  return fetchingWeeks().size > 0;
+}
+
+/**
+ * Update visible weeks and cancel fetches for non-visible weeks
+ * Call this when visible weeks change to invalidate stale requests
+ */
+export function updateVisibleWeeks(weeks: string[]): void {
+  const newVisible = new Set(weeks);
+
+  // Check if any in-flight fetches are now non-visible
+  const fetching = fetchingWeeks();
+  const staleFetches: string[] = [];
+  for (const week of fetching) {
+    if (!newVisible.has(week)) {
+      staleFetches.push(week);
+    }
+  }
+
+  if (staleFetches.length > 0) {
+    console.log(`[events] Cancelling stale fetches:`, staleFetches);
+    // Increment request ID to invalidate pending responses
+    currentRequestId++;
+    // Remove stale weeks from fetchingWeeks
+    setFetchingWeeks((prev) => {
+      const next = new Set<string>();
+      for (const week of prev) {
+        if (newVisible.has(week)) {
+          next.add(week);
+        }
+      }
+      return next;
+    });
+  }
+
+  currentVisibleWeeks = newVisible;
+}
+
+/**
+ * Fetch events for a specific week (for all accounts)
+ * Merges into existing cache rather than replacing
+ * Tracks in-flight state to prevent duplicate requests
+ * Supports cancellation via request ID pattern
+ */
+export async function fetchEventsForWeek(weekId: string): Promise<void> {
+  // Skip if already fetching this week
+  if (fetchingWeeks().has(weekId)) {
+    console.log(`[events] Skipping ${weekId} - already fetching`);
+    return;
+  }
+
+  // Skip if already fetched
+  if (fetchedWeeks().has(weekId)) {
+    console.log(`[events] Skipping ${weekId} - already cached`);
+    return;
+  }
+
+  const accounts = connectedAccounts();
+  if (accounts.length === 0) return;
+
+  // Capture request ID at start
+  const requestId = currentRequestId;
+
+  // Mark as fetching
+  setFetchingWeeks((prev) => {
+    const updated = new Set(prev);
+    updated.add(weekId);
+    return updated;
+  });
+
+  console.log(`[events] Fetching ${weekId}...`);
+
+  try {
+    const { start, end } = getWeekBounds(weekId);
+    const timeMin = start.toISOString();
+    const timeMax = end.toISOString();
+
+    const newEvents: CalendarEvent[] = [];
+
+    for (const account of accounts) {
+      // Check if request was cancelled before each account fetch
+      if (requestId !== currentRequestId) {
+        console.log(`[events] Discarding stale fetch for ${weekId} (cancelled during fetch)`);
+        return;
+      }
+
+      try {
+        const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
+          accountId: account.id,
+          weekId,
+          timeMin,
+          timeMax,
+        });
+
+        newEvents.push(...accountEvents.map(convertToCalendarEvent));
+      } catch (error) {
+        console.error(`[events] Failed to fetch week ${weekId} for account ${account.id}:`, error);
+      }
+    }
+
+    // Check if this request is still relevant before updating state
+    if (requestId !== currentRequestId) {
+      console.log(`[events] Discarding stale fetch for ${weekId} (cancelled after fetch)`);
+      return;
+    }
+
+    // Merge new events with existing
+    setEvents((prev) => processEvents(newEvents, prev));
+
+    // Update local fetched weeks tracker
+    setFetchedWeeks((prev) => {
+      const updated = new Set(prev);
+      updated.add(weekId);
+      return updated;
+    });
+
+    console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
+  } finally {
+    // Clear fetching state (only if not already cleared by cancellation)
+    setFetchingWeeks((prev) => {
+      const updated = new Set(prev);
+      updated.delete(weekId);
+      return updated;
+    });
+  }
+}
+
+/**
+ * Get events for a date range, identifying which weeks are missing from cache
+ * Returns cached events within the range and a list of weeks that need fetching
+ */
+export function getEventsForRange(
+  start: Date,
+  end: Date
+): { events: CalendarEvent[]; missingWeeks: string[] } {
+  const weeksNeeded = getWeeksInRange(start, end);
+  const cached = fetchedWeeks();
+
+  const missingWeeks = weeksNeeded.filter((week) => !cached.has(week));
+
+  // Filter events to those overlapping the range
+  const rangeStart = start.getTime();
+  const rangeEnd = end.getTime();
+
+  const eventsInRange = events().filter((event) => {
+    const eventStart = event.start.getTime();
+    const eventEnd = event.end.getTime();
+    // Event overlaps range if it starts before range ends and ends after range starts
+    return eventStart <= rangeEnd && eventEnd >= rangeStart;
+  });
+
+  return { events: eventsInRange, missingWeeks };
+}
+
+/**
+ * Update the fetched weeks tracker from cache data
+ * Call this after loading from cache to sync the local state
+ */
+export async function syncFetchedWeeksFromCache(): Promise<void> {
+  const accounts = connectedAccounts();
+  const allWeeks = new Set<string>();
+
+  for (const account of accounts) {
+    try {
+      const cache = await invoke<EventCache | null>("get_cached_events", {
+        accountId: account.id,
+      });
+
+      if (cache?.fetched_weeks) {
+        for (const week of cache.fetched_weeks) {
+          allWeeks.add(week);
+        }
+      }
+    } catch {
+      // Ignore cache read errors
+    }
+  }
+
+  setFetchedWeeks(allWeeks);
+}
+
+// Re-export week utilities for convenience
+export { getWeekId, getWeekBounds, getWeeksInRange };

@@ -1,11 +1,11 @@
-import { createSignal, onMount, onCleanup, createEffect, createMemo, on } from "solid-js";
+import { createSignal, onMount, onCleanup, createEffect, createMemo, on, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear } from "../../lib/date-utils";
-import { refreshEvents } from "../../stores/events";
+import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
+import { refreshEvents, isLoadingWeeks } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -41,6 +41,12 @@ const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Anchor point in middle
 // ============================================================================
 const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor for snap points
 
+// ============================================================================
+// Constants - Scroll Direction Tracking (for prefetching)
+// ============================================================================
+const DIRECTION_THRESHOLD_PX = 10; // Minimum movement to register direction change
+const DIRECTION_RESET_DELAY_MS = 2000; // Reset to null after idle period
+
 // Initial Reference Date (Anchor)
 // All positions are calculated relative to this date being at CENTER_OFFSET
 const anchorDate = (() => {
@@ -59,6 +65,10 @@ export const [displayedMonth, setDisplayedMonth] = createSignal("");
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
 export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
+// Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
+export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
+// Scroll direction signal for prefetching - null when idle, 'left' (past) or 'right' (future)
+export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'right' | null>(null);
 
 
 export function CalendarGrid() {
@@ -84,6 +94,10 @@ export function CalendarGrid() {
 
   // Disable scroll snap during programmatic scrolls to prevent feedback loops
   const [snapEnabled, setSnapEnabled] = createSignal(true);
+
+  // Track scroll direction for prefetching
+  let lastScrollLeft = CENTER_OFFSET;
+  let directionResetTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
@@ -161,6 +175,25 @@ export function CalendarGrid() {
     const currentScrollLeft = scrollContainerRef.scrollLeft;
     setScrollLeft(currentScrollLeft);
 
+    // Track scroll direction for prefetching
+    // Skip during programmatic scrolls (when snap is disabled) to avoid incorrect direction
+    if (snapEnabled()) {
+      if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD_PX) {
+        setScrollDirection('right'); // Scrolling toward future
+      } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD_PX) {
+        setScrollDirection('left'); // Scrolling toward past
+      }
+
+      // Reset direction to null after period of no scrolling
+      if (directionResetTimer) {
+        clearTimeout(directionResetTimer);
+      }
+      directionResetTimer = setTimeout(() => {
+        setScrollDirection(null);
+      }, DIRECTION_RESET_DELAY_MS);
+    }
+    lastScrollLeft = currentScrollLeft;
+
     const width = colWidth();
     if (width > 0) {
       const dayIndex = getDayIndexFromScroll(currentScrollLeft);
@@ -178,6 +211,21 @@ export function CalendarGrid() {
       if (!isSameDay(currentDate, visibleStartDate())) {
         setVisibleStartDate(currentDate);
         checkAndFetchEvents(currentDate);
+      }
+
+      // Update visible weeks - compute week IDs for visible range
+      const endDate = addDays(currentDate, VISIBLE_DAYS_COUNT - 1);
+      const startWeek = getWeekId(currentDate);
+      const endWeek = getWeekId(endDate);
+
+      // Build new weeks array (1 or 2 weeks depending on boundary crossing)
+      const newWeeks = startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
+
+      // Only update if weeks actually changed
+      const currentWeeks = visibleWeeks();
+      if (newWeeks.length !== currentWeeks.length ||
+          newWeeks.some((w, i) => w !== currentWeeks[i])) {
+        setVisibleWeeks(newWeeks);
       }
     }
   };
@@ -298,6 +346,13 @@ export function CalendarGrid() {
     };
     document.addEventListener("keydown", handleKeyDown);
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+    // Cleanup direction reset timer
+    onCleanup(() => {
+      if (directionResetTimer) {
+        clearTimeout(directionResetTimer);
+      }
+    });
   });
 
   // React to external centerDate changes (e.g. from Mini Calendar)
@@ -312,8 +367,16 @@ export function CalendarGrid() {
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
       {/* Month/Year indicator - outside scroll container */}
-      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0">
+      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center gap-3">
         <span class="text-lg font-medium text-[#37352f]">{displayedMonth()}</span>
+        <Show when={isLoadingWeeks()}>
+          <span
+            class="text-sm text-[#91918e] animate-pulse"
+            aria-live="polite"
+          >
+            Loading events...
+          </span>
+        </Show>
       </div>
 
       {/* ONE Main Scroll Container */}
