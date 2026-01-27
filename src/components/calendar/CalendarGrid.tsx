@@ -4,7 +4,7 @@ import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear } from "../../lib/date-utils";
+import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
 import { refreshEvents } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
@@ -59,6 +59,8 @@ export const [displayedMonth, setDisplayedMonth] = createSignal("");
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
 export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
+// Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
+export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
 
 
 export function CalendarGrid() {
@@ -178,6 +180,21 @@ export function CalendarGrid() {
       if (!isSameDay(currentDate, visibleStartDate())) {
         setVisibleStartDate(currentDate);
         checkAndFetchEvents(currentDate);
+      }
+
+      // Update visible weeks - compute week IDs for visible range
+      const endDate = addDays(currentDate, VISIBLE_DAYS_COUNT - 1);
+      const startWeek = getWeekId(currentDate);
+      const endWeek = getWeekId(endDate);
+
+      // Build new weeks array (1 or 2 weeks depending on boundary crossing)
+      const newWeeks = startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
+
+      // Only update if weeks actually changed
+      const currentWeeks = visibleWeeks();
+      if (newWeeks.length !== currentWeeks.length ||
+          newWeeks.some((w, i) => w !== currentWeeks[i])) {
+        setVisibleWeeks(newWeeks);
       }
     }
   };
