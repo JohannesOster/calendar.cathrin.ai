@@ -4,8 +4,8 @@ import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
-import { refreshEvents, isLoadingWeeks } from "../../stores/events";
+import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
+import { isLoadingWeeks } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -74,16 +74,6 @@ export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'righ
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
   let isInitialized = false;
-
-  // Track loaded range to avoid redundant fetches
-  // Initial window is -7 to +30 days (matches events.ts default)
-  const initialStart = new Date();
-  initialStart.setDate(initialStart.getDate() - 7);
-  const initialEnd = new Date();
-  initialEnd.setDate(initialEnd.getDate() + 30);
-
-  let loadedStart = initialStart;
-  let loadedEnd = initialEnd;
 
   // Track scroll position for virtualization
   const [scrollLeft, setScrollLeft] = createSignal(CENTER_OFFSET);
@@ -210,7 +200,6 @@ export function CalendarGrid() {
       // to avoid feedback loops with the scroll effect
       if (!isSameDay(currentDate, visibleStartDate())) {
         setVisibleStartDate(currentDate);
-        checkAndFetchEvents(currentDate);
       }
 
       // Update visible weeks - compute week IDs for visible range
@@ -227,29 +216,6 @@ export function CalendarGrid() {
           newWeeks.some((w, i) => w !== currentWeeks[i])) {
         setVisibleWeeks(newWeeks);
       }
-    }
-  };
-
-  // Dynamic Event Fetching
-  const checkAndFetchEvents = (visibleStart: Date) => {
-    const FETCH_THRESHOLD_DAYS = 14;
-    const FETCH_CHUNK_DAYS = 30;
-
-    const distToStart = (visibleStart.getTime() - loadedStart.getTime()) / (1000 * 60 * 60 * 24);
-    if (distToStart < FETCH_THRESHOLD_DAYS) {
-      const newStart = addDays(loadedStart, -FETCH_CHUNK_DAYS);
-      const window = { start: newStart, end: loadedStart };
-      loadedStart = newStart;
-      refreshEvents(window);
-    }
-
-    const visibleEnd = addDays(visibleStart, VISIBLE_DAYS_COUNT);
-    const distToEnd = (loadedEnd.getTime() - visibleEnd.getTime()) / (1000 * 60 * 60 * 24);
-    if (distToEnd < FETCH_THRESHOLD_DAYS) {
-      const newEnd = addDays(loadedEnd, FETCH_CHUNK_DAYS);
-      const window = { start: loadedEnd, end: newEnd };
-      loadedEnd = newEnd;
-      refreshEvents(window);
     }
   };
 
