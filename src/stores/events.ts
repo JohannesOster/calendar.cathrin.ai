@@ -267,6 +267,14 @@ export function getFetchingWeeks(): Set<string> {
 }
 
 /**
+ * Check if any weeks are currently being fetched
+ * Reactive signal for UI to show loading state
+ */
+export function isLoadingWeeks(): boolean {
+  return fetchingWeeks().size > 0;
+}
+
+/**
  * Update visible weeks and cancel fetches for non-visible weeks
  * Call this when visible weeks change to invalidate stale requests
  */

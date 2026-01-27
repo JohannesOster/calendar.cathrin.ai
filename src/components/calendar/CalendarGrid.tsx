@@ -1,11 +1,11 @@
-import { createSignal, onMount, onCleanup, createEffect, createMemo, on } from "solid-js";
+import { createSignal, onMount, onCleanup, createEffect, createMemo, on, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { addDays, getSundayOfWeek, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
-import { refreshEvents } from "../../stores/events";
+import { refreshEvents, isLoadingWeeks } from "../../stores/events";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -329,8 +329,16 @@ export function CalendarGrid() {
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
       {/* Month/Year indicator - outside scroll container */}
-      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0">
+      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center gap-3">
         <span class="text-lg font-medium text-[#37352f]">{displayedMonth()}</span>
+        <Show when={isLoadingWeeks()}>
+          <span
+            class="text-sm text-[#91918e] animate-pulse"
+            aria-live="polite"
+          >
+            Loading events...
+          </span>
+        </Show>
       </div>
 
       {/* ONE Main Scroll Container */}
