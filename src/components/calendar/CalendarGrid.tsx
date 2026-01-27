@@ -448,6 +448,7 @@ export function CalendarGrid() {
 
           {/* Phantom Snap Track - invisible anchors for scroll snapping */}
           {/* Renders hundreds of empty divs (Notion approach) - not virtualized */}
+          {/* Must span full height so they intersect viewport at any vertical scroll */}
           <Key each={snapTrackDays()} by={(d) => getDateKey(d.date)}>
             {(item) => (
               <div
@@ -457,7 +458,7 @@ export function CalendarGrid() {
                   top: "0",
                   left: `${item().left}px`,
                   width: `${colWidth()}px`,
-                  height: "1px",
+                  height: `${TOTAL_HEIGHT + HEADER_HEIGHT}px`,
                   "z-index": "-1",
                   "scroll-snap-align": "start",
                   "scroll-snap-stop": isWeekStart(item().date) ? "always" : "normal",
