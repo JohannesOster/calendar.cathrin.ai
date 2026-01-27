@@ -131,3 +131,21 @@ export function getWeeksInRange(start: Date, end: Date): string[] {
 
   return weeks;
 }
+
+/**
+ * Get the next week's ID (7 days forward)
+ */
+export function getNextWeek(weekId: string): string {
+  const { start } = getWeekBounds(weekId);
+  const nextWeekDate = addDays(start, 7);
+  return getWeekId(nextWeekDate);
+}
+
+/**
+ * Get the previous week's ID (7 days backward)
+ */
+export function getPreviousWeek(weekId: string): string {
+  const { start } = getWeekBounds(weekId);
+  const prevWeekDate = addDays(start, -1);
+  return getWeekId(prevWeekDate);
+}

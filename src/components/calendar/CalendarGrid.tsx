@@ -61,6 +61,8 @@ export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
 // Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
 export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
+// Scroll direction signal for prefetching - null when idle, 'left' (past) or 'right' (future)
+export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'right' | null>(null);
 
 
 export function CalendarGrid() {
@@ -86,6 +88,12 @@ export function CalendarGrid() {
 
   // Disable scroll snap during programmatic scrolls to prevent feedback loops
   const [snapEnabled, setSnapEnabled] = createSignal(true);
+
+  // Track scroll direction for prefetching
+  let lastScrollLeft = CENTER_OFFSET;
+  let directionResetTimer: ReturnType<typeof setTimeout> | undefined;
+  const DIRECTION_THRESHOLD = 10; // px - minimum movement to register direction
+  const DIRECTION_RESET_DELAY = 2000; // ms - reset to null after idle
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
@@ -162,6 +170,22 @@ export function CalendarGrid() {
     if (!scrollContainerRef) return;
     const currentScrollLeft = scrollContainerRef.scrollLeft;
     setScrollLeft(currentScrollLeft);
+
+    // Track scroll direction for prefetching
+    if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD) {
+      setScrollDirection('right'); // Scrolling toward future
+    } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD) {
+      setScrollDirection('left'); // Scrolling toward past
+    }
+    lastScrollLeft = currentScrollLeft;
+
+    // Reset direction to null after period of no scrolling
+    if (directionResetTimer) {
+      clearTimeout(directionResetTimer);
+    }
+    directionResetTimer = setTimeout(() => {
+      setScrollDirection(null);
+    }, DIRECTION_RESET_DELAY);
 
     const width = colWidth();
     if (width > 0) {
@@ -315,6 +339,13 @@ export function CalendarGrid() {
     };
     document.addEventListener("keydown", handleKeyDown);
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+    // Cleanup direction reset timer
+    onCleanup(() => {
+      if (directionResetTimer) {
+        clearTimeout(directionResetTimer);
+      }
+    });
   });
 
   // React to external centerDate changes (e.g. from Mini Calendar)

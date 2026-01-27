@@ -3,7 +3,7 @@ import "./App.css";
 import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
-import { CalendarGrid, visibleWeeks } from "./components/calendar/CalendarGrid";
+import { CalendarGrid, visibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { initializeAccounts } from "./stores/accounts";
 import {
   initializeEvents,
@@ -11,7 +11,10 @@ import {
   fetchEventsForWeek,
   getWeekBounds,
   updateVisibleWeeks,
+  getFetchedWeeks,
+  getFetchingWeeks,
 } from "./stores/events";
+import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
 
 // Debounce delay for fetch trigger (ms)
 const FETCH_DEBOUNCE_MS = 500;
@@ -61,6 +64,23 @@ function App() {
           // Fetch each missing week
           for (const week of missingWeeks) {
             fetchEventsForWeek(week);
+          }
+        }
+
+        // Directional prefetching: fetch next week in scroll direction
+        const direction = scrollDirection();
+        if (direction) {
+          const targetWeek = direction === 'right'
+            ? getNextWeek(lastWeek)    // Prefetch week after visible range
+            : getPreviousWeek(firstWeek); // Prefetch week before visible range
+
+          const cached = getFetchedWeeks();
+          const fetching = getFetchingWeeks();
+
+          // Only prefetch if not already cached or being fetched
+          if (!cached.has(targetWeek) && !fetching.has(targetWeek)) {
+            console.log(`[prefetch] Prefetching ${targetWeek} (direction: ${direction})`);
+            fetchEventsForWeek(targetWeek);
           }
         }
       }, FETCH_DEBOUNCE_MS);
