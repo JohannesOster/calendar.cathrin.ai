@@ -57,6 +57,12 @@ export const [eventsError, setEventsError] = createSignal<string | null>(null);
 const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
 
 /**
+ * Track which weeks are currently being fetched (in-flight requests)
+ * Prevents duplicate fetches for the same week
+ */
+const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
+
+/**
  * Convert backend StoredEvent to frontend CalendarEvent
  */
 function convertToCalendarEvent(event: StoredEvent): CalendarEvent {
@@ -243,43 +249,83 @@ export function getFetchedWeeks(): Set<string> {
 }
 
 /**
+ * Get the set of weeks currently being fetched
+ */
+export function getFetchingWeeks(): Set<string> {
+  return fetchingWeeks();
+}
+
+/**
  * Fetch events for a specific week (for all accounts)
  * Merges into existing cache rather than replacing
+ * Tracks in-flight state to prevent duplicate requests
  */
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
+  // Skip if already fetching this week
+  if (fetchingWeeks().has(weekId)) {
+    console.log(`[events] Skipping ${weekId} - already fetching`);
+    return;
+  }
+
+  // Skip if already fetched
+  if (fetchedWeeks().has(weekId)) {
+    console.log(`[events] Skipping ${weekId} - already cached`);
+    return;
+  }
+
   const accounts = connectedAccounts();
   if (accounts.length === 0) return;
 
-  const { start, end } = getWeekBounds(weekId);
-  const timeMin = start.toISOString();
-  const timeMax = end.toISOString();
-
-  const newEvents: CalendarEvent[] = [];
-
-  for (const account of accounts) {
-    try {
-      const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
-        accountId: account.id,
-        weekId,
-        timeMin,
-        timeMax,
-      });
-
-      newEvents.push(...accountEvents.map(convertToCalendarEvent));
-    } catch (error) {
-      console.error(`Failed to fetch week ${weekId} for account ${account.id}:`, error);
-    }
-  }
-
-  // Merge new events with existing
-  setEvents((prev) => processEvents(newEvents, prev));
-
-  // Update local fetched weeks tracker
-  setFetchedWeeks((prev) => {
+  // Mark as fetching
+  setFetchingWeeks((prev) => {
     const updated = new Set(prev);
     updated.add(weekId);
     return updated;
   });
+
+  console.log(`[events] Fetching ${weekId}...`);
+
+  try {
+    const { start, end } = getWeekBounds(weekId);
+    const timeMin = start.toISOString();
+    const timeMax = end.toISOString();
+
+    const newEvents: CalendarEvent[] = [];
+
+    for (const account of accounts) {
+      try {
+        const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
+          accountId: account.id,
+          weekId,
+          timeMin,
+          timeMax,
+        });
+
+        newEvents.push(...accountEvents.map(convertToCalendarEvent));
+      } catch (error) {
+        console.error(`[events] Failed to fetch week ${weekId} for account ${account.id}:`, error);
+      }
+    }
+
+    // Merge new events with existing
+    setEvents((prev) => processEvents(newEvents, prev));
+
+    // Update local fetched weeks tracker
+    setFetchedWeeks((prev) => {
+      const updated = new Set(prev);
+      updated.add(weekId);
+      return updated;
+    });
+
+    console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
+  } finally {
+    // Clear fetching state
+    setFetchingWeeks((prev) => {
+      const updated = new Set(prev);
+      updated.delete(weekId);
+      return updated;
+    });
+  }
 }
 
 /**
