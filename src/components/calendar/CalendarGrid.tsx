@@ -11,6 +11,9 @@ import { refreshEvents } from "../../stores/events";
 const getDateKey = (date: Date): string =>
   `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 
+// Helper to check if a date is a week start (Sunday)
+const isWeekStart = (date: Date): boolean => date.getDay() === 0;
+
 // Virtual Container Configuration
 const CONTAINER_WIDTH = 500000; // Large virtual width
 const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Start in middle "Today"
@@ -61,6 +64,9 @@ export function CalendarGrid() {
   // Signal to track computed column width for responsive layout
   const [colWidth, setColWidth] = createSignal(120);
 
+  // Disable scroll snap during programmatic scrolls to prevent feedback loops
+  const [snapEnabled, setSnapEnabled] = createSignal(true);
+
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
     return parseInt(getComputedStyle(document.documentElement).getPropertyValue('--grid-time-col-width')) || 64;
@@ -106,6 +112,24 @@ export function CalendarGrid() {
     const days: { date: Date; left: number }[] = [];
 
     for (let i = startIndex; i <= endIndex; i++) {
+      days.push({
+        date: addDays(anchorDate, i),
+        left: CENTER_OFFSET + (i * width)
+      });
+    }
+
+    return days;
+  });
+
+  // Snap track days - large static range for scroll snapping (Notion approach)
+  // Unlike visibleDays which virtualizes, this renders hundreds of invisible anchors
+  // so the browser always has stable snap points to target
+  const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor
+  const snapTrackDays = createMemo(() => {
+    const width = colWidth();
+    const days: { date: Date; left: number }[] = [];
+
+    for (let i = -SNAP_TRACK_RANGE; i <= SNAP_TRACK_RANGE; i++) {
       days.push({
         date: addDays(anchorDate, i),
         left: CENTER_OFFSET + (i * width)
@@ -176,6 +200,9 @@ export function CalendarGrid() {
   const scrollToDate = (date: Date) => {
     if (!scrollContainerRef) return;
 
+    // Disable snap during programmatic scroll to prevent feedback loop
+    setSnapEnabled(false);
+
     // Normalize to midnight to avoid time component affecting day calculation
     const normalizedDate = new Date(date);
     normalizedDate.setHours(0, 0, 0, 0);
@@ -190,6 +217,11 @@ export function CalendarGrid() {
     const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth()) - timeColWidth;
 
     scrollContainerRef.scrollLeft = targetScrollLeft;
+
+    // Re-enable snap after scroll settles
+    requestAnimationFrame(() => {
+      setSnapEnabled(true);
+    });
   };
 
   // Handle resize
@@ -282,12 +314,8 @@ export function CalendarGrid() {
         class="flex-1 overflow-auto overscroll-none"
         style={{
           "position": "relative",
-          // Since we use absolute positioning for children, snapping is tricky.
-          // But we can snap to the container grid interval if we want.
-          // "scroll-snap-type": "x mandatory", 
-          // Snapping is hard with virtual absolute container because snap points are infinite.
-          // Let's rely on manual snapping or just smooth scrolling for now as requested ("No complex scroll correction")
-          // Actually user asked for "Infinite Expanding Container" and "Sticky"
+          "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
+          "scroll-padding-left": "var(--grid-time-col-width)",
         }}
         onScroll={handleScroll}
       >
@@ -413,10 +441,30 @@ export function CalendarGrid() {
               totalDays={1} // Dummy
               visibleDaysCount={1} // Dummy
             />
-            {/* Note: CurrentTimeLine implementation might need adjustment to work in this container, 
-                     but since it's likely just a "top: X%" div, it might work if width is 100%. 
+            {/* Note: CurrentTimeLine implementation might need adjustment to work in this container,
+                     but since it's likely just a "top: X%" div, it might work if width is 100%.
                   */}
           </div>
+
+          {/* Phantom Snap Track - invisible anchors for scroll snapping */}
+          {/* Renders hundreds of empty divs (Notion approach) - not virtualized */}
+          <Key each={snapTrackDays()} by={(d) => getDateKey(d.date)}>
+            {(item) => (
+              <div
+                class="pointer-events-none"
+                style={{
+                  position: "absolute",
+                  top: "0",
+                  left: `${item().left}px`,
+                  width: `${colWidth()}px`,
+                  height: "1px",
+                  "z-index": "-1",
+                  "scroll-snap-align": "start",
+                  "scroll-snap-stop": isWeekStart(item().date) ? "always" : "normal",
+                }}
+              />
+            )}
+          </Key>
 
         </div>
       </div>
