@@ -241,12 +241,6 @@ fn date_to_week_id_internal(date: chrono::NaiveDate) -> String {
     format!("{}-W{:02}", iso_week.year(), iso_week.week())
 }
 
-/// Convert a date string (ISO 8601) to an ISO week ID ("YYYY-Wnn")
-/// Returns None if the date string can't be parsed
-pub fn date_to_week_id(date_str: &str) -> Option<String> {
-    parse_date_string(date_str).map(date_to_week_id_internal)
-}
-
 /// Get all week IDs between two dates (inclusive)
 /// Note: Uses day-by-day iteration because ISO weeks (Mon-Sun) don't align
 /// perfectly, making skip-by-7 unreliable for small ranges
