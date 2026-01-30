@@ -70,8 +70,19 @@ export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
 // Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
 export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
+// Month view visible weeks - contains ~6 week IDs for the visible area in month view
+export const [monthVisibleWeekIds, setMonthVisibleWeekIds] = createSignal<string[]>([]);
 // Scroll direction signal for prefetching - null when idle, 'left' (past) or 'right' (future)
 export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'right' | null>(null);
+
+// Active visible weeks - switches between week view and month view based on currentView
+// This is the signal that the events store should react to
+export const activeVisibleWeeks = createMemo(() => {
+  if (currentView() === "Month") {
+    return monthVisibleWeekIds();
+  }
+  return visibleWeeks();
+});
 
 
 export function CalendarGrid() {
@@ -332,6 +343,20 @@ export function CalendarGrid() {
     on(centerDate, (target) => {
       if (currentView() !== "Month") {
         scrollToDate(target);
+      }
+    }, { defer: true })
+  );
+
+  // When switching from Month view back to Week view, restore scroll position
+  // and update visibleWeeks signal (since onMount doesn't run again)
+  createEffect(
+    on(currentView, (view, prevView) => {
+      if (prevView === "Month" && view !== "Month" && isInitialized && scrollContainerRef) {
+        // Give the DOM time to render the week view container
+        requestAnimationFrame(() => {
+          scrollToDate(visibleStartDate());
+          handleScroll();
+        });
       }
     }, { defer: true })
   );

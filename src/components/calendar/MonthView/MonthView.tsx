@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { MonthDayCell, type DayInfo } from "./MonthDayCell";
-import { visibleStartDate, setVisibleStartDate, setDisplayedMonth, centerDate, flashDate } from "../CalendarGrid";
+import { visibleStartDate, setVisibleStartDate, setDisplayedMonth, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
 import { formatMonthYear, addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
 
 // ============================================================================
@@ -134,6 +134,34 @@ export function MonthView() {
     return Math.round((scroll - CENTER_OFFSET) / WEEK_ROW_HEIGHT);
   };
 
+  // Compute visible week IDs (ISO format) for the ~6 weeks visible in viewport
+  // This is used by the events store to know which weeks to fetch
+  const computedWeekIds = createMemo(() => {
+    const currentScrollTop = scrollTop();
+    const currentContainerHeight = containerHeight() || window.innerHeight;
+
+    // Calculate which weeks are in the viewport (no buffer - just the visible area)
+    const startPixel = currentScrollTop;
+    const endPixel = currentScrollTop + currentContainerHeight;
+
+    const startIndex = Math.floor((startPixel - CENTER_OFFSET) / WEEK_ROW_HEIGHT);
+    const endIndex = Math.ceil((endPixel - CENTER_OFFSET) / WEEK_ROW_HEIGHT);
+
+    const weekIds: string[] = [];
+    for (let i = startIndex; i <= endIndex; i++) {
+      const weekStartDate = getWeekStartDate(i);
+      weekIds.push(getWeekId(weekStartDate));
+    }
+
+    return weekIds;
+  });
+
+  // Sync computed week IDs to the shared signal for event fetching
+  createEffect(() => {
+    const weekIds = computedWeekIds();
+    setMonthVisibleWeekIds(weekIds);
+  });
+
   // Handle scroll events
   const handleScroll = () => {
     if (!scrollContainerRef) return;
@@ -195,6 +223,9 @@ export function MonthView() {
       resizeObserver.observe(scrollContainerRef);
       onCleanup(() => resizeObserver.disconnect());
     }
+
+    // Clear month visible weeks when unmounting to prevent stale data
+    onCleanup(() => setMonthVisibleWeekIds([]));
   });
 
   // React to external centerDate changes (from navigation or mini-calendar)

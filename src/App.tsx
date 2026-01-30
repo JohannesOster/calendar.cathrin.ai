@@ -3,7 +3,7 @@ import "./App.css";
 import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
-import { CalendarGrid, visibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
+import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { initializeAccounts } from "./stores/accounts";
 import {
   initializeEvents,
@@ -35,8 +35,9 @@ function App() {
   });
 
   // Watch visible weeks and trigger fetches for missing weeks
+  // Uses activeVisibleWeeks which switches between week view (1-2 weeks) and month view (~6 weeks)
   createEffect(
-    on(visibleWeeks, (weeks) => {
+    on(activeVisibleWeeks, (weeks) => {
       if (weeks.length === 0) return;
 
       // Update visible weeks immediately (triggers cancellation of non-visible fetches)
