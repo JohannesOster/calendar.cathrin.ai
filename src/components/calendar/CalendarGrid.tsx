@@ -5,6 +5,7 @@ import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
+import { MonthView } from "./MonthView";
 import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
 import { isLoadingWeeks } from "../../stores/events";
 import { currentView } from "../layout/CalendarHeader";
@@ -323,12 +324,15 @@ export function CalendarGrid() {
     });
   });
 
-  // React to external centerDate changes (e.g. from Mini Calendar)
-  // Using on() with defer to only scroll when centerDate actually changes,
-  // not on initial mount (handled by onMount) or when comparing to visibleStartDate
+  // React to external centerDate changes (e.g. from Mini Calendar or header navigation)
+  // Using on() with defer to only react when centerDate actually changes,
+  // not on initial mount (handled by onMount)
+  // Note: Month view manages its own scroll via MonthView component
   createEffect(
     on(centerDate, (target) => {
-      scrollToDate(target);
+      if (currentView() !== "Month") {
+        scrollToDate(target);
+      }
     }, { defer: true })
   );
 
@@ -482,10 +486,7 @@ export function CalendarGrid() {
           </div>
         }
       >
-        {/* Month View Placeholder */}
-        <div class="flex-1 flex items-center justify-center text-[#91918e]">
-          Month view coming soon
-        </div>
+        <MonthView />
       </Show>
     </div>
   );
