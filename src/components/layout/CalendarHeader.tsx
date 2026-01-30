@@ -9,7 +9,10 @@ import {
 import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
 import { visibleStartDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
 
-type ViewType = "Day" | "Week" | "Month";
+export type ViewType = "Day" | "Week" | "Month";
+
+// View state - exported for CalendarGrid to conditionally render views
+export const [currentView, setCurrentView] = createSignal<ViewType>("Week");
 
 // Helper to add days to a date
 function addDays(date: Date, days: number): Date {
@@ -19,7 +22,6 @@ function addDays(date: Date, days: number): Date {
 }
 
 export function CalendarHeader() {
-  const [currentView, setCurrentView] = createSignal<ViewType>("Week");
   const [viewDropdownOpen, setViewDropdownOpen] = createSignal(false);
 
   const navigatePrev = () => {

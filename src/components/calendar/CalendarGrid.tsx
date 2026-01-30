@@ -7,6 +7,7 @@ import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
 import { isLoadingWeeks } from "../../stores/events";
+import { currentView } from "../layout/CalendarHeader";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -345,137 +346,147 @@ export function CalendarGrid() {
         </Show>
       </div>
 
-      {/* ONE Main Scroll Container */}
-      <div
-        ref={scrollContainerRef}
-        class="flex-1 overflow-auto overscroll-none"
-        style={{
-          "position": "relative",
-          "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
-          "scroll-padding-left": "var(--grid-time-col-width)",
-        }}
-        onScroll={handleScroll}
-      >
-        {/* Inner Virtual Container - Extremely Wide */}
-        <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTENT_HEIGHT}px`, position: "relative" }}>
-
-          {/* Sticky Header Row */}
+      <Show
+        when={currentView() === "Month"}
+        fallback={
+          /* ONE Main Scroll Container - Week View */
           <div
-            class="flex bg-white border-b border-[#e8e8e8]"
+            ref={scrollContainerRef}
+            class="flex-1 overflow-auto overscroll-none"
             style={{
-              position: "sticky",
-              top: "0",
-              "z-index": "10",
-              height: `${HEADER_HEIGHT}px`,
-              width: "100%",
+              "position": "relative",
+              "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
+              "scroll-padding-left": "var(--grid-time-col-width)",
             }}
+            onScroll={handleScroll}
           >
-            {/* Sticky Time Column Header - Sticky Left */}
-            <div
-              class="bg-white border-r border-[#e8e8e8]"
-              style={{
-                width: "var(--grid-time-col-width)",
-                height: `${HEADER_HEIGHT}px`,
-                "flex-shrink": "0",
-                position: "sticky",
-                left: "0",
-                "z-index": "20", // Higher than date headers
-              }}
-            />
+            {/* Inner Virtual Container - Extremely Wide */}
+            <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTENT_HEIGHT}px`, position: "relative" }}>
 
-            {/* Absolute Date Headers */}
-            <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
-              {(item) => (
-                <div
-                  class="absolute border-r border-[#e8e8e8] bg-white"
-                  style={{
-                    left: `${item().left}px`,
-                    width: `${colWidth()}px`,
-                    height: `${HEADER_HEIGHT}px`,
-                    top: 0
-                  }}
-                >
-                  <DateHeader date={item().date} isToday={isToday(item().date)} />
-                </div>
-              )}
-            </Key>
-          </div>
-
-          {/* Sticky Time Column Body - Sticky Left */}
-          <div
-            class="bg-white border-r border-[#e8e8e8]"
-            style={{
-              width: "var(--grid-time-col-width)",
-              height: `${TOTAL_HEIGHT}px`,
-              position: "sticky",
-              left: "0",
-              "z-index": "15",
-            }}
-          >
-            <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
-              <TimeColumn />
-              <CurrentTimeBadge />
-            </div>
-          </div>
-
-          {/* Absolute Day Columns */}
-          <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
-            {(item) => (
+              {/* Sticky Header Row */}
               <div
-                class="absolute border-r border-[#e8e8e8]"
+                class="flex bg-white border-b border-[#e8e8e8]"
                 style={{
-                  left: `${item().left}px`,
-                  width: `${colWidth()}px`,
-                  height: `${TOTAL_HEIGHT}px`,
-                  top: `${HEADER_HEIGHT}px`, // Below header
-                  "z-index": "1",
+                  position: "sticky",
+                  top: "0",
+                  "z-index": "10",
+                  height: `${HEADER_HEIGHT}px`,
+                  width: "100%",
                 }}
               >
-                <DayColumn date={item().date} />
-              </div>
-            )}
-          </Key>
-
-          {/* Current Time Line - spans full width at current time position */}
-          <div
-            style={{
-              position: "absolute",
-              left: "0",
-              top: `${HEADER_HEIGHT}px`,
-              width: "100%",
-              height: `${TOTAL_HEIGHT}px`,
-              "pointer-events": "none",
-              "z-index": "5"
-            }}
-          >
-            <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
-          </div>
-
-          {/* Phantom Snap Track - invisible anchors for scroll snapping (Notion approach) */}
-          {/* Renders 731 empty divs as stable snap points - must span full height */}
-          <Key each={snapTrackIndices()} by={(i) => i}>
-            {(dayIndex) => {
-              const date = addDays(anchorDate, dayIndex());
-              return (
+                {/* Sticky Time Column Header - Sticky Left */}
                 <div
-                  class="pointer-events-none"
+                  class="bg-white border-r border-[#e8e8e8]"
                   style={{
-                    position: "absolute",
-                    top: "0",
-                    left: `${getDayLeftPosition(dayIndex(), colWidth())}px`,
-                    width: `${colWidth()}px`,
-                    height: `${CONTENT_HEIGHT}px`,
-                    "z-index": "-1",
-                    "scroll-snap-align": "start",
-                    "scroll-snap-stop": isWeekStart(date) ? "always" : "normal",
+                    width: "var(--grid-time-col-width)",
+                    height: `${HEADER_HEIGHT}px`,
+                    "flex-shrink": "0",
+                    position: "sticky",
+                    left: "0",
+                    "z-index": "20", // Higher than date headers
                   }}
                 />
-              );
-            }}
-          </Key>
 
+                {/* Absolute Date Headers */}
+                <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                  {(item) => (
+                    <div
+                      class="absolute border-r border-[#e8e8e8] bg-white"
+                      style={{
+                        left: `${item().left}px`,
+                        width: `${colWidth()}px`,
+                        height: `${HEADER_HEIGHT}px`,
+                        top: 0
+                      }}
+                    >
+                      <DateHeader date={item().date} isToday={isToday(item().date)} />
+                    </div>
+                  )}
+                </Key>
+              </div>
+
+              {/* Sticky Time Column Body - Sticky Left */}
+              <div
+                class="bg-white border-r border-[#e8e8e8]"
+                style={{
+                  width: "var(--grid-time-col-width)",
+                  height: `${TOTAL_HEIGHT}px`,
+                  position: "sticky",
+                  left: "0",
+                  "z-index": "15",
+                }}
+              >
+                <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
+                  <TimeColumn />
+                  <CurrentTimeBadge />
+                </div>
+              </div>
+
+              {/* Absolute Day Columns */}
+              <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                {(item) => (
+                  <div
+                    class="absolute border-r border-[#e8e8e8]"
+                    style={{
+                      left: `${item().left}px`,
+                      width: `${colWidth()}px`,
+                      height: `${TOTAL_HEIGHT}px`,
+                      top: `${HEADER_HEIGHT}px`, // Below header
+                      "z-index": "1",
+                    }}
+                  >
+                    <DayColumn date={item().date} />
+                  </div>
+                )}
+              </Key>
+
+              {/* Current Time Line - spans full width at current time position */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: "0",
+                  top: `${HEADER_HEIGHT}px`,
+                  width: "100%",
+                  height: `${TOTAL_HEIGHT}px`,
+                  "pointer-events": "none",
+                  "z-index": "5"
+                }}
+              >
+                <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
+              </div>
+
+              {/* Phantom Snap Track - invisible anchors for scroll snapping (Notion approach) */}
+              {/* Renders 731 empty divs as stable snap points - must span full height */}
+              <Key each={snapTrackIndices()} by={(i) => i}>
+                {(dayIndex) => {
+                  const date = addDays(anchorDate, dayIndex());
+                  return (
+                    <div
+                      class="pointer-events-none"
+                      style={{
+                        position: "absolute",
+                        top: "0",
+                        left: `${getDayLeftPosition(dayIndex(), colWidth())}px`,
+                        width: `${colWidth()}px`,
+                        height: `${CONTENT_HEIGHT}px`,
+                        "z-index": "-1",
+                        "scroll-snap-align": "start",
+                        "scroll-snap-stop": isWeekStart(date) ? "always" : "normal",
+                      }}
+                    />
+                  );
+                }}
+              </Key>
+
+            </div>
+          </div>
+        }
+      >
+        {/* Month View Placeholder */}
+        <div class="flex-1 flex items-center justify-center text-[#91918e]">
+          Month view coming soon
         </div>
-      </div>
+      </Show>
     </div>
   );
 }
