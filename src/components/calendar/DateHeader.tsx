@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { createSignal, createEffect, onCleanup, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { isSameDay } from "../../lib/date-utils";
 
@@ -10,6 +10,8 @@ interface DateHeaderProps {
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function DateHeader(props: DateHeaderProps) {
+  // Use a counter to force re-mount of flash element, restarting CSS animation
+  const [flashKey, setFlashKey] = createSignal(0);
   const [showFlash, setShowFlash] = createSignal(false);
 
   // Flash effect when this day is selected from mini-calendar
@@ -30,6 +32,8 @@ export function DateHeader(props: DateHeaderProps) {
     }
 
     if (shouldFlash) {
+      // Increment key to force re-mount and restart CSS animation
+      setFlashKey((k) => k + 1);
       setShowFlash(true);
       flashTimeout = window.setTimeout(() => {
         setShowFlash(false);
@@ -59,10 +63,12 @@ export function DateHeader(props: DateHeaderProps) {
         {dayNumber()}
       </span>
 
-      {/* Flash highlight overlay */}
-      <Show when={showFlash()}>
-        <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
-      </Show>
+      {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
+      <For each={showFlash() ? [flashKey()] : []}>
+        {() => (
+          <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+        )}
+      </For>
     </div>
   );
 }

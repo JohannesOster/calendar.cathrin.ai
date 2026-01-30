@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, Show, For } from "solid-js";
+import { createSignal, createEffect, onCleanup, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
 import { events } from "../../stores/events";
@@ -11,6 +11,8 @@ interface DayColumnProps {
 }
 
 export function DayColumn(props: DayColumnProps) {
+  // Use a counter to force re-mount of flash element, restarting CSS animation
+  const [flashKey, setFlashKey] = createSignal(0);
   const [showFlash, setShowFlash] = createSignal(false);
 
   const isSameDay = (date1: Date, date2: Date): boolean => {
@@ -39,6 +41,8 @@ export function DayColumn(props: DayColumnProps) {
     }
 
     if (shouldFlash) {
+      // Increment key to force re-mount and restart CSS animation
+      setFlashKey((k) => k + 1);
       setShowFlash(true);
       flashTimeout = window.setTimeout(() => {
         setShowFlash(false);
@@ -107,10 +111,12 @@ export function DayColumn(props: DayColumnProps) {
         )}
       </For>
 
-      {/* Flash highlight overlay */}
-      <Show when={showFlash()}>
-        <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
-      </Show>
+      {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
+      <For each={showFlash() ? [flashKey()] : []}>
+        {() => (
+          <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+        )}
+      </For>
     </div>
   );
 }
