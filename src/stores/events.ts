@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { connectedAccounts } from "./accounts";
-import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
+import { getWeekId, getWeekBounds, getWeeksInRange, addDays } from "../lib/date-utils";
 
 /**
  * Event data from the backend, with dates parsed to JS Date objects
@@ -41,6 +41,9 @@ interface EventCache {
 // Time window for fetching events (days relative to now)
 const DAYS_BEFORE = 7;
 const DAYS_AFTER = 30;
+
+// Pruning window: keep events within ±90 days of center date
+const PRUNE_WINDOW_DAYS = 90;
 
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
@@ -114,12 +117,12 @@ function getTimeWindow(): { timeMin: string; timeMax: string } {
 function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent[] = []): CalendarEvent[] {
   // Deduplicate by event id
   const uniqueEvents = new Map<string, CalendarEvent>();
-  
+
   // Add existing events first
   for (const event of existingEvents) {
     uniqueEvents.set(event.id, event);
   }
-  
+
   // Add/overwrite with new events
   for (const event of newEvents) {
     uniqueEvents.set(event.id, event);
@@ -129,6 +132,42 @@ function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent
   return Array.from(uniqueEvents.values()).sort(
     (a, b) => a.start.getTime() - b.start.getTime()
   );
+}
+
+/**
+ * Prune events outside a time window around the center date
+ * Keeps events that overlap with the window (multi-day events spanning boundary are kept)
+ */
+function pruneEvents(events: CalendarEvent[], centerDate: Date): CalendarEvent[] {
+  const minTime = addDays(centerDate, -PRUNE_WINDOW_DAYS).getTime();
+  const maxTime = addDays(centerDate, PRUNE_WINDOW_DAYS).getTime();
+
+  return events.filter((event) => {
+    // Keep event if any part of it overlaps with the prune window
+    // Event overlaps if it starts before window ends AND ends after window starts
+    const eventStart = event.start.getTime();
+    const eventEnd = event.end.getTime();
+    return eventStart <= maxTime && eventEnd >= minTime;
+  });
+}
+
+/**
+ * Prune fetched weeks outside the prune window
+ * This ensures scrolling back to pruned weeks will trigger re-fetch
+ */
+function pruneFetchedWeeks(weeks: Set<string>, centerDate: Date): Set<string> {
+  const minDate = addDays(centerDate, -PRUNE_WINDOW_DAYS);
+  const maxDate = addDays(centerDate, PRUNE_WINDOW_DAYS);
+
+  const prunedWeeks = new Set<string>();
+  for (const weekId of weeks) {
+    const { start, end } = getWeekBounds(weekId);
+    // Keep week if any part of it overlaps with prune window
+    if (start.getTime() <= maxDate.getTime() && end.getTime() >= minDate.getTime()) {
+      prunedWeeks.add(weekId);
+    }
+  }
+  return prunedWeeks;
 }
 
 /**
@@ -217,22 +256,21 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     }
 
     // Merge new events with existing ones
-    // If no window was provided (initial load/refresh), we might want to replace everything?
-    // But for safety and simplicity, merging is usually properly safe if we trust deduplication.
-    // However, if we do a full refresh (no window), we probably expect to clear stale events that might have been deleted?
-    // For now, let's assume 'processEvents' handles merging.
-    // If window is NOT provided, it effectively acts as a "reset" or "initial load" logic in original code.
-    // To support "replace all", we would pass empty array to processEvents second arg.
-    
-    // If window IS provided, we merge.
-    // If window IS NOT provided (refresh button or init), we probably want to keep existing events that are OUTSIDE the default window?
-    // Or maybe we want to reset? The original code replaced EVERYTHING.
-    // Let's preserve original behavior: if no window, replace everything (implied by passing empty array as existing).
-    // actually, let's keep all events to be safe, so we don't lose scrolled-to events.
-    
-    setEvents((prev) => processEvents(newEvents, window ? prev : []));
-    
-    setLastRefreshed(new Date());
+    // If window IS provided, merge with existing and prune to prevent unbounded growth.
+    // If window IS NOT provided (full refresh), replace entirely (no pruning needed).
+    const now = new Date();
+    if (window) {
+      setEvents((prev) => {
+        const merged = processEvents(newEvents, prev);
+        return pruneEvents(merged, now);
+      });
+      // Also prune fetched weeks tracker
+      setFetchedWeeks((prev) => pruneFetchedWeeks(prev, now));
+    } else {
+      setEvents(processEvents(newEvents, []));
+    }
+
+    setLastRefreshed(now);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : String(error);
@@ -377,14 +415,18 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
       return;
     }
 
-    // Merge new events with existing
-    setEvents((prev) => processEvents(newEvents, prev));
+    // Merge new events with existing and prune old events
+    const now = new Date();
+    setEvents((prev) => {
+      const merged = processEvents(newEvents, prev);
+      return pruneEvents(merged, now);
+    });
 
-    // Update local fetched weeks tracker
+    // Update local fetched weeks tracker and prune old weeks
     setFetchedWeeks((prev) => {
       const updated = new Set(prev);
       updated.add(weekId);
-      return updated;
+      return pruneFetchedWeeks(updated, now);
     });
 
     console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
