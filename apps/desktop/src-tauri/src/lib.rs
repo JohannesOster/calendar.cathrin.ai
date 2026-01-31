@@ -6,9 +6,10 @@ mod oauth;
 mod storage;
 
 use commands::{
-    clear_cached_events, ensure_valid_token, fetch_events, fetch_events_for_week,
-    get_cached_events, get_connected_accounts, refresh_account_calendars, remove_account,
-    start_oauth_flow, toggle_calendar_visibility,
+    clear_cached_events, clear_session_token, ensure_valid_token, fetch_events,
+    fetch_events_for_week, get_cached_events, get_connected_accounts, get_session_token,
+    open_url, refresh_account_calendars, remove_account, save_session_token, start_oauth_flow,
+    toggle_calendar_visibility,
 };
 
 #[cfg(target_os = "macos")]
@@ -275,6 +276,10 @@ pub fn run() {
             fetch_events_for_week,
             get_cached_events,
             clear_cached_events,
+            save_session_token,
+            get_session_token,
+            clear_session_token,
+            open_url,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

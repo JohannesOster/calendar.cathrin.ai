@@ -443,3 +443,68 @@ pub async fn fetch_events_for_week(
 
     Ok(all_events)
 }
+
+// Session token storage key
+const SESSION_TOKEN_KEY: &str = "session_token";
+const SESSION_STORE_PATH: &str = "session.json";
+
+/// Save session token to secure storage
+#[tauri::command]
+pub async fn save_session_token(app: AppHandle<Wry>, token: String) -> Result<(), String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SESSION_STORE_PATH)
+        .map_err(|e| format!("Failed to open store: {}", e))?;
+
+    store
+        .set(SESSION_TOKEN_KEY, serde_json::json!(token));
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save store: {}", e))?;
+
+    Ok(())
+}
+
+/// Get session token from secure storage
+#[tauri::command]
+pub async fn get_session_token(app: AppHandle<Wry>) -> Result<Option<String>, String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SESSION_STORE_PATH)
+        .map_err(|e| format!("Failed to open store: {}", e))?;
+
+    let token = store
+        .get(SESSION_TOKEN_KEY)
+        .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+    Ok(token)
+}
+
+/// Clear session token from secure storage
+#[tauri::command]
+pub async fn clear_session_token(app: AppHandle<Wry>) -> Result<(), String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SESSION_STORE_PATH)
+        .map_err(|e| format!("Failed to open store: {}", e))?;
+
+    store.delete(SESSION_TOKEN_KEY);
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save store: {}", e))?;
+
+    Ok(())
+}
+
+/// Open a URL in the default browser
+#[tauri::command]
+pub async fn open_url(app: AppHandle<Wry>, url: String) -> Result<(), String> {
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("Failed to open URL: {}", e))
+}
