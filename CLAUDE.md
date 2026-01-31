@@ -75,6 +75,11 @@ pnpm --filter @cathrin/sync-server build
 
 # Start production server
 pnpm --filter @cathrin/sync-server start
+
+# Database commands
+pnpm --filter @cathrin/sync-server db:generate  # Generate migrations from schema
+pnpm --filter @cathrin/sync-server db:migrate   # Apply migrations
+pnpm --filter @cathrin/sync-server db:studio    # Open Drizzle Studio
 ```
 
 ## Architecture
@@ -94,10 +99,21 @@ apps/sync-server/src/
 ```
 
 **Endpoints:**
-- `GET /health` - Health check, returns `{ status: "ok", timestamp: "..." }`
+- `GET /health` - Health check, returns `{ status: "ok", timestamp: "...", db: "connected|disconnected" }`
 
 **Type exports:**
 The server exports `AppType` for future RPC client usage with Hono's type-safe client.
+
+**Database:**
+- Uses Drizzle ORM with postgres.js driver
+- Schema defined in `src/db/schema.ts` (users, accounts, sessions tables)
+- Migrations in `drizzle/` directory
+- Token encryption with AES-256-GCM (utilities in `src/lib/crypto.ts`)
+
+**Environment variables:**
+- `PORT` - Server port (default: 3000)
+- `DATABASE_URL` - Postgres connection string
+- `ENCRYPTION_KEY` - 64-char hex string for token encryption
 
 ### Shared Types Package
 

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
 import { healthRoute } from "./routes/health.js";
+import { closeDatabase } from "./db/index.js";
 
 const app = new Hono();
 
@@ -23,8 +24,11 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 });
 
 // Graceful shutdown
-const shutdown = () => {
+const shutdown = async () => {
   console.log("\nShutting down gracefully...");
+
+  await closeDatabase();
+
   server.close(() => {
     console.log("Server closed");
     process.exit(0);
