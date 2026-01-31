@@ -1,13 +1,28 @@
-import { createSignal, onMount, onCleanup, createEffect, createMemo, on, Show } from "solid-js";
+import {
+  createSignal,
+  onMount,
+  onCleanup,
+  createEffect,
+  createMemo,
+  on,
+  Show,
+} from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { Loader2 } from "lucide-solid";
+import { LoaderCircle } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
-import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
+import {
+  addDays,
+  isSameDay,
+  isToday,
+  formatMonthYear,
+  getWeekId,
+} from "../../lib/date-utils";
 import { isLoadingWeeks } from "../../stores/events";
+import { isAnySyncing } from "../../stores/accounts";
 import { currentView } from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
@@ -65,18 +80,26 @@ const [anchorDate, setAnchorDate] = createSignal(getInitialAnchor());
 
 // Export signals for external control
 // Initialize to anchor (Sunday of current week) for consistent startup
-export const [centerDate, setCenterDate] = createSignal(new Date(getInitialAnchor()));
+export const [centerDate, setCenterDate] = createSignal(
+  new Date(getInitialAnchor()),
+);
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
-export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(getInitialAnchor()));
+export const [visibleStartDate, setVisibleStartDate] = createSignal(
+  new Date(getInitialAnchor()),
+);
 // Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
 export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
 // Month view visible weeks - contains ~6 week IDs for the visible area in month view
-export const [monthVisibleWeekIds, setMonthVisibleWeekIds] = createSignal<string[]>([]);
+export const [monthVisibleWeekIds, setMonthVisibleWeekIds] = createSignal<
+  string[]
+>([]);
 // Scroll direction signal for prefetching - null when idle, 'left' (past) or 'right' (future)
-export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'right' | null>(null);
+export const [scrollDirection, setScrollDirection] = createSignal<
+  "left" | "right" | null
+>(null);
 
 // Active visible weeks - switches between week view and month view based on currentView
 // This is the signal that the events store should react to
@@ -86,7 +109,6 @@ export const activeVisibleWeeks = createMemo(() => {
   }
   return visibleWeeks();
 });
-
 
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
@@ -108,7 +130,9 @@ export function CalendarGrid() {
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
-    const cssValue = getComputedStyle(document.documentElement).getPropertyValue('--grid-time-col-width');
+    const cssValue = getComputedStyle(
+      document.documentElement,
+    ).getPropertyValue("--grid-time-col-width");
     return parseInt(cssValue) || TIME_COL_WIDTH_FALLBACK;
   };
 
@@ -133,7 +157,7 @@ export function CalendarGrid() {
 
   // Calculate pixel position for a day index relative to anchor
   const getDayLeftPosition = (dayIndex: number, width: number) =>
-    CENTER_OFFSET + (dayIndex * width);
+    CENTER_OFFSET + dayIndex * width;
 
   // Calculate visible day range based on scroll position
   const visibleDays = createMemo(() => {
@@ -146,14 +170,16 @@ export function CalendarGrid() {
     const startPixel = currentScrollLeft;
     const endPixel = currentScrollLeft + currentContainerWidth;
 
-    const startIndex = Math.floor((startPixel - CENTER_OFFSET) / width) - VISIBLE_BUFFER_DAYS;
-    const endIndex = Math.ceil((endPixel - CENTER_OFFSET) / width) + VISIBLE_BUFFER_DAYS;
+    const startIndex =
+      Math.floor((startPixel - CENTER_OFFSET) / width) - VISIBLE_BUFFER_DAYS;
+    const endIndex =
+      Math.ceil((endPixel - CENTER_OFFSET) / width) + VISIBLE_BUFFER_DAYS;
 
     const days: { date: Date; left: number }[] = [];
     for (let i = startIndex; i <= endIndex; i++) {
       days.push({
         date: addDays(anchor, i),
-        left: getDayLeftPosition(i, width)
+        left: getDayLeftPosition(i, width),
       });
     }
 
@@ -187,9 +213,9 @@ export function CalendarGrid() {
     // Skip during programmatic scrolls (when snap is disabled) to avoid incorrect direction
     if (snapEnabled()) {
       if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD_PX) {
-        setScrollDirection('right'); // Scrolling toward future
+        setScrollDirection("right"); // Scrolling toward future
       } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD_PX) {
-        setScrollDirection('left'); // Scrolling toward past
+        setScrollDirection("left"); // Scrolling toward past
       }
 
       // Reset direction to null after period of no scrolling
@@ -226,12 +252,15 @@ export function CalendarGrid() {
       const endWeek = getWeekId(endDate);
 
       // Build new weeks array (1 or 2 weeks depending on boundary crossing)
-      const newWeeks = startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
+      const newWeeks =
+        startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
 
       // Only update if weeks actually changed
       const currentWeeks = visibleWeeks();
-      if (newWeeks.length !== currentWeeks.length ||
-          newWeeks.some((w, i) => w !== currentWeeks[i])) {
+      if (
+        newWeeks.length !== currentWeeks.length ||
+        newWeeks.some((w, i) => w !== currentWeeks[i])
+      ) {
         setVisibleWeeks(newWeeks);
       }
     }
@@ -261,13 +290,17 @@ export function CalendarGrid() {
       newAnchor.setHours(0, 0, 0, 0);
       setAnchorDate(newAnchor);
       // Recalculate diffDays from new anchor
-      diffDays = Math.round((normalizedDate.getTime() - newAnchor.getTime()) / (1000 * 60 * 60 * 24));
+      diffDays = Math.round(
+        (normalizedDate.getTime() - newAnchor.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
     }
 
     // Account for sticky time column - position the target day right after the time column
     const timeColWidth = getTimeColWidth();
     const currentColWidth = colWidth();
-    const targetScrollLeft = CENTER_OFFSET + (diffDays * currentColWidth) - timeColWidth;
+    const targetScrollLeft =
+      CENTER_OFFSET + diffDays * currentColWidth - timeColWidth;
 
     // Disable snap, wait for DOM update, then scroll
     setSnapEnabled(false);
@@ -320,14 +353,18 @@ export function CalendarGrid() {
         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
         const timeColWidth = getTimeColWidth();
         const currentColWidth = colWidth();
-        const targetScrollLeft = CENTER_OFFSET + (diffDays * currentColWidth) - timeColWidth;
+        const targetScrollLeft =
+          CENTER_OFFSET + diffDays * currentColWidth - timeColWidth;
 
         // Set scroll position directly
         scrollContainerRef.scrollLeft = targetScrollLeft;
 
         // Vertical scroll to show current time with some context above
         const currentHour = new Date().getHours();
-        const scrollPosition = Math.max(0, (currentHour - INITIAL_SCROLL_OFFSET_HOURS) * HOUR_HEIGHT);
+        const scrollPosition = Math.max(
+          0,
+          (currentHour - INITIAL_SCROLL_OFFSET_HOURS) * HOUR_HEIGHT,
+        );
         scrollContainerRef.scrollTop = scrollPosition;
 
         // Force initial update of signals
@@ -356,7 +393,9 @@ export function CalendarGrid() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Delete" || e.key === "Backspace") {
         const activeEl = document.activeElement as HTMLElement | null;
-        const eventWrapper = activeEl?.closest("[data-event-id]") as HTMLElement | null;
+        const eventWrapper = activeEl?.closest(
+          "[data-event-id]",
+        ) as HTMLElement | null;
         if (eventWrapper && (eventWrapper as any).triggerBurn) {
           e.preventDefault();
           (eventWrapper as any).triggerBurn();
@@ -381,34 +420,49 @@ export function CalendarGrid() {
   // not on initial mount (handled by onMount)
   // Note: Month view manages its own scroll via MonthView component
   createEffect(
-    on(centerDate, (target) => {
-      if (currentView() !== "Month") {
-        scrollToDate(target);
-      }
-    }, { defer: true })
+    on(
+      centerDate,
+      (target) => {
+        if (currentView() !== "Month") {
+          scrollToDate(target);
+        }
+      },
+      { defer: true },
+    ),
   );
 
   // When switching from Month view back to Week view, restore scroll position
   // and update visibleWeeks signal (since onMount doesn't run again)
   createEffect(
-    on(currentView, (view, prevView) => {
-      if (prevView === "Month" && view !== "Month" && isInitialized && scrollContainerRef) {
-        // Give the DOM time to render the week view container
-        requestAnimationFrame(() => {
-          scrollToDate(visibleStartDate());
-          handleScroll();
-        });
-      }
-    }, { defer: true })
+    on(
+      currentView,
+      (view, prevView) => {
+        if (
+          prevView === "Month" &&
+          view !== "Month" &&
+          isInitialized &&
+          scrollContainerRef
+        ) {
+          // Give the DOM time to render the week view container
+          requestAnimationFrame(() => {
+            scrollToDate(visibleStartDate());
+            handleScroll();
+          });
+        }
+      },
+      { defer: true },
+    ),
   );
 
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
       {/* Month/Year indicator - outside scroll container */}
-      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center justify-between">
-        <span class="text-lg font-medium text-[#37352f]">{displayedMonth()}</span>
-        <Show when={isLoadingWeeks()}>
-          <Loader2
+      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center gap-2">
+        <span class="text-lg font-medium text-[#37352f]">
+          {displayedMonth()}
+        </span>
+        <Show when={isLoadingWeeks() || isAnySyncing()}>
+          <LoaderCircle
             size={16}
             class="text-[#91918e] animate-spin"
             aria-label="Loading events"
@@ -424,15 +478,20 @@ export function CalendarGrid() {
             ref={scrollContainerRef}
             class="flex-1 overflow-auto overscroll-none scrollbar-hidden"
             style={{
-              "position": "relative",
+              position: "relative",
               "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
               "scroll-padding-left": "var(--grid-time-col-width)",
             }}
             onScroll={handleScroll}
           >
             {/* Inner Virtual Container - Extremely Wide */}
-            <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTENT_HEIGHT}px`, position: "relative" }}>
-
+            <div
+              style={{
+                width: `${CONTAINER_WIDTH}px`,
+                height: `${CONTENT_HEIGHT}px`,
+                position: "relative",
+              }}
+            >
               {/* Sticky Header Row */}
               <div
                 class="flex bg-white border-b border-[#e8e8e8]"
@@ -466,10 +525,13 @@ export function CalendarGrid() {
                         left: `${item().left}px`,
                         width: `${colWidth()}px`,
                         height: `${HEADER_HEIGHT}px`,
-                        top: 0
+                        top: 0,
                       }}
                     >
-                      <DateHeader date={item().date} isToday={isToday(item().date)} />
+                      <DateHeader
+                        date={item().date}
+                        isToday={isToday(item().date)}
+                      />
                     </div>
                   )}
                 </Key>
@@ -519,7 +581,7 @@ export function CalendarGrid() {
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
-                  "z-index": "5"
+                  "z-index": "5",
                 }}
               >
                 <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
@@ -541,13 +603,14 @@ export function CalendarGrid() {
                         height: `${CONTENT_HEIGHT}px`,
                         "z-index": "-1",
                         "scroll-snap-align": "start",
-                        "scroll-snap-stop": isWeekStart(date) ? "always" : "normal",
+                        "scroll-snap-stop": isWeekStart(date)
+                          ? "always"
+                          : "normal",
                       }}
                     />
                   );
                 }}
               </Key>
-
             </div>
           </div>
         }
