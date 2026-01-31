@@ -52,10 +52,6 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
-// Use max possible all-day section height for virtual container
-// (10 rows * 24px + 4px padding = 244px max)
-const MAX_ALL_DAY_HEIGHT = 244;
-const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT + MAX_ALL_DAY_HEIGHT;
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -230,29 +226,24 @@ export function CalendarGrid() {
     const currentScrollLeft = scrollLeft();
     const timeColWidth = getTimeColWidth();
 
-    // Calculate which days are actually visible (not buffer)
-    const visibleStartLeft = currentScrollLeft + timeColWidth;
-    const visibleEndLeft = currentScrollLeft + (containerWidth() || window.innerWidth);
+    // Use the full range of rendered days (including buffer) for all-day layout
+    // This ensures events render into non-visible columns and are ready when scrolled to
+    if (days.length === 0) return [];
 
-    const visibleDaysOnly = days.filter(
-      (d) => d.left >= visibleStartLeft - width && d.left < visibleEndLeft
-    );
-
-    if (visibleDaysOnly.length === 0) return [];
-
-    const viewStart = visibleDaysOnly[0].date;
-    const viewEnd = visibleDaysOnly[visibleDaysOnly.length - 1].date;
+    const viewStart = days[0].date;
+    const viewEnd = days[days.length - 1].date;
+    const totalColumns = days.length;
 
     // Filter to visible calendars
     const visibleIds = visibleCalendarIds();
     const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
 
-    // Calculate layouts
-    const layouts = calculateAllDayLayouts(visibleEvents, viewStart, viewEnd);
+    // Calculate layouts using the full range of days
+    const layouts = calculateAllDayLayouts(visibleEvents, viewStart, viewEnd, totalColumns);
 
     // Convert to pixel positions
     const result: AllDayEventLayout[] = [];
-    const firstDayLeft = visibleDaysOnly[0].left;
+    const firstDayLeft = days[0].left;
 
     for (const [eventId, layoutInfo] of layouts) {
       const event = visibleEvents.find((e) => e.id === eventId);
@@ -282,6 +273,11 @@ export function CalendarGrid() {
       layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
+
+  // Total content height = header + all-day section + time grid
+  const contentHeight = createMemo(() =>
+    HEADER_HEIGHT + allDayHeight() + TOTAL_HEIGHT
+  );
 
   // Calculate day index from scroll position
   // Account for sticky time column - the visible day starts after the time column
@@ -563,7 +559,7 @@ export function CalendarGrid() {
             <div
               style={{
                 width: `${CONTAINER_WIDTH}px`,
-                height: `${CONTENT_HEIGHT}px`,
+                height: `${contentHeight()}px`,
                 position: "relative",
               }}
             >
@@ -697,7 +693,7 @@ export function CalendarGrid() {
                         top: "0",
                         left: `${getDayLeftPosition(dayIndex(), colWidth())}px`,
                         width: `${colWidth()}px`,
-                        height: `${CONTENT_HEIGHT}px`,
+                        height: `${contentHeight()}px`,
                         "z-index": "-1",
                         "scroll-snap-align": "start",
                         "scroll-snap-stop": isWeekStart(date)
