@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, For } from "solid-js";
+import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
 import { events } from "../../stores/events";
@@ -72,7 +72,8 @@ export function DayColumn(props: DayColumnProps) {
   };
 
   // Filter events for this day: must be on this day, from a visible calendar, and not all-day
-  const dayEvents = () => {
+  // Using createMemo to ensure proper reactive tracking when events() signal updates
+  const dayEvents = createMemo(() => {
     const visible = visibleCalendarIds();
     const allEvents = events();
 
@@ -82,10 +83,10 @@ export function DayColumn(props: DayColumnProps) {
         visible.has(event.calendarId) &&
         !event.isAllDay
     );
-  };
+  });
 
   // Calculate layout info for overlapping events
-  const eventLayouts = () => calculateEventLayouts(dayEvents());
+  const eventLayouts = createMemo(() => calculateEventLayouts(dayEvents()));
 
   return (
     <div
