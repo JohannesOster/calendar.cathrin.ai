@@ -44,3 +44,65 @@ export function getWeeksInRange(start: Date, end: Date): string[] {
 
   return weeks;
 }
+
+/**
+ * Get the start and end dates for a week ID
+ * Returns Monday 00:00:00 to Sunday 23:59:59.999 (UTC)
+ */
+export function getWeekBounds(weekId: string): { start: Date; end: Date } {
+  // Parse week ID (e.g., "2025-W05")
+  const match = weekId.match(/^(\d{4})-W(\d{2})$/);
+  if (!match) {
+    throw new Error(`Invalid week ID format: ${weekId}`);
+  }
+
+  const year = parseInt(match[1], 10);
+  const week = parseInt(match[2], 10);
+
+  // Find January 4th of the year (always in week 1 by ISO standard)
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+
+  // Find the Monday of week 1
+  const dayOfWeek = jan4.getUTCDay();
+  const mondayOfWeek1 = new Date(jan4);
+  mondayOfWeek1.setUTCDate(jan4.getUTCDate() - ((dayOfWeek + 6) % 7));
+
+  // Calculate the Monday of the target week
+  const targetMonday = new Date(mondayOfWeek1);
+  targetMonday.setUTCDate(mondayOfWeek1.getUTCDate() + (week - 1) * 7);
+  targetMonday.setUTCHours(0, 0, 0, 0);
+
+  // Get Sunday (end of week)
+  const targetSunday = new Date(targetMonday);
+  targetSunday.setUTCDate(targetMonday.getUTCDate() + 6);
+  targetSunday.setUTCHours(23, 59, 59, 999);
+
+  return { start: targetMonday, end: targetSunday };
+}
+
+/**
+ * Get consolidated date bounds for multiple week IDs
+ * Returns the earliest start and latest end across all weeks
+ */
+export function getDateBoundsForWeeks(
+  weekIds: string[]
+): { start: Date; end: Date } {
+  if (weekIds.length === 0) {
+    throw new Error("Cannot get bounds for empty week list");
+  }
+
+  let minStart: Date | null = null;
+  let maxEnd: Date | null = null;
+
+  for (const weekId of weekIds) {
+    const { start, end } = getWeekBounds(weekId);
+    if (!minStart || start < minStart) {
+      minStart = start;
+    }
+    if (!maxEnd || end > maxEnd) {
+      maxEnd = end;
+    }
+  }
+
+  return { start: minStart!, end: maxEnd! };
+}
