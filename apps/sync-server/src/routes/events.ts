@@ -1,15 +1,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and, lte, gte, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { accounts } from "../db/schema.js";
+import { accounts, serverEvents } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
-import { getAccessToken, TokenRevokedError } from "../services/token-refresh.js";
-import {
-  GoogleCalendarService,
-  TokenExpiredError,
-} from "../services/google-calendar.js";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
 const querySchema = z.object({
@@ -35,81 +30,56 @@ export const eventsRoute = new Hono()
         : [rawCalendarIds]
       : undefined;
 
-    // Get all accounts for this user
+    // Get user's account IDs
     const userAccounts = await db.query.accounts.findMany({
       where: eq(accounts.userId, userId),
+      columns: { id: true },
     });
 
-    const allEvents: ApiCalendarEvent[] = [];
-    const errors: { accountId: string; error: string }[] = [];
+    const accountIds = userAccounts.map((a) => a.id);
 
-    // Fetch events from each account
-    await Promise.all(
-      userAccounts.map(async (account) => {
-        try {
-          const accessToken = await getAccessToken(account.id);
-          const service = new GoogleCalendarService(accessToken);
+    if (accountIds.length === 0) {
+      return c.json([]);
+    }
 
-          // Get calendars for this account
-          const calendars = await service.fetchCalendarList();
+    // Parse dates for comparison
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
 
-          // Filter to requested calendars if specified
-          const calendarsToFetch = calendarIds
-            ? calendars.filter((cal) => calendarIds.includes(cal.id))
-            : calendars;
+    // Build query - events overlap with range if: start <= to AND end >= from
+    let events;
+    if (calendarIds && calendarIds.length > 0) {
+      events = await db.query.serverEvents.findMany({
+        where: and(
+          inArray(serverEvents.accountId, accountIds),
+          inArray(serverEvents.calendarId, calendarIds),
+          lte(serverEvents.start, toDate),
+          gte(serverEvents.end, fromDate)
+        ),
+        orderBy: (events, { asc }) => [asc(events.start)],
+      });
+    } else {
+      events = await db.query.serverEvents.findMany({
+        where: and(
+          inArray(serverEvents.accountId, accountIds),
+          lte(serverEvents.start, toDate),
+          gte(serverEvents.end, fromDate)
+        ),
+        orderBy: (events, { asc }) => [asc(events.start)],
+      });
+    }
 
-          // Fetch events from each calendar in parallel
-          const calendarEvents = await Promise.all(
-            calendarsToFetch.map(async (calendar) => {
-              try {
-                return await service.fetchEvents(
-                  calendar.id,
-                  from,
-                  to,
-                  calendar.color
-                );
-              } catch (error) {
-                console.error(
-                  `Failed to fetch events for calendar ${calendar.id}:`,
-                  error
-                );
-                return [];
-              }
-            })
-          );
+    // Map to API format
+    const apiEvents: ApiCalendarEvent[] = events.map((event) => ({
+      id: event.googleEventId,
+      calendarId: event.calendarId,
+      title: event.title,
+      start: event.start.toISOString(),
+      end: event.end.toISOString(),
+      isAllDay: event.isAllDay ?? false,
+      color: event.color || "#4285f4",
+      provider: "google",
+    }));
 
-          allEvents.push(...calendarEvents.flat());
-        } catch (error) {
-          console.error(
-            `Failed to fetch events for account ${account.email}:`,
-            error
-          );
-
-          if (
-            error instanceof TokenRevokedError ||
-            error instanceof TokenExpiredError
-          ) {
-            errors.push({
-              accountId: account.id,
-              error: "Token expired or revoked - re-authorization required",
-            });
-          } else {
-            errors.push({
-              accountId: account.id,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to fetch events",
-            });
-          }
-        }
-      })
-    );
-
-    // Sort by start time
-    allEvents.sort(
-      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
-    );
-
-    return c.json(allEvents);
+    return c.json(apiEvents);
   });
