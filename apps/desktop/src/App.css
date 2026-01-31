@@ -14,6 +14,7 @@ body {
   --grid-hour-height: 48px;
   --grid-time-col-width: 64px;
   --grid-all-day-chip-height: 20px;
+  --grid-all-day-row-height: 28px;
 
   /* Colors - Notion-like palette */
   --color-text-primary: #37352f;

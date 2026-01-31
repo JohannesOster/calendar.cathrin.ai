@@ -14,6 +14,7 @@ import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
+import { AllDaySection, ALL_DAY_SECTION_HEIGHT } from "./AllDaySection";
 import {
   addDays,
   isSameDay,
@@ -46,7 +47,7 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
-const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT;
+const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT;
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -525,6 +526,23 @@ export function CalendarGrid() {
                 </Key>
               </div>
 
+              {/* Sticky All-Day Section Row */}
+              <div
+                class="flex bg-white border-b border-[#e8e8e8]"
+                style={{
+                  position: "sticky",
+                  top: `${HEADER_HEIGHT}px`,
+                  "z-index": "9",
+                  height: `${ALL_DAY_SECTION_HEIGHT}px`,
+                  width: "100%",
+                }}
+              >
+                <AllDaySection
+                  visibleDays={visibleDays()}
+                  colWidth={colWidth()}
+                />
+              </div>
+
               {/* Sticky Time Column Body - Sticky Left */}
               <div
                 class="bg-white border-r border-[#e8e8e8]"
@@ -551,7 +569,7 @@ export function CalendarGrid() {
                       left: `${item().left}px`,
                       width: `${colWidth()}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${HEADER_HEIGHT}px`, // Below header
+                      top: `${HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT}px`, // Below header and all-day section
                       "z-index": "1",
                     }}
                   >
@@ -565,7 +583,7 @@ export function CalendarGrid() {
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${HEADER_HEIGHT}px`,
+                  top: `${HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
