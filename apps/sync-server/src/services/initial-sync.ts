@@ -97,17 +97,42 @@ export async function performInitialSync(accountId: string): Promise<void> {
 
         totalEvents += events.length;
 
-        // Initialize sync state for this calendar (no syncToken yet - will get on first incremental)
+        // Get syncToken for future incremental syncs
+        // This requires a separate API call with no time bounds
+        let syncToken: string | null = null;
+        try {
+          const syncTokenResponse = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?maxResults=1`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }
+          );
+          if (syncTokenResponse.ok) {
+            const syncData = (await syncTokenResponse.json()) as {
+              nextSyncToken?: string;
+            };
+            syncToken = syncData.nextSyncToken || null;
+          }
+        } catch (err) {
+          console.warn(
+            `[initial-sync] Failed to get syncToken for calendar "${calendar.name}":`,
+            err
+          );
+        }
+
+        // Store sync state with token for incremental sync
         await db
           .insert(calendarSyncState)
           .values({
             accountId,
             calendarId: calendar.id,
+            syncToken,
             lastSyncAt: new Date(),
           })
           .onConflictDoUpdate({
             target: [calendarSyncState.accountId, calendarSyncState.calendarId],
             set: {
+              syncToken,
               lastSyncAt: new Date(),
             },
           });
