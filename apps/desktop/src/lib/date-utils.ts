@@ -55,13 +55,29 @@ export function formatMonthYearLocale(date: Date): string {
 }
 
 /**
- * Get ISO week ID for a date (e.g., "2025-W05")
- * Uses ISO 8601 week numbering (week 1 contains first Thursday of year)
+ * Get week ID for a date (e.g., "2025-W05")
+ * Uses ISO 8601 week numbering but adjusted for Sunday-Saturday display.
+ *
+ * IMPORTANT: Our calendar displays Sunday-Saturday weeks, but ISO weeks are
+ * Monday-Sunday. This means Sunday is the LAST day of an ISO week but the
+ * FIRST day of our display week. We handle this by using Monday of our
+ * display week for the ISO calculation.
  */
 export function getWeekId(date: Date): string {
-  // Get Thursday of this week (ISO week is defined by its Thursday)
-  const thursday = new Date(date);
-  thursday.setDate(date.getDate() - ((date.getDay() + 6) % 7) + 3);
+  // For our Sunday-Saturday weeks, use Monday of the same display week
+  // to get the correct ISO week ID.
+  // If date is Sunday (day 0), add 1 to get Monday of the same display week.
+  // Otherwise, find the Monday of the current display week.
+  const adjustedDate = new Date(date);
+  const dayOfWeek = adjustedDate.getDay();
+  if (dayOfWeek === 0) {
+    // Sunday: move to Monday (next day) which is in the same display week
+    adjustedDate.setDate(adjustedDate.getDate() + 1);
+  }
+
+  // Get Thursday of this ISO week (ISO week is defined by its Thursday)
+  const thursday = new Date(adjustedDate);
+  thursday.setDate(adjustedDate.getDate() - ((adjustedDate.getDay() + 6) % 7) + 3);
 
   // Get January 1st of the Thursday's year
   const jan1 = new Date(thursday.getFullYear(), 0, 1);

@@ -324,18 +324,6 @@ export function CalendarGrid() {
     });
   };
 
-  // Handle resize
-  const handleResize = () => {
-    if (!scrollContainerRef) return;
-    // Remember the date we were looking at
-    const currentLeftDate = visibleStartDate();
-
-    getColumnWidth(); // Update width
-
-    // Restore scroll position to keep that date at left
-    scrollToDate(currentLeftDate);
-  };
-
   // Initialize on mount
   onMount(() => {
     // Initial setup

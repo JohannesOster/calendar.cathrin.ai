@@ -1,11 +1,8 @@
 import { createSignal, Show } from "solid-js";
-import { burnElement } from "../../hooks/useBurnAnimation";
+import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
-import type { CalendarEvent } from "../../stores/events";
-
-// Re-export for backward compatibility
-export type { CalendarEvent };
+import type { CalendarEvent as CalendarEventData } from "../../stores/events";
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,
@@ -22,7 +19,7 @@ import {
 } from "../../constants/calendar";
 
 interface CalendarEventProps {
-  event: CalendarEvent;
+  event: CalendarEventData;
   layout?: EventLayoutInfo;
 }
 

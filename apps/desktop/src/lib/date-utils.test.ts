@@ -17,9 +17,10 @@ describe("getWeekId", () => {
   });
 
   it("returns correct week ID for Sunday (start of calendar week)", () => {
-    // Sunday, January 12, 2025
+    // Sunday, January 12, 2025 is the START of our Sun-Sat week
+    // Week bounds for W03 are Sun Jan 12 - Sat Jan 18
     const date = new Date(2025, 0, 12);
-    expect(getWeekId(date)).toBe("2025-W02");
+    expect(getWeekId(date)).toBe("2025-W03");
   });
 
   it("returns correct week ID for Saturday (end of calendar week)", () => {
@@ -78,7 +79,7 @@ describe("getWeekBounds", () => {
   });
 
   it("handles week 1 of a year correctly", () => {
-    const { start, end } = getWeekBounds("2025-W01");
+    const { start } = getWeekBounds("2025-W01");
 
     // Week 1 of 2025 starts on Sunday, December 29, 2024
     expect(start.getFullYear()).toBe(2024);
@@ -260,8 +261,8 @@ describe("getSundayOfWeek", () => {
 });
 
 describe("Week calculation consistency", () => {
-  it("consecutive days have consistent week boundaries (ISO weeks change on Monday)", () => {
-    // ISO weeks run Monday to Sunday, so week IDs change on Monday
+  it("consecutive days have consistent week boundaries (weeks change on Sunday)", () => {
+    // Our calendar uses Sunday-Saturday weeks, so week IDs change on Sunday
     const startDate = new Date(2025, 0, 1);
     let lastWeekId = getWeekId(startDate);
     let lastDayOfWeek = startDate.getDay();
@@ -271,11 +272,11 @@ describe("Week calculation consistency", () => {
       const weekId = getWeekId(date);
       const dayOfWeek = date.getDay();
 
-      // Week ID should only change when we cross from Sunday (0) to Monday (1)
-      // (ISO weeks end on Sunday and start on Monday)
+      // Week ID should only change when we cross from Saturday (6) to Sunday (0)
+      // (Our weeks end on Saturday and start on Sunday)
       if (weekId !== lastWeekId) {
-        expect(dayOfWeek).toBe(1); // Monday
-        expect(lastDayOfWeek).toBe(0); // Previous day was Sunday
+        expect(dayOfWeek).toBe(0); // Sunday
+        expect(lastDayOfWeek).toBe(6); // Previous day was Saturday
       }
 
       lastWeekId = weekId;
