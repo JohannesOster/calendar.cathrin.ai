@@ -2,7 +2,7 @@ import { createSignal, createMemo } from "solid-js";
 import { startServerOAuth, isAuthenticated, onAuthComplete } from "./auth";
 import { apiFetch } from "../lib/api";
 import { refreshEvents } from "./events";
-import type { ApiAccount, ApiCalendar } from "@cathrin/shared-types";
+import type { ApiAccount, ApiCalendar, SyncStatus } from "@cathrin/shared-types";
 
 /**
  * Response format from the calendars API
@@ -24,6 +24,7 @@ export interface CalendarAccount {
   id: string;
   email: string;
   calendars: Calendar[];
+  syncStatus: SyncStatus;
 }
 
 // Signals for account state
@@ -192,6 +193,7 @@ async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
     id: account.id,
     email: account.email,
     calendars: calendarsByAccount.get(account.id) || [],
+    syncStatus: account.syncStatus ?? "pending",
   }));
 }
 
@@ -401,10 +403,54 @@ export async function refreshAccounts(): Promise<void> {
   }
 }
 
+/**
+ * Check if any account is currently syncing
+ */
+export function isAnySyncing(): boolean {
+  return connectedAccounts().some(
+    (a) => a.syncStatus === "pending" || a.syncStatus === "syncing"
+  );
+}
+
+/**
+ * Poll for sync completion after adding an account
+ * Polls every 2 seconds until all accounts are synced, then refreshes events
+ */
+async function pollUntilSyncComplete(): Promise<void> {
+  const POLL_INTERVAL = 2000; // 2 seconds
+  const MAX_POLLS = 60; // Max 2 minutes of polling
+  let polls = 0;
+
+  console.log("[accounts] Starting sync status polling...");
+
+  while (polls < MAX_POLLS) {
+    await reloadAccounts();
+
+    if (!isAnySyncing()) {
+      console.log("[accounts] All accounts synced, refreshing events");
+      refreshEvents();
+      return;
+    }
+
+    polls++;
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+  }
+
+  console.warn("[accounts] Sync polling timed out after 2 minutes");
+  // Refresh events anyway with whatever data we have
+  refreshEvents();
+}
+
 // Register callback to reload accounts when auth completes
 // This handles both initial login and adding additional accounts
 onAuthComplete(async () => {
   await reloadAccounts();
-  // Also refresh events to fetch data from the new account
-  refreshEvents();
+
+  // If any account is still syncing, poll until complete
+  if (isAnySyncing()) {
+    pollUntilSyncComplete();
+  } else {
+    // All accounts already synced, just refresh events
+    refreshEvents();
+  }
 });
