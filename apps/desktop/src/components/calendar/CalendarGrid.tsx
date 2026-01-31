@@ -42,7 +42,7 @@ const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Anchor point in middle
 // ============================================================================
 // Constants - Scroll Snap
 // ============================================================================
-const SNAP_TRACK_RANGE = 365; // Days in each direction from anchor for snap points
+const SNAP_TRACK_RANGE = 730; // Days in each direction from anchor for snap points (2 years)
 
 // ============================================================================
 // Constants - Scroll Direction Tracking (for prefetching)
@@ -52,23 +52,25 @@ const DIRECTION_RESET_DELAY_MS = 2000; // Reset to null after idle period
 
 // Initial Reference Date (Anchor)
 // All positions are calculated relative to this date being at CENTER_OFFSET
-const anchorDate = (() => {
+// This is now a signal so we can re-anchor when navigating far from current position
+const getInitialAnchor = () => {
   const today = new Date();
   const d = new Date(today);
   d.setDate(today.getDate() - today.getDay()); // Start with Sunday
   d.setHours(0, 0, 0, 0);
-  console.log('[CalendarGrid] anchorDate:', d.toISOString());
   return d;
-})();
+};
+
+const [anchorDate, setAnchorDate] = createSignal(getInitialAnchor());
 
 // Export signals for external control
 // Initialize to anchor (Sunday of current week) for consistent startup
-export const [centerDate, setCenterDate] = createSignal(new Date(anchorDate));
+export const [centerDate, setCenterDate] = createSignal(new Date(getInitialAnchor()));
 export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
-export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
+export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(getInitialAnchor()));
 // Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
 export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
 // Month view visible weeks - contains ~6 week IDs for the visible area in month view
@@ -138,6 +140,7 @@ export function CalendarGrid() {
     const width = colWidth();
     const currentScrollLeft = scrollLeft();
     const currentContainerWidth = containerWidth() || window.innerWidth;
+    const anchor = anchorDate();
 
     // Calculate day indices relative to anchor (0 = anchor date)
     const startPixel = currentScrollLeft;
@@ -149,7 +152,7 @@ export function CalendarGrid() {
     const days: { date: Date; left: number }[] = [];
     for (let i = startIndex; i <= endIndex; i++) {
       days.push({
-        date: addDays(anchorDate, i),
+        date: addDays(anchor, i),
         left: getDayLeftPosition(i, width)
       });
     }
@@ -202,7 +205,7 @@ export function CalendarGrid() {
     const width = colWidth();
     if (width > 0) {
       const dayIndex = getDayIndexFromScroll(currentScrollLeft);
-      const currentDate = addDays(anchorDate, dayIndex);
+      const currentDate = addDays(anchorDate(), dayIndex);
 
       // Update displayed month if changed
       const newMonth = formatMonthYear(currentDate);
@@ -237,29 +240,64 @@ export function CalendarGrid() {
 
   // Virtual Scroll to a specific date
   const scrollToDate = (date: Date) => {
-    if (!scrollContainerRef) return;
-
-    // Disable snap during programmatic scroll to prevent feedback loop
-    setSnapEnabled(false);
+    if (!scrollContainerRef) {
+      console.log('[CalendarGrid] scrollToDate: no scrollContainerRef');
+      return;
+    }
 
     // Normalize to midnight to avoid time component affecting day calculation
     const normalizedDate = new Date(date);
     normalizedDate.setHours(0, 0, 0, 0);
 
-    // Calculate difference in days from anchor
-    const diffTime = normalizedDate.getTime() - anchorDate.getTime();
+    // Calculate difference in days from current anchor
+    const currentAnchor = anchorDate();
+    const diffTime = normalizedDate.getTime() - currentAnchor.getTime();
     // Use Math.round to handle DST issues (difference should be roughly integer days)
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    let diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    // Check if target is outside snap track range - if so, re-anchor
+    // Use a slightly smaller threshold to ensure we have snap points around the target
+    const reanchorThreshold = SNAP_TRACK_RANGE - 30; // Leave 30-day buffer
+    if (Math.abs(diffDays) > reanchorThreshold) {
+      console.log('[CalendarGrid] Re-anchoring from', currentAnchor.toISOString(), 'to', normalizedDate.toISOString());
+      // Set new anchor to be the Sunday of the target week
+      const newAnchor = new Date(normalizedDate);
+      newAnchor.setDate(normalizedDate.getDate() - normalizedDate.getDay());
+      newAnchor.setHours(0, 0, 0, 0);
+      setAnchorDate(newAnchor);
+      // Recalculate diffDays from new anchor
+      diffDays = Math.round((normalizedDate.getTime() - newAnchor.getTime()) / (1000 * 60 * 60 * 24));
+    }
 
     // Account for sticky time column - position the target day right after the time column
     const timeColWidth = getTimeColWidth();
-    const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth()) - timeColWidth;
+    const currentColWidth = colWidth();
+    const targetScrollLeft = CENTER_OFFSET + (diffDays * currentColWidth) - timeColWidth;
 
-    scrollContainerRef.scrollLeft = targetScrollLeft;
+    console.log('[CalendarGrid] scrollToDate:', {
+      date: normalizedDate.toISOString(),
+      anchor: anchorDate().toISOString(),
+      diffDays,
+      colWidth: currentColWidth,
+      targetScrollLeft,
+      currentScrollLeft: scrollContainerRef.scrollLeft,
+    });
 
-    // Re-enable snap after scroll settles
+    // Disable snap, wait for DOM update, then scroll
+    setSnapEnabled(false);
+
+    // Use double-RAF to ensure CSS change is applied before scroll
     requestAnimationFrame(() => {
-      setSnapEnabled(true);
+      requestAnimationFrame(() => {
+        if (scrollContainerRef) {
+          scrollContainerRef.scrollLeft = targetScrollLeft;
+
+          // Re-enable snap after scroll completes (give it time to settle)
+          setTimeout(() => {
+            setSnapEnabled(true);
+          }, 50);
+        }
+      });
     });
   };
 
@@ -487,10 +525,10 @@ export function CalendarGrid() {
               </div>
 
               {/* Phantom Snap Track - invisible anchors for scroll snapping (Notion approach) */}
-              {/* Renders 731 empty divs as stable snap points - must span full height */}
+              {/* Renders ~1461 empty divs as stable snap points - must span full height */}
               <Key each={snapTrackIndices()} by={(i) => i}>
                 {(dayIndex) => {
-                  const date = addDays(anchorDate, dayIndex());
+                  const date = addDays(anchorDate(), dayIndex());
                   return (
                     <div
                       class="pointer-events-none"

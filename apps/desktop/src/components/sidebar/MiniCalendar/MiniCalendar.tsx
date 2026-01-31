@@ -58,7 +58,17 @@ export function MiniCalendar() {
     setTimeout(() => setFlashDate(null), SIDEBAR.FLASH_CLEAR_DELAY);
   };
 
+  // Flag to skip auto-sync after user clicks a date
+  let skipNextSync = false;
+
   const handleDayClick = (dayInfo: DayInfo) => {
+    // Skip the next auto-sync so the mini-calendar stays on the clicked date's month
+    skipNextSync = true;
+
+    // If clicking a gray day (from adjacent month), shift mini-calendar to that month
+    if (!dayInfo.isCurrentMonth) {
+      setCurrentMonth(new Date(dayInfo.date.getFullYear(), dayInfo.date.getMonth(), 1));
+    }
     navigateToDate(dayInfo.date);
   };
 
@@ -66,10 +76,18 @@ export function MiniCalendar() {
   let prevVisibleDate = visibleStartDate();
 
   // Sync mini calendar month when scroll position changes to a different month
+  // (but not after user clicks a date - we want to preserve their intended month)
   createEffect(() => {
     const visible = visibleStartDate();
     if (visible.getTime() !== prevVisibleDate.getTime()) {
       prevVisibleDate = visible;
+
+      // Skip sync if user just clicked a date
+      if (skipNextSync) {
+        skipNextSync = false;
+        return;
+      }
+
       if (
         visible.getMonth() !== currentMonth().getMonth() ||
         visible.getFullYear() !== currentMonth().getFullYear()

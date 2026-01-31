@@ -22,7 +22,9 @@ export function CalendarHeader() {
 
   const navigatePrev = () => {
     const date = visibleStartDate();
-    switch (currentView()) {
+    const view = currentView();
+    console.log('[CalendarHeader] navigatePrev:', { view, from: date.toISOString() });
+    switch (view) {
       case "Day":
         setCenterDate(addDays(date, -1));
         break;
@@ -39,7 +41,9 @@ export function CalendarHeader() {
 
   const navigateNext = () => {
     const date = visibleStartDate();
-    switch (currentView()) {
+    const view = currentView();
+    console.log('[CalendarHeader] navigateNext:', { view, from: date.toISOString() });
+    switch (view) {
       case "Day":
         setCenterDate(addDays(date, 1));
         break;
@@ -114,15 +118,23 @@ export function CalendarHeader() {
 
         {/* Navigation arrows */}
         <button
-          onClick={navigatePrev}
-          class="ml-1 p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('[CalendarHeader] Prev button clicked');
+            navigatePrev();
+          }}
+          class="ml-1 p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
           title="Previous"
         >
           <ChevronLeft size={18} />
         </button>
         <button
-          onClick={navigateNext}
-          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log('[CalendarHeader] Next button clicked');
+            navigateNext();
+          }}
+          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
           title="Next"
         >
           <ChevronRight size={18} />
