@@ -1,10 +1,16 @@
 import { createSignal } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
-import { connectedAccounts } from "./accounts";
-import { getWeekId, getWeekBounds, getWeeksInRange, addDays } from "../lib/date-utils";
+import { apiFetch, AuthError } from "../lib/api";
+import { isAuthenticated } from "./auth";
+import {
+  getWeekId,
+  getWeekBounds,
+  getWeeksInRange,
+  addDays,
+} from "../lib/date-utils";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
 /**
- * Event data from the backend, with dates parsed to JS Date objects
+ * Event data for the frontend, with dates parsed to JS Date objects
  */
 export interface CalendarEvent {
   id: string;
@@ -14,28 +20,6 @@ export interface CalendarEvent {
   end: Date;
   isAllDay: boolean;
   color: string;
-}
-
-/**
- * Raw event data from Tauri backend (dates as strings)
- */
-interface StoredEvent {
-  id: string;
-  calendar_id: string;
-  title: string;
-  start: string;
-  end: string;
-  is_all_day: boolean;
-  color: string;
-}
-
-/**
- * Cached events structure from Tauri backend
- */
-interface EventCache {
-  events: StoredEvent[];
-  last_fetched_at: number;
-  fetched_weeks: string[];  // ISO week format: "YYYY-Wnn"
 }
 
 // Time window for fetching events (days relative to now)
@@ -49,13 +33,12 @@ const PRUNE_WINDOW_DAYS = 90;
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [lastRefreshed, setLastRefreshed] = createSignal<Date | null>(
-  null
+  null,
 );
 export const [eventsError, setEventsError] = createSignal<string | null>(null);
 
 /**
- * Track which weeks have been fetched (across all accounts)
- * This is a local cache of the union of all accounts' fetched_weeks
+ * Track which weeks have been fetched
  */
 const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
 
@@ -77,16 +60,16 @@ let currentRequestId = 0;
 let currentVisibleWeeks: Set<string> = new Set();
 
 /**
- * Convert backend StoredEvent to frontend CalendarEvent
+ * Convert API event to frontend CalendarEvent
  */
-function convertToCalendarEvent(event: StoredEvent): CalendarEvent {
+function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
   return {
     id: event.id,
-    calendarId: event.calendar_id,
+    calendarId: event.calendarId,
     title: event.title,
     start: new Date(event.start),
     end: new Date(event.end),
-    isAllDay: event.is_all_day,
+    isAllDay: event.isAllDay,
     color: event.color,
   };
 }
@@ -114,7 +97,10 @@ function getTimeWindow(): { timeMin: string; timeMax: string } {
 /**
  * Deduplicate and sort events by start time
  */
-function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent[] = []): CalendarEvent[] {
+function processEvents(
+  newEvents: CalendarEvent[],
+  existingEvents: CalendarEvent[] = [],
+): CalendarEvent[] {
   // Deduplicate by event id
   const uniqueEvents = new Map<string, CalendarEvent>();
 
@@ -130,7 +116,7 @@ function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent
 
   // Sort by start time
   return Array.from(uniqueEvents.values()).sort(
-    (a, b) => a.start.getTime() - b.start.getTime()
+    (a, b) => a.start.getTime() - b.start.getTime(),
   );
 }
 
@@ -138,7 +124,10 @@ function processEvents(newEvents: CalendarEvent[], existingEvents: CalendarEvent
  * Prune events outside a time window around the center date
  * Keeps events that overlap with the window (multi-day events spanning boundary are kept)
  */
-function pruneEvents(events: CalendarEvent[], centerDate: Date): CalendarEvent[] {
+function pruneEvents(
+  events: CalendarEvent[],
+  centerDate: Date,
+): CalendarEvent[] {
   const minTime = addDays(centerDate, -PRUNE_WINDOW_DAYS).getTime();
   const maxTime = addDays(centerDate, PRUNE_WINDOW_DAYS).getTime();
 
@@ -163,7 +152,10 @@ function pruneFetchedWeeks(weeks: Set<string>, centerDate: Date): Set<string> {
   for (const weekId of weeks) {
     const { start, end } = getWeekBounds(weekId);
     // Keep week if any part of it overlaps with prune window
-    if (start.getTime() <= maxDate.getTime() && end.getTime() >= minDate.getTime()) {
+    if (
+      start.getTime() <= maxDate.getTime() &&
+      end.getTime() >= minDate.getTime()
+    ) {
       prunedWeeks.add(weekId);
     }
   }
@@ -171,52 +163,20 @@ function pruneFetchedWeeks(weeks: Set<string>, centerDate: Date): Set<string> {
 }
 
 /**
- * Load events from cache (fast, no network)
- * Silently fails if no cache exists - empty state is fine
- * Also syncs the fetched weeks tracker
- */
-export async function loadCachedEvents(): Promise<void> {
-  try {
-    const accounts = connectedAccounts();
-    if (accounts.length === 0) {
-      setEvents([]);
-      setFetchedWeeks(new Set());
-      return;
-    }
-
-    const allEvents: CalendarEvent[] = [];
-    const allWeeks = new Set<string>();
-
-    for (const account of accounts) {
-      const cache = await invoke<EventCache | null>("get_cached_events", {
-        accountId: account.id,
-      });
-
-      if (cache?.events) {
-        allEvents.push(...cache.events.map(convertToCalendarEvent));
-      }
-
-      if (cache?.fetched_weeks) {
-        for (const week of cache.fetched_weeks) {
-          allWeeks.add(week);
-        }
-      }
-    }
-
-    setEvents(processEvents(allEvents));
-    setFetchedWeeks(allWeeks);
-  } catch {
-    setEvents([]);
-    setFetchedWeeks(new Set());
-  }
-}
-
-/**
- * Refresh events from Google Calendar API
+ * Refresh events from sync-server API
  * Shows loading state and surfaces errors
  * @param window Optional time window to fetch events for. Defaults to initial window.
  */
-export async function refreshEvents(window?: { start: Date; end: Date }): Promise<void> {
+export async function refreshEvents(window?: {
+  start: Date;
+  end: Date;
+}): Promise<void> {
+  // Skip if not authenticated
+  if (!isAuthenticated()) {
+    setEvents([]);
+    return;
+  }
+
   // Only set global loading on initial fetch or full refresh
   if (!window) {
     setIsLoading(true);
@@ -224,13 +184,6 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
   setEventsError(null);
 
   try {
-    const accounts = connectedAccounts();
-    if (accounts.length === 0) {
-      setEvents([]);
-      setLastRefreshed(new Date());
-      return;
-    }
-
     let timeMin: string;
     let timeMax: string;
 
@@ -243,17 +196,12 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
       timeMax = defaultWindow.timeMax;
     }
 
-    const newEvents: CalendarEvent[] = [];
+    // Fetch events from sync-server (handles all accounts server-side)
+    const apiEvents = await apiFetch<ApiCalendarEvent[]>(
+      `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`,
+    );
 
-    for (const account of accounts) {
-      const accountEvents = await invoke<StoredEvent[]>("fetch_events", {
-        accountId: account.id,
-        timeMin,
-        timeMax,
-      });
-
-      newEvents.push(...accountEvents.map(convertToCalendarEvent));
-    }
+    const newEvents = apiEvents.map(convertApiEvent);
 
     // Merge new events with existing ones
     // If window IS provided, merge with existing and prune to prevent unbounded growth.
@@ -272,22 +220,27 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
 
     setLastRefreshed(now);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    setEventsError(errorMessage || "Failed to refresh events");
+    if (error instanceof AuthError) {
+      // Auth error - session expired, user needs to re-authenticate
+      setEventsError("Please reconnect your account");
+    } else {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      setEventsError(errorMessage || "Failed to refresh events");
+    }
   } finally {
     setIsLoading(false);
   }
 }
 
 /**
- * Initialize events: load from cache, then refresh in background
- * Call this on app startup after accounts are initialized
+ * Initialize events: refresh from API
+ * Call this on app startup after auth is initialized
  */
 export async function initializeEvents(): Promise<void> {
-  await loadCachedEvents();
-  // Refresh in background (no await) - stale-while-revalidate pattern
-  refreshEvents();
+  if (isAuthenticated()) {
+    await refreshEvents();
+  }
 }
 
 /**
@@ -348,12 +301,17 @@ export function updateVisibleWeeks(weeks: string[]): void {
 }
 
 /**
- * Fetch events for a specific week (for all accounts)
+ * Fetch events for a specific week
  * Merges into existing cache rather than replacing
  * Tracks in-flight state to prevent duplicate requests
  * Supports cancellation via request ID pattern
  */
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
+  // Skip if not authenticated
+  if (!isAuthenticated()) {
+    return;
+  }
+
   // Skip if already fetching this week
   if (fetchingWeeks().has(weekId)) {
     console.log(`[events] Skipping ${weekId} - already fetching`);
@@ -365,9 +323,6 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     console.log(`[events] Skipping ${weekId} - already cached`);
     return;
   }
-
-  const accounts = connectedAccounts();
-  if (accounts.length === 0) return;
 
   // Capture request ID at start
   const requestId = currentRequestId;
@@ -386,31 +341,20 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const timeMin = start.toISOString();
     const timeMax = end.toISOString();
 
-    // Fetch all accounts in parallel
-    const results = await Promise.all(
-      accounts.map(async (account) => {
-        try {
-          const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
-            accountId: account.id,
-            weekId,
-            timeMin,
-            timeMax,
-          });
-          return accountEvents.map(convertToCalendarEvent);
-        } catch (error) {
-          console.error(`[events] Failed to fetch week ${weekId} for account ${account.id}:`, error);
-          return [];
-        }
-      })
+    // Fetch events from sync-server
+    const apiEvents = await apiFetch<ApiCalendarEvent[]>(
+      `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`,
     );
 
     // Check if this request is still relevant before updating state
     if (requestId !== currentRequestId) {
-      console.log(`[events] Discarding stale fetch for ${weekId} (cancelled after fetch)`);
+      console.log(
+        `[events] Discarding stale fetch for ${weekId} (cancelled after fetch)`,
+      );
       return;
     }
 
-    const newEvents = results.flat();
+    const newEvents = apiEvents.map(convertApiEvent);
 
     // Merge new events with existing and prune old events
     const now = new Date();
@@ -427,6 +371,12 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     });
 
     console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      console.error(`[events] Auth error fetching ${weekId}:`, error);
+    } else {
+      console.error(`[events] Failed to fetch week ${weekId}:`, error);
+    }
   } finally {
     // Clear fetching state (only if not already cleared by cancellation)
     setFetchingWeeks((prev) => {
@@ -443,7 +393,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
  */
 export function getEventsForRange(
   start: Date,
-  end: Date
+  end: Date,
 ): { events: CalendarEvent[]; missingWeeks: string[] } {
   const weeksNeeded = getWeeksInRange(start, end);
   const cached = fetchedWeeks();
@@ -465,30 +415,16 @@ export function getEventsForRange(
 }
 
 /**
- * Update the fetched weeks tracker from cache data
- * Call this after loading from cache to sync the local state
+ * Clear all events and reset state
+ * Call this when user logs out
  */
-export async function syncFetchedWeeksFromCache(): Promise<void> {
-  const accounts = connectedAccounts();
-  const allWeeks = new Set<string>();
-
-  for (const account of accounts) {
-    try {
-      const cache = await invoke<EventCache | null>("get_cached_events", {
-        accountId: account.id,
-      });
-
-      if (cache?.fetched_weeks) {
-        for (const week of cache.fetched_weeks) {
-          allWeeks.add(week);
-        }
-      }
-    } catch {
-      // Ignore cache read errors
-    }
-  }
-
-  setFetchedWeeks(allWeeks);
+export function clearEvents(): void {
+  setEvents([]);
+  setFetchedWeeks(new Set());
+  setFetchingWeeks(new Set());
+  setLastRefreshed(null);
+  setEventsError(null);
+  currentRequestId++;
 }
 
 // Re-export week utilities for convenience
