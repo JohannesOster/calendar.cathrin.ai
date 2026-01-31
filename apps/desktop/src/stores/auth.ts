@@ -12,7 +12,7 @@ export { sessionToken, isAuthenticated, isAuthLoading, authError };
 
 // Server URL from environment
 const SYNC_SERVER_URL =
-  import.meta.env.VITE_SYNC_SERVER_URL || "http://localhost:3000";
+  import.meta.env.VITE_SYNC_SERVER_URL || "http://localhost:5000";
 
 /**
  * Initialize auth state on app startup
@@ -41,7 +41,7 @@ export async function initAuth(): Promise<void> {
   } catch (error) {
     console.error("Failed to initialize auth:", error);
     setAuthError(
-      error instanceof Error ? error.message : "Failed to initialize auth"
+      error instanceof Error ? error.message : "Failed to initialize auth",
     );
   } finally {
     setIsAuthLoading(false);
@@ -82,7 +82,7 @@ export async function startServerOAuth(): Promise<void> {
   } catch (error) {
     console.error("Failed to start OAuth:", error);
     setAuthError(
-      error instanceof Error ? error.message : "Failed to start OAuth"
+      error instanceof Error ? error.message : "Failed to start OAuth",
     );
     setIsAuthLoading(false);
   }
@@ -103,7 +103,7 @@ export async function handleAuthCallback(token: string): Promise<void> {
   } catch (error) {
     console.error("Failed to save session token:", error);
     setAuthError(
-      error instanceof Error ? error.message : "Failed to save session"
+      error instanceof Error ? error.message : "Failed to save session",
     );
   } finally {
     setIsAuthLoading(false);
