@@ -8,11 +8,7 @@ import {
 } from "lucide-solid";
 import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
 import { visibleStartDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
-
-export type ViewType = "Day" | "Week" | "Month";
-
-// View state - exported for CalendarGrid to conditionally render views
-export const [currentView, setCurrentView] = createSignal<ViewType>("Week");
+import { currentView, setCurrentView, type ViewType } from "../../stores/view";
 
 // Helper to add days to a date
 function addDays(date: Date, days: number): Date {

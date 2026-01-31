@@ -386,34 +386,31 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const timeMin = start.toISOString();
     const timeMax = end.toISOString();
 
-    const newEvents: CalendarEvent[] = [];
-
-    for (const account of accounts) {
-      // Check if request was cancelled before each account fetch
-      if (requestId !== currentRequestId) {
-        console.log(`[events] Discarding stale fetch for ${weekId} (cancelled during fetch)`);
-        return;
-      }
-
-      try {
-        const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
-          accountId: account.id,
-          weekId,
-          timeMin,
-          timeMax,
-        });
-
-        newEvents.push(...accountEvents.map(convertToCalendarEvent));
-      } catch (error) {
-        console.error(`[events] Failed to fetch week ${weekId} for account ${account.id}:`, error);
-      }
-    }
+    // Fetch all accounts in parallel
+    const results = await Promise.all(
+      accounts.map(async (account) => {
+        try {
+          const accountEvents = await invoke<StoredEvent[]>("fetch_events_for_week", {
+            accountId: account.id,
+            weekId,
+            timeMin,
+            timeMax,
+          });
+          return accountEvents.map(convertToCalendarEvent);
+        } catch (error) {
+          console.error(`[events] Failed to fetch week ${weekId} for account ${account.id}:`, error);
+          return [];
+        }
+      })
+    );
 
     // Check if this request is still relevant before updating state
     if (requestId !== currentRequestId) {
       console.log(`[events] Discarding stale fetch for ${weekId} (cancelled after fetch)`);
       return;
     }
+
+    const newEvents = results.flat();
 
     // Merge new events with existing and prune old events
     const now = new Date();

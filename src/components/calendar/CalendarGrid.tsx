@@ -1,16 +1,18 @@
 import { createSignal, onMount, onCleanup, createEffect, createMemo, on, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { LoaderCircle } from "lucide-solid";
+import { Loader2 } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
+import { MonthView } from "./MonthView";
 import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
 import { isLoadingWeeks } from "../../stores/events";
-import { currentView } from "../layout/CalendarHeader";
+import { currentView } from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
-const getDateKey = (date: Date): string => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+const getDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 
 // Helper to check if a date is a week start (Sunday)
 const isWeekStart = (date: Date): boolean => date.getDay() === 0;
@@ -55,6 +57,7 @@ const anchorDate = (() => {
   const d = new Date(today);
   d.setDate(today.getDate() - today.getDay()); // Start with Sunday
   d.setHours(0, 0, 0, 0);
+  console.log('[CalendarGrid] anchorDate:', d.toISOString());
   return d;
 })();
 
@@ -68,8 +71,20 @@ export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 export const [visibleStartDate, setVisibleStartDate] = createSignal(new Date(anchorDate));
 // Visible weeks signal - contains 1-2 week IDs depending on whether view spans week boundary
 export const [visibleWeeks, setVisibleWeeks] = createSignal<string[]>([]);
+// Month view visible weeks - contains ~6 week IDs for the visible area in month view
+export const [monthVisibleWeekIds, setMonthVisibleWeekIds] = createSignal<string[]>([]);
 // Scroll direction signal for prefetching - null when idle, 'left' (past) or 'right' (future)
-export const [scrollDirection, setScrollDirection] = createSignal<"left" | "right" | null>(null);
+export const [scrollDirection, setScrollDirection] = createSignal<'left' | 'right' | null>(null);
+
+// Active visible weeks - switches between week view and month view based on currentView
+// This is the signal that the events store should react to
+export const activeVisibleWeeks = createMemo(() => {
+  if (currentView() === "Month") {
+    return monthVisibleWeekIds();
+  }
+  return visibleWeeks();
+});
+
 
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
@@ -91,7 +106,7 @@ export function CalendarGrid() {
 
   // Get the time column width from CSS variable
   const getTimeColWidth = () => {
-    const cssValue = getComputedStyle(document.documentElement).getPropertyValue("--grid-time-col-width");
+    const cssValue = getComputedStyle(document.documentElement).getPropertyValue('--grid-time-col-width');
     return parseInt(cssValue) || TIME_COL_WIDTH_FALLBACK;
   };
 
@@ -115,7 +130,8 @@ export function CalendarGrid() {
   };
 
   // Calculate pixel position for a day index relative to anchor
-  const getDayLeftPosition = (dayIndex: number, width: number) => CENTER_OFFSET + dayIndex * width;
+  const getDayLeftPosition = (dayIndex: number, width: number) =>
+    CENTER_OFFSET + (dayIndex * width);
 
   // Calculate visible day range based on scroll position
   const visibleDays = createMemo(() => {
@@ -134,7 +150,7 @@ export function CalendarGrid() {
     for (let i = startIndex; i <= endIndex; i++) {
       days.push({
         date: addDays(anchorDate, i),
-        left: getDayLeftPosition(i, width),
+        left: getDayLeftPosition(i, width)
       });
     }
 
@@ -168,9 +184,9 @@ export function CalendarGrid() {
     // Skip during programmatic scrolls (when snap is disabled) to avoid incorrect direction
     if (snapEnabled()) {
       if (currentScrollLeft > lastScrollLeft + DIRECTION_THRESHOLD_PX) {
-        setScrollDirection("right"); // Scrolling toward future
+        setScrollDirection('right'); // Scrolling toward future
       } else if (currentScrollLeft < lastScrollLeft - DIRECTION_THRESHOLD_PX) {
-        setScrollDirection("left"); // Scrolling toward past
+        setScrollDirection('left'); // Scrolling toward past
       }
 
       // Reset direction to null after period of no scrolling
@@ -198,6 +214,7 @@ export function CalendarGrid() {
       // Note: centerDate is only set externally (e.g., from mini-calendar clicks)
       // to avoid feedback loops with the scroll effect
       if (!isSameDay(currentDate, visibleStartDate())) {
+        console.log('[CalendarGrid] Setting visibleStartDate to:', currentDate.toISOString());
         setVisibleStartDate(currentDate);
       }
 
@@ -211,7 +228,8 @@ export function CalendarGrid() {
 
       // Only update if weeks actually changed
       const currentWeeks = visibleWeeks();
-      if (newWeeks.length !== currentWeeks.length || newWeeks.some((w, i) => w !== currentWeeks[i])) {
+      if (newWeeks.length !== currentWeeks.length ||
+          newWeeks.some((w, i) => w !== currentWeeks[i])) {
         setVisibleWeeks(newWeeks);
       }
     }
@@ -235,7 +253,7 @@ export function CalendarGrid() {
 
     // Account for sticky time column - position the target day right after the time column
     const timeColWidth = getTimeColWidth();
-    const targetScrollLeft = CENTER_OFFSET + diffDays * colWidth() - timeColWidth;
+    const targetScrollLeft = CENTER_OFFSET + (diffDays * colWidth()) - timeColWidth;
 
     scrollContainerRef.scrollLeft = targetScrollLeft;
 
@@ -243,6 +261,18 @@ export function CalendarGrid() {
     requestAnimationFrame(() => {
       setSnapEnabled(true);
     });
+  };
+
+  // Handle resize
+  const handleResize = () => {
+    if (!scrollContainerRef) return;
+    // Remember the date we were looking at
+    const currentLeftDate = visibleStartDate();
+
+    getColumnWidth(); // Update width
+
+    // Restore scroll position to keep that date at left
+    scrollToDate(currentLeftDate);
   };
 
   // Initialize on mount
@@ -307,26 +337,43 @@ export function CalendarGrid() {
     });
   });
 
-  // React to external centerDate changes (e.g. from Mini Calendar)
-  // Using on() with defer to only scroll when centerDate actually changes,
-  // not on initial mount (handled by onMount) or when comparing to visibleStartDate
+  // React to external centerDate changes (e.g. from Mini Calendar or header navigation)
+  // Using on() with defer to only react when centerDate actually changes,
+  // not on initial mount (handled by onMount)
+  // Note: Month view manages its own scroll via MonthView component
   createEffect(
-    on(
-      centerDate,
-      (target) => {
+    on(centerDate, (target) => {
+      if (currentView() !== "Month") {
         scrollToDate(target);
-      },
-      { defer: true },
-    ),
+      }
+    }, { defer: true })
+  );
+
+  // When switching from Month view back to Week view, restore scroll position
+  // and update visibleWeeks signal (since onMount doesn't run again)
+  createEffect(
+    on(currentView, (view, prevView) => {
+      if (prevView === "Month" && view !== "Month" && isInitialized && scrollContainerRef) {
+        // Give the DOM time to render the week view container
+        requestAnimationFrame(() => {
+          scrollToDate(visibleStartDate());
+          handleScroll();
+        });
+      }
+    }, { defer: true })
   );
 
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
       {/* Month/Year indicator - outside scroll container */}
-      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center gap-4">
+      <div class="px-4 py-2 bg-white border-b border-[#e8e8e8] shrink-0 flex items-center justify-between">
         <span class="text-lg font-medium text-[#37352f]">{displayedMonth()}</span>
         <Show when={isLoadingWeeks()}>
-          <LoaderCircle size={16} class="text-[#91918e] animate-spin" aria-label="Loading events" />
+          <Loader2
+            size={16}
+            class="text-[#91918e] animate-spin"
+            aria-label="Loading events"
+          />
         </Show>
       </div>
 
@@ -338,7 +385,7 @@ export function CalendarGrid() {
             ref={scrollContainerRef}
             class="flex-1 overflow-auto overscroll-none"
             style={{
-              position: "relative",
+              "position": "relative",
               "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
               "scroll-padding-left": "var(--grid-time-col-width)",
             }}
@@ -346,6 +393,7 @@ export function CalendarGrid() {
           >
             {/* Inner Virtual Container - Extremely Wide */}
             <div style={{ width: `${CONTAINER_WIDTH}px`, height: `${CONTENT_HEIGHT}px`, position: "relative" }}>
+
               {/* Sticky Header Row */}
               <div
                 class="flex bg-white border-b border-[#e8e8e8]"
@@ -379,7 +427,7 @@ export function CalendarGrid() {
                         left: `${item().left}px`,
                         width: `${colWidth()}px`,
                         height: `${HEADER_HEIGHT}px`,
-                        top: 0,
+                        top: 0
                       }}
                     >
                       <DateHeader date={item().date} isToday={isToday(item().date)} />
@@ -432,7 +480,7 @@ export function CalendarGrid() {
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
-                  "z-index": "5",
+                  "z-index": "5"
                 }}
               >
                 <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
@@ -460,12 +508,12 @@ export function CalendarGrid() {
                   );
                 }}
               </Key>
+
             </div>
           </div>
         }
       >
-        {/* Month View Placeholder */}
-        <div class="flex-1 flex items-center justify-center text-[#91918e]">Month view coming soon</div>
+        <MonthView />
       </Show>
     </div>
   );
