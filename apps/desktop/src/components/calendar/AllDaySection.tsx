@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, createMemo } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { AllDayEventChip } from "./AllDayEventChip";
 import type { CalendarEvent } from "../../stores/events";
@@ -71,44 +71,9 @@ export function AllDaySection(props: AllDaySectionProps) {
     return layouts.filter((l) => l.row < MAX_COLLAPSED_ROWS);
   });
 
-  // Count hidden events
-  const hiddenCount = createMemo(() => {
-    const layouts = props.eventLayouts ?? [];
-    if (props.isExpanded) return 0;
-    return layouts.filter((l) => l.row >= MAX_COLLAPSED_ROWS).length;
-  });
-
-  // Show expand button only when there are hidden events
-  const showExpandButton = () => hiddenCount() > 0 || props.isExpanded;
 
   return (
-    <div class="flex" style={{ height: `${sectionHeight()}px` }}>
-      {/* All-day label - in the time column area */}
-      <div
-        class="bg-white border-r border-[#e8e8e8] flex flex-col items-end justify-start pt-1 pr-2"
-        style={{
-          width: "var(--grid-time-col-width)",
-          height: `${sectionHeight()}px`,
-          "flex-shrink": "0",
-          position: "sticky",
-          left: "0",
-          "z-index": "20",
-        }}
-      >
-        <span class="text-xs text-[#91918e]">All day</span>
-
-        {/* Expand/collapse button */}
-        <Show when={showExpandButton()}>
-          <button
-            class="text-xs text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded px-1 py-0.5 mt-1 transition-colors"
-            onClick={props.onToggleExpand}
-            tabIndex={0}
-          >
-            {props.isExpanded ? "less" : `+${hiddenCount()}`}
-          </button>
-        </Show>
-      </div>
-
+    <div class="relative" style={{ height: `${sectionHeight()}px`, flex: "1" }}>
       {/* Day slots - aligned with day columns */}
       <Key each={props.visibleDays} by={(d) => getDateKey(d.date)}>
         {(item) => (

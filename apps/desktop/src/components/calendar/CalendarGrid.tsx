@@ -6,19 +6,20 @@ import {
   createMemo,
   on,
   Show,
+  For,
 } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { LoaderCircle } from "lucide-solid";
+import { LoaderCircle, ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
 import {
-  AllDaySection,
   calculateAllDaySectionHeight,
   type AllDayEventLayout,
 } from "./AllDaySection";
+import { AllDayEventChip } from "./AllDayEventChip";
 import {
   addDays,
   isSameDay,
@@ -608,28 +609,74 @@ export function CalendarGrid() {
                 </Key>
               </div>
 
-              {/* Sticky All-Day Section Row */}
+              {/* Sticky All-Day Section Row - matches header row structure */}
               <div
                 class="flex bg-white border-b border-[#e8e8e8] transition-[height] duration-200 ease-out"
                 style={{
                   position: "sticky",
                   top: `${HEADER_HEIGHT}px`,
-                  "z-index": "9",
+                  "z-index": "10", // Same as header row
                   height: `${allDayHeight()}px`,
                   width: "100%",
-                  overflow: "hidden",
                 }}
               >
-                <AllDaySection
-                  visibleDays={visibleDays()}
-                  colWidth={colWidth()}
-                  eventLayouts={allDayEventLayouts()}
-                  isExpanded={allDayExpanded()}
-                  onToggleExpand={toggleAllDayExpanded}
-                />
+                {/* Sticky "All day" label - matches time column header corner */}
+                <div
+                  class="bg-white border-r border-b border-[#e8e8e8] flex flex-col items-end justify-start pt-1 pr-2"
+                  style={{
+                    width: "var(--grid-time-col-width)",
+                    height: `${allDayHeight()}px`,
+                    "flex-shrink": "0",
+                    position: "sticky",
+                    left: "0",
+                    "z-index": "20", // Higher than event chips
+                  }}
+                >
+                  <span class="text-xs text-[#91918e]">All day</span>
+                  {/* Expand/collapse button */}
+                  <Show when={allDayEventLayouts().some(l => l.row >= 2) || allDayExpanded()}>
+                    <button
+                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded p-0.5 mt-1 transition-colors"
+                      onClick={toggleAllDayExpanded}
+                      tabIndex={0}
+                      aria-label={allDayExpanded() ? "Collapse all-day events" : "Expand all-day events"}
+                    >
+                      {allDayExpanded() ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+                    </button>
+                  </Show>
+                </div>
+
+                {/* Absolute day slots - matches header date slots */}
+                <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                  {(item) => (
+                    <div
+                      class="absolute border-r border-b border-[#e8e8e8] bg-white"
+                      style={{
+                        left: `${item().left}px`,
+                        width: `${colWidth()}px`,
+                        height: `${allDayHeight()}px`,
+                        top: 0,
+                      }}
+                    />
+                  )}
+                </Key>
+
+                {/* All-day event chips */}
+                <For each={allDayExpanded() ? allDayEventLayouts() : allDayEventLayouts().filter(l => l.row < 2)}>
+                  {(layout) => (
+                    <AllDayEventChip
+                      event={layout.event}
+                      left={layout.left}
+                      width={layout.width}
+                      row={layout.row}
+                      startsBeforeView={layout.startsBeforeView}
+                      endsAfterView={layout.endsAfterView}
+                    />
+                  )}
+                </For>
               </div>
 
-              {/* Sticky Time Column Body - Sticky Left */}
+              {/* Sticky Time Column Body - Sticky Left, below all-day section */}
               <div
                 class="bg-white border-r border-[#e8e8e8]"
                 style={{
@@ -637,7 +684,7 @@ export function CalendarGrid() {
                   height: `${TOTAL_HEIGHT}px`,
                   position: "sticky",
                   left: "0",
-                  "z-index": "15",
+                  "z-index": "5", // Below all-day section (z-index 10) so it scrolls beneath
                 }}
               >
                 <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
