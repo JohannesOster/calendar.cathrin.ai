@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
+import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
@@ -17,6 +18,22 @@ const app = new Hono();
 
 // Middleware
 app.use("*", logger());
+
+// CORS - allow desktop app and Tauri webview
+app.use(
+  "*",
+  cors({
+    origin: [
+      "http://localhost:1430", // Vite dev server
+      "tauri://localhost", // Tauri webview (macOS)
+      "https://tauri.localhost", // Tauri webview (Windows)
+      "http://tauri.localhost", // Tauri webview alternative
+    ],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
 // Routes
 const routes = app
