@@ -1,41 +1,19 @@
 {
-  "name": "calendarcathrinai",
+  "name": "@cathrin/root",
   "version": "0.1.0",
-  "description": "",
+  "private": true,
   "type": "module",
   "scripts": {
-    "start": "vite",
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview",
-    "tauri": "tauri",
-    "test": "vitest",
-    "test:run": "vitest run"
-  },
-  "license": "MIT",
-  "dependencies": {
-    "@formkit/auto-animate": "^0.9.0",
-    "@solid-primitives/keyed": "^1.5.3",
-    "@tanstack/solid-virtual": "^3.13.18",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-store": "^2",
-    "@thisbeyond/solid-dnd": "^0.7.5",
-    "gsap": "^3.14.2",
-    "lucide-solid": "^0.562.0",
-    "solid-js": "^1.9.3"
+    "dev": "turbo run dev --filter=@cathrin/desktop",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:run": "turbo run test:run",
+    "tauri": "pnpm --filter @cathrin/desktop tauri",
+    "tauri:dev": "pnpm --filter @cathrin/desktop tauri dev",
+    "tauri:build": "pnpm --filter @cathrin/desktop tauri build"
   },
   "devDependencies": {
-    "@ark-ui/solid": "^5.30.0",
-    "@tailwindcss/postcss": "^4.1.18",
-    "@tailwindcss/vite": "^4.1.18",
-    "@tauri-apps/cli": "^2",
-    "autoprefixer": "^10.4.23",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3",
-    "vite-plugin-solid": "^2.11.0",
-    "vitest": "^4.0.18"
-  }
+    "turbo": "^2.4.4"
+  },
+  "packageManager": "pnpm@9.15.4"
 }

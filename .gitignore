@@ -1,7 +1,18 @@
+# Dependencies
 node_modules
-dist
 
+# Build outputs
+dist
+.turbo
+
+# IDE
 .vscode
+.idea
+
+# Environment
 .claude.env
 .env
 .claude
+
+# Package manager
+yarn.lock

@@ -4,54 +4,80 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a calendar application built with:
+This is a calendar application built as a **pnpm monorepo** with:
 - **Tauri v2** - Desktop application framework
 - **SolidJS** - Reactive UI framework
 - **TypeScript** - Type-safe JavaScript
 - **Tailwind CSS v4** - Styling framework
 - **Vite** - Build tool and dev server
+- **Turborepo** - Monorepo build orchestration
 
 The app features a macOS-style calendar with a custom title bar overlay (traffic light positioning) and collapsible sidebars that persist state to localStorage.
 
+## Monorepo Structure
+
+```
+calendar.cathrin.ai/
+├── apps/
+│   └── desktop/          # Tauri + SolidJS desktop app
+├── packages/
+│   └── shared-types/     # Shared TypeScript types (@cathrin/shared-types)
+├── pnpm-workspace.yaml   # Workspace configuration
+├── turbo.json            # Turborepo build pipeline
+└── package.json          # Root workspace scripts
+```
+
 ## Development Commands
 
-### Frontend Development
+### From Repository Root
+
+```bash
+# Install all dependencies
+pnpm install
+
+# Start desktop app in dev mode
+pnpm tauri:dev
+
+# Build all packages
+pnpm build
+
+# Run all tests
+pnpm test:run
+```
+
+### Desktop App (apps/desktop)
+
 ```bash
 # Start Vite dev server only (http://localhost:1430)
-yarn dev
+pnpm --filter @cathrin/desktop dev
 
-# Build frontend
-yarn build
-
-# Preview production build
-yarn serve
-```
-
-### Tauri Desktop App
-```bash
-# Run Tauri in development mode (starts Vite dev server automatically)
-yarn tauri dev
+# Run Tauri in development mode
+pnpm --filter @cathrin/desktop tauri dev
 
 # Build desktop app for production
-yarn tauri build
+pnpm --filter @cathrin/desktop tauri build
+
+# Run tests
+pnpm --filter @cathrin/desktop test:run
 ```
 
-### Testing
-```bash
-# Run tests in watch mode
-yarn test
-
-# Run tests once (CI mode)
-yarn test:run
-```
-
-Uses Vitest with configuration in `vite.config.ts`. Tests are in `*.test.ts` files alongside source.
+Uses Vitest with configuration in `apps/desktop/vite.config.ts`. Tests are in `*.test.ts` files alongside source.
 
 ## Architecture
 
-### Component Structure
+### Shared Types Package
 
-The app uses a three-layer layout system defined in `src/components/layout/AppShell.tsx`:
+`packages/shared-types` exports TypeScript types for API contracts between apps:
+- `Provider` - Calendar provider type (`"google" | "outlook" | "caldav"`)
+- `ApiCalendarEvent` - Event with ISO string dates
+- `ApiCalendar` - Calendar metadata
+- `ApiAccount` - Connected account info
+
+Import with: `import { ApiCalendarEvent } from "@cathrin/shared-types"`
+
+### Desktop App Component Structure
+
+The app uses a three-layer layout system defined in `apps/desktop/src/components/layout/AppShell.tsx`:
 
 1. **AppShell** - Main layout container with:
    - Draggable header region (data-tauri-drag-region)
@@ -61,21 +87,21 @@ The app uses a three-layer layout system defined in `src/components/layout/AppSh
    - Sidebar state management via exported signals and toggle functions: `leftSidebarOpen`, `rightSidebarOpen`, `toggleLeftSidebar()`, `toggleRightSidebar()`
    - Sidebar state persisted to localStorage
 
-2. **Calendar Components** (`src/components/calendar/`):
+2. **Calendar Components** (`apps/desktop/src/components/calendar/`):
    - `CalendarGrid.tsx` - Main calendar container with week view
    - `DateHeader.tsx` - Day header cells
    - `TimeColumn.tsx` - Left-side time labels
    - `DayColumn.tsx` - Individual day columns for events
    - Grid automatically scrolls to current time on mount
 
-3. **Layout Components** (`src/components/layout/`):
+3. **Layout Components** (`apps/desktop/src/components/layout/`):
    - `AppShell.tsx` - Main layout structure
    - `CalendarHeader.tsx` - Top header content
    - `LeftSidebar.tsx` - Left sidebar content
 
 ### Styling System
 
-- Uses Tailwind CSS v4 with custom CSS variables in `src/App.css`:
+- Uses Tailwind CSS v4 with custom CSS variables in `apps/desktop/src/App.css`:
   - `--grid-header-height`: Header height
   - `--grid-time-col-width`: Time column width
   - `--grid-hour-height`: Height per hour slot
@@ -83,7 +109,7 @@ The app uses a three-layer layout system defined in `src/components/layout/AppSh
 
 ### Tauri Configuration
 
-- Window configuration in `src-tauri/tauri.conf.json`:
+- Window configuration in `apps/desktop/src-tauri/tauri.conf.json`:
   - Title bar style: "Overlay" with traffic light position at (x: 20, y: 24)
   - Default size: 1200x800
   - Dev server on port 1430
@@ -119,7 +145,7 @@ The time column uses CSS transform (`translateY`) instead of a separate scrollab
 
 Uses `@thisbeyond/solid-dnd` for sortable lists.
 
-**Architecture** (`src/components/sidebar/AccountsList/`):
+**Architecture** (`apps/desktop/src/components/sidebar/AccountsList/`):
 - `AccountsList.tsx` - Main DnD orchestrator with single DragDropProvider
 - `SortableAccountItem.tsx` - Draggable account header (sortable)
 - `SortableCalendarItem.tsx` - Draggable calendar item (sortable)
@@ -178,9 +204,9 @@ function LayoutRemeasurer(props: { isDragging: () => boolean }) {
 ### Progressive Event Loading
 
 Events are fetched progressively as users scroll, using week-based caching:
-- `src/stores/events.ts` - Week-based fetching, cache queries, loading state
-- `src/lib/date-utils.ts` - Week ID calculation (`getWeekId`, `getWeekBounds`, etc.)
-- `src-tauri/src/storage.rs` - Backend cache with `fetched_weeks` tracking
+- `apps/desktop/src/stores/events.ts` - Week-based fetching, cache queries, loading state
+- `apps/desktop/src/lib/date-utils.ts` - Week ID calculation (`getWeekId`, `getWeekBounds`, etc.)
+- `apps/desktop/src-tauri/src/storage.rs` - Backend cache with `fetched_weeks` tracking
 
 **ISO Week vs Calendar Week Gotcha**:
 The calendar displays Sunday-Saturday weeks, but uses ISO 8601 week IDs (YYYY-Wnn) which are Monday-Sunday. This causes edge cases:
@@ -190,7 +216,7 @@ The calendar displays Sunday-Saturday weeks, but uses ISO 8601 week IDs (YYYY-Wn
 
 ## Rust Backend
 
-Minimal Rust backend in `src-tauri/src/`:
+Minimal Rust backend in `apps/desktop/src-tauri/src/`:
 - `main.rs` - Entry point
 - `lib.rs` - Core Tauri setup with fullscreen event hooks
 - Uses `tauri-plugin-opener` for opening URLs
