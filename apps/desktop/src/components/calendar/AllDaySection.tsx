@@ -1,13 +1,27 @@
+import { For } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
+import { AllDayEventChip } from "./AllDayEventChip";
+import type { CalendarEvent } from "../../stores/events";
 
 interface DaySlot {
   date: Date;
   left: number;
 }
 
+/** Layout info for an all-day event chip */
+export interface AllDayEventLayout {
+  event: CalendarEvent;
+  left: number; // px from left edge
+  width: number; // px width
+  row: number; // row index (0-based)
+  startsBeforeView: boolean;
+  endsAfterView: boolean;
+}
+
 interface AllDaySectionProps {
   visibleDays: DaySlot[];
   colWidth: number;
+  eventLayouts?: AllDayEventLayout[];
 }
 
 // Height in pixels for the all-day section (single row for now)
@@ -49,6 +63,20 @@ export function AllDaySection(props: AllDaySectionProps) {
           />
         )}
       </Key>
+
+      {/* All-day event chips */}
+      <For each={props.eventLayouts}>
+        {(layout) => (
+          <AllDayEventChip
+            event={layout.event}
+            left={layout.left}
+            width={layout.width}
+            row={layout.row}
+            startsBeforeView={layout.startsBeforeView}
+            endsAfterView={layout.endsAfterView}
+          />
+        )}
+      </For>
     </div>
   );
 }
