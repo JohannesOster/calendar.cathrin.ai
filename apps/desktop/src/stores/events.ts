@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
 import { apiFetch, AuthError } from "../lib/api";
 import { isAuthenticated } from "./auth";
 import {
@@ -8,6 +9,20 @@ import {
   addDays,
 } from "../lib/date-utils";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
+
+/**
+ * Cached event format (matches Rust struct)
+ */
+interface CachedEvent {
+  id: string;
+  calendar_id: string;
+  title: string;
+  start: string;
+  end: string;
+  is_all_day: boolean;
+  color: string;
+  provider: string;
+}
 
 /**
  * Event data for the frontend, with dates parsed to JS Date objects
@@ -163,8 +178,70 @@ function pruneFetchedWeeks(weeks: Set<string>, centerDate: Date): Set<string> {
 }
 
 /**
- * Refresh events from sync-server API
- * Shows loading state and surfaces errors
+ * Convert cached event to CalendarEvent
+ */
+function convertCachedEvent(event: CachedEvent): CalendarEvent {
+  return {
+    id: event.id,
+    calendarId: event.calendar_id,
+    title: event.title,
+    start: new Date(event.start),
+    end: new Date(event.end),
+    isAllDay: event.is_all_day,
+    color: event.color,
+  };
+}
+
+/**
+ * Convert API event to cached event format
+ */
+function apiEventToCached(event: ApiCalendarEvent): CachedEvent {
+  return {
+    id: event.id,
+    calendar_id: event.calendarId,
+    title: event.title,
+    start: event.start,
+    end: event.end,
+    is_all_day: event.isAllDay,
+    color: event.color,
+    provider: event.provider,
+  };
+}
+
+/**
+ * Load events from local SQLite cache
+ */
+async function loadFromCache(
+  timeMin: string,
+  timeMax: string,
+): Promise<CalendarEvent[]> {
+  try {
+    const cached = await invoke<CachedEvent[]>("get_local_cached_events", {
+      start: timeMin,
+      end: timeMax,
+    });
+    return cached.map(convertCachedEvent);
+  } catch (error) {
+    console.warn("[events] Failed to load from cache:", error);
+    return [];
+  }
+}
+
+/**
+ * Save events to local SQLite cache
+ */
+async function saveToCache(events: ApiCalendarEvent[]): Promise<void> {
+  try {
+    const cached = events.map(apiEventToCached);
+    await invoke("cache_events_locally", { events: cached });
+  } catch (error) {
+    console.warn("[events] Failed to save to cache:", error);
+  }
+}
+
+/**
+ * Refresh events from sync-server API with stale-while-revalidate
+ * Shows cached data immediately, then fetches fresh data in background
  * @param window Optional time window to fetch events for. Defaults to initial window.
  */
 export async function refreshEvents(window?: {
@@ -177,56 +254,66 @@ export async function refreshEvents(window?: {
     return;
   }
 
-  // Only set global loading on initial fetch or full refresh
-  if (!window) {
+  let timeMin: string;
+  let timeMax: string;
+
+  if (window) {
+    timeMin = window.start.toISOString();
+    timeMax = window.end.toISOString();
+  } else {
+    const defaultWindow = getTimeWindow();
+    timeMin = defaultWindow.timeMin;
+    timeMax = defaultWindow.timeMax;
+  }
+
+  // 1. Show cached events immediately (stale-while-revalidate)
+  const cachedEvents = await loadFromCache(timeMin, timeMax);
+  if (cachedEvents.length > 0) {
+    setEvents(processEvents(cachedEvents, events()));
+  }
+
+  // Only set global loading if we have no cached data
+  if (!window && cachedEvents.length === 0) {
     setIsLoading(true);
   }
   setEventsError(null);
 
+  // 2. Fetch fresh data from server
   try {
-    let timeMin: string;
-    let timeMax: string;
-
-    if (window) {
-      timeMin = window.start.toISOString();
-      timeMax = window.end.toISOString();
-    } else {
-      const defaultWindow = getTimeWindow();
-      timeMin = defaultWindow.timeMin;
-      timeMax = defaultWindow.timeMax;
-    }
-
-    // Fetch events from sync-server (handles all accounts server-side)
     const apiEvents = await apiFetch<ApiCalendarEvent[]>(
       `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`,
     );
 
     const newEvents = apiEvents.map(convertApiEvent);
 
-    // Merge new events with existing ones
-    // If window IS provided, merge with existing and prune to prevent unbounded growth.
-    // If window IS NOT provided (full refresh), replace entirely (no pruning needed).
+    // Update UI with fresh data
     const now = new Date();
     if (window) {
       setEvents((prev) => {
         const merged = processEvents(newEvents, prev);
         return pruneEvents(merged, now);
       });
-      // Also prune fetched weeks tracker
       setFetchedWeeks((prev) => pruneFetchedWeeks(prev, now));
     } else {
       setEvents(processEvents(newEvents, []));
     }
 
     setLastRefreshed(now);
+
+    // 3. Save fresh data to local cache
+    await saveToCache(apiEvents);
   } catch (error) {
-    if (error instanceof AuthError) {
-      // Auth error - session expired, user needs to re-authenticate
-      setEventsError("Please reconnect your account");
+    // If we have cached data, don't show error (offline mode)
+    if (cachedEvents.length === 0) {
+      if (error instanceof AuthError) {
+        setEventsError("Please reconnect your account");
+      } else {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        setEventsError(errorMessage || "Failed to refresh events");
+      }
     } else {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      setEventsError(errorMessage || "Failed to refresh events");
+      console.log("[events] Using cached data (offline or server error)");
     }
   } finally {
     setIsLoading(false);
@@ -234,12 +321,23 @@ export async function refreshEvents(window?: {
 }
 
 /**
- * Initialize events: refresh from API
+ * Initialize events: load from cache, then refresh from API
  * Call this on app startup after auth is initialized
  */
 export async function initializeEvents(): Promise<void> {
   if (isAuthenticated()) {
-    await refreshEvents();
+    // Load from cache first for instant display
+    const defaultWindow = getTimeWindow();
+    const cached = await loadFromCache(
+      defaultWindow.timeMin,
+      defaultWindow.timeMax,
+    );
+    if (cached.length > 0) {
+      setEvents(processEvents(cached, []));
+    }
+
+    // Then refresh from server in background
+    refreshEvents();
   }
 }
 

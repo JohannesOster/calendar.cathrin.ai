@@ -508,3 +508,54 @@ pub async fn open_url(app: AppHandle<Wry>, url: String) -> Result<(), String> {
         .open_url(&url, None::<&str>)
         .map_err(|e| format!("Failed to open URL: {}", e))
 }
+
+// ============================================================================
+// Local SQLite Cache Commands
+// ============================================================================
+
+use crate::local_cache::{CachedEvent, LocalCache};
+use std::sync::OnceLock;
+
+/// Global cache instance
+static CACHE: OnceLock<LocalCache> = OnceLock::new();
+
+/// Initialize the local cache (call during app setup)
+pub fn init_local_cache(app: &AppHandle<Wry>) -> Result<(), String> {
+    let cache = LocalCache::new(app).map_err(|e| e.to_string())?;
+    CACHE.set(cache).map_err(|_| "Cache already initialized".to_string())
+}
+
+fn get_cache() -> Result<&'static LocalCache, String> {
+    CACHE.get().ok_or_else(|| "Cache not initialized".to_string())
+}
+
+/// Get cached events for a date range
+#[tauri::command]
+pub async fn get_local_cached_events(
+    start: String,
+    end: String,
+) -> Result<Vec<CachedEvent>, String> {
+    let cache = get_cache()?;
+    cache.get_events(&start, &end).map_err(|e| e.to_string())
+}
+
+/// Store events in local cache
+#[tauri::command]
+pub async fn cache_events_locally(events: Vec<CachedEvent>) -> Result<usize, String> {
+    let cache = get_cache()?;
+    cache.upsert_events(&events).map_err(|e| e.to_string())
+}
+
+/// Clear local event cache
+#[tauri::command]
+pub async fn clear_local_cache() -> Result<(), String> {
+    let cache = get_cache()?;
+    cache.clear().map_err(|e| e.to_string())
+}
+
+/// Prune old events from cache (older than 90 days)
+#[tauri::command]
+pub async fn prune_local_cache() -> Result<usize, String> {
+    let cache = get_cache()?;
+    cache.prune_old_events(90).map_err(|e| e.to_string())
+}

@@ -2,14 +2,16 @@ use tauri::{Emitter, Manager};
 
 mod calendar_api;
 mod commands;
+mod local_cache;
 mod oauth;
 mod storage;
 
 use commands::{
-    clear_cached_events, clear_session_token, ensure_valid_token, fetch_events,
-    fetch_events_for_week, get_cached_events, get_connected_accounts, get_session_token,
-    open_url, refresh_account_calendars, remove_account, save_session_token, start_oauth_flow,
-    toggle_calendar_visibility,
+    cache_events_locally, clear_cached_events, clear_local_cache, clear_session_token,
+    ensure_valid_token, fetch_events, fetch_events_for_week, get_cached_events,
+    get_connected_accounts, get_local_cached_events, get_session_token, init_local_cache,
+    open_url, prune_local_cache, refresh_account_calendars, remove_account, save_session_token,
+    start_oauth_flow, toggle_calendar_visibility,
 };
 
 #[cfg(target_os = "macos")]
@@ -280,8 +282,18 @@ pub fn run() {
             get_session_token,
             clear_session_token,
             open_url,
+            // Local SQLite cache commands
+            get_local_cached_events,
+            cache_events_locally,
+            clear_local_cache,
+            prune_local_cache,
         ])
         .setup(|app| {
+            // Initialize local SQLite cache
+            if let Err(e) = init_local_cache(app.handle()) {
+                eprintln!("Failed to initialize local cache: {}", e);
+            }
+
             #[cfg(target_os = "macos")]
             {
                 let app_handle = app.handle().clone();
