@@ -19,7 +19,8 @@ The app features a macOS-style calendar with a custom title bar overlay (traffic
 ```
 calendar.cathrin.ai/
 ├── apps/
-│   └── desktop/          # Tauri + SolidJS desktop app
+│   ├── desktop/          # Tauri + SolidJS desktop app (@cathrin/desktop)
+│   └── sync-server/      # Hono API server (@cathrin/sync-server)
 ├── packages/
 │   └── shared-types/     # Shared TypeScript types (@cathrin/shared-types)
 ├── pnpm-workspace.yaml   # Workspace configuration
@@ -63,7 +64,40 @@ pnpm --filter @cathrin/desktop test:run
 
 Uses Vitest with configuration in `apps/desktop/vite.config.ts`. Tests are in `*.test.ts` files alongside source.
 
+### Sync Server (apps/sync-server)
+
+```bash
+# Start dev server with hot reload (http://localhost:3000)
+pnpm --filter @cathrin/sync-server dev
+
+# Build for production
+pnpm --filter @cathrin/sync-server build
+
+# Start production server
+pnpm --filter @cathrin/sync-server start
+```
+
 ## Architecture
+
+### Sync Server
+
+`apps/sync-server` is a Hono-based TypeScript server that will proxy calendar provider APIs.
+
+**Structure:**
+```
+apps/sync-server/src/
+├── index.ts          # Entry point, middleware, route mounting
+├── routes/           # API route handlers
+│   └── health.ts     # Health check endpoint
+├── services/         # Business logic (future)
+└── middlewares/      # Custom middleware (future)
+```
+
+**Endpoints:**
+- `GET /health` - Health check, returns `{ status: "ok", timestamp: "..." }`
+
+**Type exports:**
+The server exports `AppType` for future RPC client usage with Hono's type-safe client.
 
 ### Shared Types Package
 
