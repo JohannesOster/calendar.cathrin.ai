@@ -79,24 +79,75 @@ async function validateSession(token: string): Promise<boolean> {
 
 /**
  * Start the OAuth flow by opening the browser to the server's OAuth endpoint
+ * Uses a state-based polling mechanism for the callback
  */
 export async function startServerOAuth(): Promise<void> {
   setIsAuthLoading(true);
   setAuthError(null);
 
   try {
-    // Open browser to OAuth endpoint
-    await invoke("open_url", { url: `${SYNC_SERVER_URL}/auth/google` });
+    // Step 1: Create a pending state on the server
+    const stateResponse = await fetch(`${SYNC_SERVER_URL}/auth/state`, {
+      method: "POST",
+    });
 
-    // Token will be received via deep link handler
-    // The handleAuthCallback function will be called when the app receives the token
+    if (!stateResponse.ok) {
+      throw new Error("Failed to create OAuth state");
+    }
+
+    const { state } = await stateResponse.json();
+
+    // Step 2: Open browser to start OAuth flow
+    await invoke("open_url", {
+      url: `${SYNC_SERVER_URL}/auth/start?state=${state}`,
+    });
+
+    // Step 3: Poll for the token
+    const token = await pollForToken(state);
+
+    // Step 4: Handle the callback
+    await handleAuthCallback(token);
   } catch (error) {
-    console.error("Failed to start OAuth:", error);
+    console.error("Failed to complete OAuth:", error);
     setAuthError(
-      error instanceof Error ? error.message : "Failed to start OAuth",
+      error instanceof Error ? error.message : "Failed to complete OAuth",
     );
     setIsAuthLoading(false);
   }
+}
+
+/**
+ * Poll the server for the OAuth token
+ * Returns when the token is available or times out
+ */
+async function pollForToken(state: string): Promise<string> {
+  const maxAttempts = 120; // 2 minutes at 1 second intervals
+  const pollInterval = 1000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+    const response = await fetch(
+      `${SYNC_SERVER_URL}/auth/poll?state=${state}`,
+    );
+
+    if (response.status === 202) {
+      // Still pending, continue polling
+      continue;
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "OAuth failed");
+    }
+
+    const data = await response.json();
+    if (data.token) {
+      return data.token;
+    }
+  }
+
+  throw new Error("OAuth timed out - please try again");
 }
 
 /**

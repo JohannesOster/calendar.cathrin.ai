@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { googleAuth } from "@hono/oauth-providers/google";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, accounts, sessions } from "../db/schema.js";
+import { users, accounts, sessions, oauthPendingTokens } from "../db/schema.js";
 import { encrypt } from "../lib/crypto.js";
 import { createSessionToken, getSessionExpiresAt } from "../lib/jwt.js";
 import { authMiddleware } from "../middlewares/auth.js";
@@ -15,6 +15,93 @@ const GOOGLE_SCOPES = [
 ];
 
 export const authRoute = new Hono()
+  // Start OAuth flow with state parameter from desktop client
+  // Desktop creates state, then opens browser to this endpoint
+  .get("/start", async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    const state = c.req.query("state");
+    if (!state) {
+      return c.json({ error: "Missing state parameter" }, 400);
+    }
+
+    // Verify state exists in database
+    const pending = await db.query.oauthPendingTokens.findFirst({
+      where: eq(oauthPendingTokens.state, state),
+    });
+
+    if (!pending || pending.expiresAt < new Date()) {
+      return c.json({ error: "Invalid or expired state" }, 400);
+    }
+
+    // Set state in cookie so we can retrieve it after OAuth callback
+    c.header("Set-Cookie", `oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
+
+    // Redirect to Google OAuth
+    return c.redirect("/auth/google");
+  })
+  // Create a pending OAuth state (called before opening browser)
+  .post("/state", async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    // Generate a random state
+    const state = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store pending state
+    await db.insert(oauthPendingTokens).values({
+      state,
+      expiresAt,
+    });
+
+    // Clean up expired tokens (fire and forget)
+    db.delete(oauthPendingTokens)
+      .where(lt(oauthPendingTokens.expiresAt, new Date()))
+      .catch(() => {});
+
+    return c.json({ state });
+  })
+  // Poll for OAuth completion
+  .get("/poll", async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    const state = c.req.query("state");
+    if (!state) {
+      return c.json({ error: "Missing state parameter" }, 400);
+    }
+
+    const pending = await db.query.oauthPendingTokens.findFirst({
+      where: eq(oauthPendingTokens.state, state),
+    });
+
+    if (!pending) {
+      return c.json({ error: "State not found or expired" }, 404);
+    }
+
+    if (pending.expiresAt < new Date()) {
+      await db.delete(oauthPendingTokens).where(eq(oauthPendingTokens.state, state));
+      return c.json({ error: "State expired" }, 410);
+    }
+
+    if (pending.error) {
+      await db.delete(oauthPendingTokens).where(eq(oauthPendingTokens.state, state));
+      return c.json({ error: pending.error }, 400);
+    }
+
+    if (!pending.token) {
+      return c.json({ status: "pending" }, 202);
+    }
+
+    // Token is ready - delete the pending entry and return it
+    await db.delete(oauthPendingTokens).where(eq(oauthPendingTokens.state, state));
+    return c.json({ token: pending.token });
+  })
   // Google OAuth middleware
   .use(
     "/google",
@@ -133,6 +220,22 @@ export const authRoute = new Hono()
         .returning();
 
       const jwt = await createSessionToken(user.id, session.id);
+
+      // Check if there's a pending state in cookie (desktop flow)
+      const cookieHeader = c.req.header("Cookie") || "";
+      const stateMatch = cookieHeader.match(/oauth_state=([^;]+)/);
+      const pendingState = stateMatch ? stateMatch[1] : null;
+
+      if (pendingState) {
+        // Store the token for the desktop app to poll
+        await db
+          .update(oauthPendingTokens)
+          .set({ token: jwt })
+          .where(eq(oauthPendingTokens.state, pendingState));
+
+        // Clear the cookie
+        c.header("Set-Cookie", "oauth_state=; Path=/; HttpOnly; Max-Age=0");
+      }
 
       // Success page that shows the token for the desktop app to capture
       // The desktop app will read this from the page or we can use a custom protocol

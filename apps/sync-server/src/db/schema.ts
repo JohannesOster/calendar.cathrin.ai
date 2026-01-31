@@ -128,3 +128,19 @@ export const calendarSyncState = pgTable(
     ),
   ]
 );
+
+/**
+ * Temporary storage for OAuth state tokens
+ * Used for desktop app polling callback mechanism
+ */
+export const oauthPendingTokens = pgTable(
+  "oauth_pending_tokens",
+  {
+    state: text("state").primaryKey(),
+    token: text("token"),
+    error: text("error"),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("oauth_pending_expires_idx").on(table.expiresAt)]
+);
