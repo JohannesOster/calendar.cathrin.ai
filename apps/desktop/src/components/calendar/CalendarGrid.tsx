@@ -383,7 +383,7 @@ export function CalendarGrid() {
           /* ONE Main Scroll Container - Week View */
           <div
             ref={scrollContainerRef}
-            class="flex-1 overflow-auto overscroll-none"
+            class="flex-1 overflow-auto overscroll-none scrollbar-hidden"
             style={{
               "position": "relative",
               "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
