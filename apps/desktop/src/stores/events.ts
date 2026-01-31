@@ -45,6 +45,9 @@ const DAYS_AFTER = 30;
 const HOT_ZONE_DAYS = 30; // Days each direction from today - never evicted
 const MAX_LRU_WEEKS = 50; // Maximum weeks to keep in LRU cache (excluding hot zone)
 
+// Staleness configuration
+const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes - revalidate after this
+
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
 export const [isLoading, setIsLoading] = createSignal(false);
@@ -71,6 +74,20 @@ const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
 const weekAccessTimes = new Map<string, number>();
 
 /**
+ * Staleness tracking: Map of weekId -> fetchedAt timestamp
+ * Used to determine if week data needs background revalidation
+ */
+const weekFetchTimes = new Map<string, number>();
+
+/**
+ * Track which weeks are currently being revalidated
+ * Prevents duplicate revalidation requests
+ */
+const [revalidatingWeeks, setRevalidatingWeeks] = createSignal<Set<string>>(
+  new Set(),
+);
+
+/**
  * Record a week access for LRU tracking
  */
 function recordWeekAccess(weekId: string): void {
@@ -85,6 +102,32 @@ function recordWeeksAccess(weekIds: string[]): void {
   for (const weekId of weekIds) {
     weekAccessTimes.set(weekId, now);
   }
+}
+
+/**
+ * Record fetch time for staleness tracking
+ */
+function recordWeekFetch(weekId: string): void {
+  weekFetchTimes.set(weekId, Date.now());
+}
+
+/**
+ * Record fetch times for multiple weeks
+ */
+function recordWeeksFetch(weekIds: string[]): void {
+  const now = Date.now();
+  for (const weekId of weekIds) {
+    weekFetchTimes.set(weekId, now);
+  }
+}
+
+/**
+ * Check if a week's data is stale and needs revalidation
+ */
+function isWeekStale(weekId: string): boolean {
+  const fetchedAt = weekFetchTimes.get(weekId);
+  if (!fetchedAt) return true; // Never fetched = stale
+  return Date.now() - fetchedAt > STALE_THRESHOLD_MS;
 }
 
 /**
@@ -192,9 +235,10 @@ function evictStaleWeeks(): void {
   if (evicted.length > 0) {
     console.log(`[events] Evicting ${evicted.length} stale weeks:`, evicted);
 
-    // Clean up LRU tracking for evicted weeks
+    // Clean up tracking for evicted weeks
     for (const weekId of evicted) {
       weekAccessTimes.delete(weekId);
+      weekFetchTimes.delete(weekId);
     }
 
     // Update fetched weeks
@@ -207,6 +251,59 @@ function evictStaleWeeks(): void {
         return toKeep.has(weekId);
       }),
     );
+  }
+}
+
+/**
+ * Revalidate a week's data in the background
+ * Does not show loading state - stale data remains visible during fetch
+ */
+async function revalidateWeekBackground(weekId: string): Promise<void> {
+  // Skip if already revalidating this week
+  if (revalidatingWeeks().has(weekId)) {
+    console.log(`[events] Skipping revalidation for ${weekId} - already in progress`);
+    return;
+  }
+
+  // Mark as revalidating
+  setRevalidatingWeeks((prev) => {
+    const updated = new Set(prev);
+    updated.add(weekId);
+    return updated;
+  });
+
+  console.log(`[events] Revalidating stale week ${weekId}...`);
+
+  try {
+    const { start, end } = getWeekBounds(weekId);
+    const timeMin = start.toISOString();
+    const timeMax = end.toISOString();
+
+    // Fetch fresh data from server
+    const apiEvents = await apiFetch<ApiCalendarEvent[]>(
+      `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`,
+    );
+
+    const newEvents = apiEvents.map(convertApiEvent);
+
+    // Record fresh fetch time
+    recordWeekFetch(weekId);
+    recordWeekAccess(weekId);
+
+    // Merge fresh events into cache (replaces old events for this week)
+    setEvents((prev) => processEvents(newEvents, prev));
+
+    console.log(`[events] Revalidated ${weekId} - ${newEvents.length} events`);
+  } catch (error) {
+    // Log but don't surface error - stale data is still visible
+    console.warn(`[events] Failed to revalidate ${weekId}:`, error);
+  } finally {
+    // Clear revalidating state
+    setRevalidatingWeeks((prev) => {
+      const updated = new Set(prev);
+      updated.delete(weekId);
+      return updated;
+    });
   }
 }
 
@@ -322,9 +419,10 @@ export async function refreshEvents(window?: {
     // Update UI with fresh data
     const now = new Date();
     if (window) {
-      // Record access for all weeks in the window
+      // Record access and fetch times for all weeks in the window
       const weeksInWindow = getWeeksInRange(new Date(timeMin), new Date(timeMax));
       recordWeeksAccess(weeksInWindow);
+      recordWeeksFetch(weeksInWindow);
 
       setEvents((prev) => processEvents(newEvents, prev));
 
@@ -409,6 +507,23 @@ export function isLoadingWeeks(): boolean {
 }
 
 /**
+ * Check if any weeks are currently being revalidated
+ */
+export function isRevalidatingWeeks(): boolean {
+  return revalidatingWeeks().size > 0;
+}
+
+/**
+ * Get weeks that are stale and need revalidation
+ * Useful for periodic polling to know which weeks to refresh
+ */
+export function getStaleWeeks(weekIds: string[]): string[] {
+  return weekIds.filter(
+    (weekId) => fetchedWeeks().has(weekId) && isWeekStale(weekId),
+  );
+}
+
+/**
  * Update visible weeks and cancel fetches for non-visible weeks
  * Call this when visible weeks change to invalidate stale requests
  */
@@ -461,9 +576,19 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     return;
   }
 
-  // Skip if already fetched
-  if (fetchedWeeks().has(weekId)) {
-    console.log(`[events] Skipping ${weekId} - already cached`);
+  const isFetched = fetchedWeeks().has(weekId);
+  const isStale = isWeekStale(weekId);
+
+  // If we have cached data that's still fresh, skip
+  if (isFetched && !isStale) {
+    console.log(`[events] Skipping ${weekId} - fresh cache`);
+    return;
+  }
+
+  // If we have cached data but it's stale, trigger background revalidation
+  if (isFetched && isStale) {
+    // Fire and forget - don't await
+    revalidateWeekBackground(weekId);
     return;
   }
 
@@ -499,8 +624,9 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
 
     const newEvents = apiEvents.map(convertApiEvent);
 
-    // Record week access for LRU tracking
+    // Record week access for LRU tracking and fetch time for staleness
     recordWeekAccess(weekId);
+    recordWeekFetch(weekId);
 
     // Merge new events with existing
     setEvents((prev) => processEvents(newEvents, prev));
@@ -567,9 +693,11 @@ export function clearEvents(): void {
   setEvents([]);
   setFetchedWeeks(new Set());
   setFetchingWeeks(new Set());
+  setRevalidatingWeeks(new Set());
   setLastRefreshed(null);
   setEventsError(null);
   weekAccessTimes.clear();
+  weekFetchTimes.clear();
   currentRequestId++;
 }
 
