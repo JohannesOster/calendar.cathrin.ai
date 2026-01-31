@@ -14,14 +14,21 @@ export interface AllDayLayoutInfo {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Get days between two dates (floor division)
+ * Get the date components (year, month, day) in UTC
+ * This avoids timezone issues with date-only strings
+ */
+function getUTCDateOnly(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+/**
+ * Get days between two dates using UTC to avoid timezone issues
+ * This is important for all-day events which use date-only strings
  */
 function daysBetween(from: Date, to: Date): number {
-  const fromMidnight = new Date(from);
-  fromMidnight.setHours(0, 0, 0, 0);
-  const toMidnight = new Date(to);
-  toMidnight.setHours(0, 0, 0, 0);
-  return Math.floor((toMidnight.getTime() - fromMidnight.getTime()) / MS_PER_DAY);
+  const fromUTC = getUTCDateOnly(from);
+  const toUTC = getUTCDateOnly(to);
+  return Math.round((toUTC - fromUTC) / MS_PER_DAY);
 }
 
 /**
@@ -52,19 +59,21 @@ function columnsOverlap(
 /**
  * Check if an event overlaps the view range
  * All-day events use exclusive end (event on Jan 15 has end of Jan 16 00:00)
+ * Uses UTC comparison to avoid timezone issues
  */
 function eventOverlapsView(
   event: CalendarEvent,
   viewStart: Date,
   viewEnd: Date
 ): boolean {
-  // viewEnd is inclusive (the last visible day)
-  // event.end is exclusive (midnight of day after last event day)
-  const viewEndExclusive = new Date(viewEnd);
-  viewEndExclusive.setDate(viewEndExclusive.getDate() + 1);
-  viewEndExclusive.setHours(0, 0, 0, 0);
+  // Compare using UTC date components to avoid timezone issues
+  const eventStartUTC = getUTCDateOnly(event.start);
+  const eventEndUTC = getUTCDateOnly(event.end);
+  const viewStartUTC = getUTCDateOnly(viewStart);
+  // viewEnd is inclusive, so add 1 day for exclusive comparison
+  const viewEndExclusiveUTC = getUTCDateOnly(viewEnd) + MS_PER_DAY;
 
-  return event.start < viewEndExclusive && event.end > viewStart;
+  return eventStartUTC < viewEndExclusiveUTC && eventEndUTC > viewStartUTC;
 }
 
 /**
@@ -82,11 +91,10 @@ export function calculateAllDayLayouts(
 ): Map<string, AllDayLayoutInfo> {
   const layouts = new Map<string, AllDayLayoutInfo>();
 
-  // Normalize dates to midnight
-  const viewStartNorm = new Date(viewStart);
-  viewStartNorm.setHours(0, 0, 0, 0);
-  const viewEndNorm = new Date(viewEnd);
-  viewEndNorm.setHours(0, 0, 0, 0);
+  // Use UTC date components for consistent comparison
+  // (avoids timezone issues with date-only strings from API)
+  const viewStartNorm = new Date(getUTCDateOnly(viewStart));
+  const viewEndNorm = new Date(getUTCDateOnly(viewEnd));
 
   // Filter to all-day events that overlap the view
   const allDayEvents = events.filter(
@@ -103,22 +111,22 @@ export function calculateAllDayLayouts(
   const rows: Array<Array<{ startCol: number; span: number }>> = [];
 
   for (const event of sorted) {
-    // Calculate column span for this event
-    // startCol: days from viewStart to event.start (min 0)
-    const rawStartCol = daysBetween(viewStartNorm, event.start);
-    const startCol = Math.max(0, rawStartCol);
-
     // For all-day events, end is exclusive (midnight of next day)
-    // So the last visible day of the event is (end - 1 day)
-    const eventLastDay = new Date(event.end);
-    eventLastDay.setDate(eventLastDay.getDate() - 1);
-    eventLastDay.setHours(0, 0, 0, 0);
+    // So event duration in days = daysBetween(start, end)
+    const eventDurationDays = daysBetween(event.start, event.end);
 
-    // endCol: days from viewStart to event's last day (max 6)
-    const rawEndCol = daysBetween(viewStartNorm, eventLastDay);
-    const endCol = Math.min(6, rawEndCol);
+    // Calculate event position relative to view
+    const eventStartOffset = daysBetween(viewStartNorm, event.start);
 
-    // Span is the number of columns (1 = single day)
+    // startCol: where the event starts in the view (min 0)
+    const startCol = Math.max(0, eventStartOffset);
+
+    // endCol: where the event ends in the view (max 6)
+    // The event's last day is at offset: eventStartOffset + eventDurationDays - 1
+    const eventEndOffset = eventStartOffset + eventDurationDays - 1;
+    const endCol = Math.min(6, eventEndOffset);
+
+    // Span is the visible portion of the event
     const span = endCol - startCol + 1;
 
     // Skip if event has no visible span (shouldn't happen after filtering)
@@ -142,12 +150,13 @@ export function calculateAllDayLayouts(
     }
     rows[assignedRow].push(eventSpan);
 
-    // Determine if event extends beyond view
-    const startsBeforeView = event.start < viewStartNorm;
-    const viewEndNextDay = new Date(viewEndNorm);
-    viewEndNextDay.setDate(viewEndNextDay.getDate() + 1);
-    viewEndNextDay.setHours(0, 0, 0, 0);
-    const endsAfterView = event.end > viewEndNextDay;
+    // Determine if event extends beyond view (using UTC comparison)
+    const eventStartUTC = getUTCDateOnly(event.start);
+    const eventEndUTC = getUTCDateOnly(event.end);
+    const viewStartUTC = getUTCDateOnly(viewStartNorm);
+    const viewEndNextDayUTC = getUTCDateOnly(viewEndNorm) + MS_PER_DAY;
+    const startsBeforeView = eventStartUTC < viewStartUTC;
+    const endsAfterView = eventEndUTC > viewEndNextDayUTC;
 
     layouts.set(event.id, {
       row: assignedRow,
