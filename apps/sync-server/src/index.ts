@@ -8,6 +8,10 @@ import { accountsRoute } from "./routes/accounts.js";
 import { calendarsRoute } from "./routes/calendars.js";
 import { eventsRoute } from "./routes/events.js";
 import { closeDatabase } from "./db/index.js";
+import {
+  startBackgroundSync,
+  stopBackgroundSync,
+} from "./services/background-sync.js";
 
 const app = new Hono();
 
@@ -30,11 +34,17 @@ const port = Number(process.env.PORT) || 3000;
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Server running on http://localhost:${info.port}`);
+
+  // Start background sync service
+  startBackgroundSync();
 });
 
 // Graceful shutdown
 const shutdown = async () => {
   console.log("\nShutting down gracefully...");
+
+  // Stop background sync
+  stopBackgroundSync();
 
   await closeDatabase();
 
