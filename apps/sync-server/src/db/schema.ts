@@ -3,9 +3,11 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  unique,
   index,
   boolean,
   jsonb,
+  serial,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -143,4 +145,34 @@ export const oauthPendingTokens = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [index("oauth_pending_expires_idx").on(table.expiresAt)]
+);
+
+/**
+ * Tracks which weeks have been fetched from the calendar provider
+ * Used to distinguish "empty week (no events)" from "week never fetched"
+ * Enables on-demand fetching when client requests unfetched ranges
+ */
+export const fetchedWeeks = pgTable(
+  "fetched_weeks",
+  {
+    id: serial("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    calendarId: text("calendar_id").notNull(),
+    weekId: text("week_id").notNull(), // ISO 8601: "2025-W05"
+    fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  },
+  (table) => [
+    unique("fetched_weeks_unique").on(
+      table.accountId,
+      table.calendarId,
+      table.weekId
+    ),
+    index("fetched_weeks_lookup_idx").on(
+      table.accountId,
+      table.calendarId,
+      table.weekId
+    ),
+  ]
 );

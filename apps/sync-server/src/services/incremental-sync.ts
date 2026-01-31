@@ -1,11 +1,12 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents, calendarSyncState } from "../db/schema.js";
+import { serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import {
   GoogleCalendarService,
   SyncTokenExpiredError,
 } from "./google-calendar.js";
+import { getWeekId, getWeeksInRange } from "../lib/week-utils.js";
 
 /**
  * Perform incremental sync for a calendar using its syncToken
@@ -49,6 +50,7 @@ export async function syncCalendarIncremental(
 
     let updated = 0;
     let deleted = 0;
+    const affectedWeekIds = new Set<string>();
 
     // Process each event
     for (const event of events) {
@@ -65,12 +67,17 @@ export async function syncCalendarIncremental(
       if (event.title === "(No title)" && !event.start && !event.end) {
         // This is likely a deleted event - remove it
         if (existingEvent) {
+          // Track the week of the deleted event for fetchedAt update
+          affectedWeekIds.add(getWeekId(existingEvent.start));
           await db
             .delete(serverEvents)
             .where(eq(serverEvents.id, existingEvent.id));
           deleted++;
         }
       } else {
+        // Track the week of this event
+        affectedWeekIds.add(getWeekId(new Date(event.start)));
+
         // Upsert the event
         await db
           .insert(serverEvents)
@@ -98,6 +105,21 @@ export async function syncCalendarIncremental(
           });
         updated++;
       }
+    }
+
+    // Update fetchedAt for all affected weeks
+    if (affectedWeekIds.size > 0) {
+      const weekIdArray = Array.from(affectedWeekIds);
+      await db
+        .update(fetchedWeeks)
+        .set({ fetchedAt: new Date() })
+        .where(
+          and(
+            eq(fetchedWeeks.accountId, accountId),
+            eq(fetchedWeeks.calendarId, calendarId),
+            inArray(fetchedWeeks.weekId, weekIdArray)
+          )
+        );
     }
 
     // Update sync token
@@ -212,6 +234,26 @@ export async function syncCalendarFull(
         lastSyncAt: new Date(),
       },
     });
+
+  // Record all fetched weeks
+  const weeksInRange = getWeeksInRange(timeMin, timeMax);
+  for (const weekId of weeksInRange) {
+    await db
+      .insert(fetchedWeeks)
+      .values({
+        accountId,
+        calendarId,
+        weekId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          fetchedWeeks.accountId,
+          fetchedWeeks.calendarId,
+          fetchedWeeks.weekId,
+        ],
+        set: { fetchedAt: new Date() },
+      });
+  }
 
   return { synced: events.length, syncToken };
 }

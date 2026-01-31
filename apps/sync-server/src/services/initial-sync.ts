@@ -1,8 +1,14 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { accounts, serverEvents, calendarSyncState } from "../db/schema.js";
+import {
+  accounts,
+  serverEvents,
+  calendarSyncState,
+  fetchedWeeks,
+} from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
+import { getWeeksInRange } from "../lib/week-utils.js";
 
 // Initial sync window: ±6 months
 const INITIAL_SYNC_MONTHS_BEFORE = 6;
@@ -161,6 +167,30 @@ export async function performInitialSync(accountId: string): Promise<void> {
               lastSyncAt: new Date(),
             },
           });
+
+        // Record all fetched weeks for on-demand fetching logic
+        const weeksInRange = getWeeksInRange(timeMin, timeMax);
+        console.log(
+          `[initial-sync] Recording ${weeksInRange.length} fetched weeks for "${calendar.name}"`
+        );
+
+        for (const weekId of weeksInRange) {
+          await db
+            .insert(fetchedWeeks)
+            .values({
+              accountId,
+              calendarId: calendar.id,
+              weekId,
+            })
+            .onConflictDoUpdate({
+              target: [
+                fetchedWeeks.accountId,
+                fetchedWeeks.calendarId,
+                fetchedWeeks.weekId,
+              ],
+              set: { fetchedAt: new Date() },
+            });
+        }
       } catch (error) {
         console.error(
           `[initial-sync] Failed to sync calendar "${calendar.name}":`,
