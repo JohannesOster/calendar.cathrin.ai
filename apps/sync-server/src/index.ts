@@ -19,16 +19,31 @@ const app = new Hono();
 // Middleware
 app.use("*", logger());
 
-// CORS - allow desktop app and Tauri webview
-app.use(
-  "*",
-  cors({
-    origin: [
-      "http://localhost:1430", // Vite dev server
+// CORS configuration
+// In production, only allow Tauri webview origins
+// In development, also allow Vite dev server
+const isDevelopment = process.env.NODE_ENV !== "production";
+const corsOrigins = isDevelopment
+  ? [
+      "http://localhost:1430", // Vite dev server (development only)
       "tauri://localhost", // Tauri webview (macOS)
       "https://tauri.localhost", // Tauri webview (Windows)
       "http://tauri.localhost", // Tauri webview alternative
-    ],
+    ]
+  : [
+      "tauri://localhost", // Tauri webview (macOS)
+      "https://tauri.localhost", // Tauri webview (Windows)
+      "http://tauri.localhost", // Tauri webview alternative
+    ];
+
+if (isDevelopment) {
+  console.log("[cors] Development mode - allowing localhost origins");
+}
+
+app.use(
+  "*",
+  cors({
+    origin: corsOrigins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
