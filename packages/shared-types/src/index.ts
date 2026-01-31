@@ -64,15 +64,3 @@ export interface ApiAccount {
   lastSyncAt?: string | null;
 }
 
-// =============================================================================
-// Convenience aliases matching the epic's API contract naming
-// =============================================================================
-
-/** @deprecated Use ApiCalendarEvent for clarity */
-export type CalendarEvent = ApiCalendarEvent;
-
-/** @deprecated Use ApiCalendar for clarity */
-export type Calendar = ApiCalendar;
-
-/** @deprecated Use ApiAccount for clarity */
-export type Account = ApiAccount;
