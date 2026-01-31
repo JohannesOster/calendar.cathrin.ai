@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "last_reanchor_at" timestamp;

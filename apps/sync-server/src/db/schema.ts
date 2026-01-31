@@ -44,6 +44,7 @@ export const accounts = pgTable(
     syncStatus: text("sync_status").default("pending"), // pending, syncing, complete, failed
     syncError: text("sync_error"),
     lastSyncAt: timestamp("last_sync_at"),
+    lastReanchorAt: timestamp("last_reanchor_at"), // Last time reanchoring ran for this account
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

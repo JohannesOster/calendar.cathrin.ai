@@ -106,3 +106,36 @@ export function getDateBoundsForWeeks(
 
   return { start: minStart!, end: maxEnd! };
 }
+
+/**
+ * Calculate the signed distance in weeks between two week IDs
+ * Returns positive if toWeek is after fromWeek, negative otherwise
+ */
+export function getWeekDistance(fromWeek: string, toWeek: string): number {
+  const fromBounds = getWeekBounds(fromWeek);
+  const toBounds = getWeekBounds(toWeek);
+
+  // Calculate weeks difference based on start dates
+  const diffMs = toBounds.start.getTime() - fromBounds.start.getTime();
+  return Math.round(diffMs / (DAYS_PER_WEEK * MS_PER_DAY));
+}
+
+/**
+ * Add (or subtract) weeks to a week ID
+ * Returns the resulting week ID
+ */
+export function addWeeks(weekId: string, weeks: number): string {
+  const { start } = getWeekBounds(weekId);
+  const newDate = new Date(start);
+  newDate.setUTCDate(newDate.getUTCDate() + weeks * 7);
+  return getWeekId(newDate);
+}
+
+/**
+ * Compare two week IDs
+ * Returns negative if a < b, zero if equal, positive if a > b
+ */
+export function compareWeeks(a: string, b: string): number {
+  // Week IDs are lexicographically comparable (YYYY-Wnn format)
+  return a.localeCompare(b);
+}

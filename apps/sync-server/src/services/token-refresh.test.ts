@@ -61,6 +61,7 @@ describe("token-refresh service", () => {
       syncStatus: "complete",
       syncError: null,
       lastSyncAt: null,
+      lastReanchorAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       ...overrides,

@@ -4,6 +4,7 @@ import { accounts, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
+import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 
 // Sync configuration
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -112,6 +113,25 @@ async function runSyncCycle(): Promise<void> {
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
         accountsSucceeded++;
+
+        // Check if reanchoring is needed (once per day per account)
+        if (shouldCheckReanchor(account.lastReanchorAt)) {
+          try {
+            const reanchorResult = await checkAndReanchor(account.id);
+            if (reanchorResult.extended) {
+              console.log(
+                `[background-sync] Reanchored ${account.email}: ` +
+                  `+${reanchorResult.futureWeeks} future, +${reanchorResult.pastWeeks} past weeks`
+              );
+            }
+          } catch (reanchorError) {
+            console.error(
+              `[background-sync] Reanchor failed for ${account.email}:`,
+              reanchorError
+            );
+            // Don't fail the account sync for reanchor errors
+          }
+        }
       } catch (error) {
         console.error(
           `[background-sync] Failed to sync account ${account.email}:`,
