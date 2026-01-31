@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
+import { accountsRoute } from "./routes/accounts.js";
 import { calendarsRoute } from "./routes/calendars.js";
 import { closeDatabase } from "./db/index.js";
 
@@ -16,6 +17,7 @@ app.use("*", logger());
 const routes = app
   .route("/health", healthRoute)
   .route("/auth", authRoute)
+  .route("/api/accounts", accountsRoute)
   .route("/api/calendars", calendarsRoute);
 
 // Export type for RPC client (future use)
