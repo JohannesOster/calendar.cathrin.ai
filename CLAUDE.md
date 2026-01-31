@@ -115,6 +115,44 @@ The server exports `AppType` for future RPC client usage with Hono's type-safe c
 - `DATABASE_URL` - Postgres connection string
 - `ENCRYPTION_KEY` - 64-char hex string for token encryption
 
+### Caching & Sync Architecture
+
+The app uses a multi-tier caching strategy with stale-while-revalidate pattern:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLIENT                                   │
+│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────┐ │
+│  │ HOT ZONE    │    │ LRU CACHE    │    │ SQLite Persistent   │ │
+│  │ today ±30d  │    │ up to 50     │    │ (offline backup)    │ │
+│  │ never evict │    │ other weeks  │    │                     │ │
+│  └─────────────┘    └──────────────┘    └─────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼ HTTP
+┌──────────────────────────────────────────────────────────────────┐
+│                         SERVER                                    │
+│  ┌─────────────────┐    ┌──────────────────────────────────────┐ │
+│  │ fetched_weeks   │    │ Postgres event cache                 │ │
+│  └─────────────────┘    └──────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Timing Configuration (intentionally asymmetric):**
+
+| Component | Interval | Purpose |
+|-----------|----------|---------|
+| Server sync | 5 min | Sync with Google (reduces API quota) |
+| Client staleness | 3 min | Consider cached data stale |
+| Client polling | 3 min | Check for stale visible weeks |
+
+This means changes in Google Calendar propagate to UI in ~3-8 minutes.
+
+**Key files:**
+- `apps/desktop/src/stores/events.ts` - Client cache, staleness, polling
+- `apps/sync-server/src/services/background-sync.ts` - Server sync with Google
+- `apps/sync-server/src/services/reanchor.ts` - Extends fetched window over time
+
 ### Shared Types Package
 
 `packages/shared-types` exports TypeScript types for API contracts between apps:

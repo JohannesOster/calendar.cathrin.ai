@@ -45,11 +45,24 @@ const DAYS_AFTER = 30;
 const HOT_ZONE_DAYS = 30; // Days each direction from today - never evicted
 const MAX_LRU_WEEKS = 50; // Maximum weeks to keep in LRU cache (excluding hot zone)
 
-// Staleness configuration
-const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes - revalidate after this
+// =============================================================================
+// Cache Timing Configuration
+// =============================================================================
+// These values are intentionally different from server-side sync intervals:
+// - Server syncs with Google every 5 minutes (background-sync.ts)
+// - Client considers data stale after 3 minutes and polls for updates
+//
+// This means client revalidation can catch server updates within ~3-8 minutes
+// of them occurring in Google Calendar. The asymmetry is intentional:
+// - Server sync is slower to reduce Google API quota usage
+// - Client polling is faster to provide responsive UI updates
+// =============================================================================
 
-// Polling configuration
-const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes - matches staleness threshold
+// Staleness: How long before cached data is considered stale
+const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+
+// Polling: How often to check for stale visible weeks
+const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes (matches staleness)
 
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);

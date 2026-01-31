@@ -6,9 +6,18 @@ import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 
-// Sync configuration
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts
+// =============================================================================
+// Sync Timing Configuration
+// =============================================================================
+// Server syncs with Google every 5 minutes using incremental sync (syncTokens).
+// This is slower than client polling (3 minutes) to reduce Google API quota usage.
+//
+// Combined with client-side staleness (3 min) and polling (3 min), changes in
+// Google Calendar propagate to the UI within approximately 3-8 minutes.
+// =============================================================================
+
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes - sync with Google
+const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts (rate limiting)
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after startup
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
