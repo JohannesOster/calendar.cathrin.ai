@@ -4,6 +4,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
+import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
 import {
   initializeEvents,
@@ -23,8 +24,11 @@ function App() {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(async () => {
+    // Initialize auth first to load session token
+    await initAuth();
+    // Then load accounts and events (both check isAuthenticated)
     await initializeAccounts();
-    initializeEvents();
+    await initializeEvents();
   });
 
   // Cleanup debounce timer on unmount
