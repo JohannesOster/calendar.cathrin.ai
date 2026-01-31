@@ -154,6 +154,21 @@ impl LocalCache {
         Ok(deleted)
     }
 
+    /// Delete events within a specific date range
+    /// Used to evict events for specific weeks from the cache
+    pub fn delete_events_in_range(&self, start: &str, end: &str) -> Result<usize, CacheError> {
+        let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
+
+        // Delete events that overlap with the given range
+        // An event overlaps if it starts before the range ends AND ends after the range starts
+        let deleted = conn.execute(
+            "DELETE FROM cached_events WHERE start <= ?1 AND end >= ?2",
+            params![end, start],
+        )?;
+
+        Ok(deleted)
+    }
+
     /// Clear all cached events
     pub fn clear(&self) -> Result<(), CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
@@ -162,6 +177,7 @@ impl LocalCache {
     }
 
     /// Get cache metadata value
+    #[allow(dead_code)]
     pub fn get_metadata(&self, key: &str) -> Result<Option<String>, CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
         let value: Option<String> = conn
@@ -175,6 +191,7 @@ impl LocalCache {
     }
 
     /// Set cache metadata value
+    #[allow(dead_code)]
     pub fn set_metadata(&self, key: &str, value: &str) -> Result<(), CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
         conn.execute(

@@ -214,6 +214,8 @@ function processEvents(
  * Evict stale weeks from cache using tiered eviction strategy:
  * 1. Hot zone (today ±30 days) - never evicted
  * 2. LRU cache - keep most recently accessed weeks up to limit
+ *
+ * Also deletes evicted events from SQLite to prevent unbounded disk growth.
  */
 function evictStaleWeeks(): void {
   const hotZone = getHotZoneWeeks(HOT_ZONE_DAYS);
@@ -252,13 +254,39 @@ function evictStaleWeeks(): void {
     // Update fetched weeks
     setFetchedWeeks(toKeep);
 
-    // Remove events for evicted weeks
+    // Remove events for evicted weeks from memory
     setEvents((prev) =>
       prev.filter((event) => {
         const weekId = getWeekId(event.start);
         return toKeep.has(weekId);
       }),
     );
+
+    // Delete evicted events from SQLite to prevent unbounded disk growth
+    deleteEvictedWeeksFromDisk(evicted);
+  }
+}
+
+/**
+ * Delete events for evicted weeks from SQLite cache
+ * Runs asynchronously to not block the UI
+ */
+async function deleteEvictedWeeksFromDisk(weekIds: string[]): Promise<void> {
+  try {
+    // Convert week IDs to date bounds
+    const weekBounds = weekIds.map((weekId) => {
+      const { start, end } = getWeekBounds(weekId);
+      return {
+        start: start.toISOString(),
+        end: end.toISOString(),
+      };
+    });
+
+    const deleted = await invoke<number>("delete_cached_weeks", { weekBounds });
+    console.log(`[events] Deleted ${deleted} events from SQLite for ${weekIds.length} evicted weeks`);
+  } catch (error) {
+    // Log but don't fail - disk cleanup is best-effort
+    console.warn("[events] Failed to delete evicted weeks from SQLite:", error);
   }
 }
 

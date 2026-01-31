@@ -8,10 +8,10 @@ mod storage;
 
 use commands::{
     cache_events_locally, clear_cached_events, clear_local_cache, clear_session_token,
-    ensure_valid_token, fetch_events, fetch_events_for_week, get_cached_events,
-    get_connected_accounts, get_local_cached_events, get_session_token, init_local_cache,
-    open_url, prune_local_cache, refresh_account_calendars, remove_account, save_session_token,
-    start_oauth_flow, toggle_calendar_visibility,
+    delete_cached_weeks, ensure_valid_token, fetch_events, fetch_events_for_week,
+    get_cached_events, get_connected_accounts, get_local_cached_events, get_session_token,
+    init_local_cache, open_url, prune_local_cache, refresh_account_calendars, remove_account,
+    save_session_token, start_oauth_flow, toggle_calendar_visibility,
 };
 
 #[cfg(target_os = "macos")]
@@ -287,6 +287,7 @@ pub fn run() {
             cache_events_locally,
             clear_local_cache,
             prune_local_cache,
+            delete_cached_weeks,
         ])
         .setup(|app| {
             // Initialize local SQLite cache

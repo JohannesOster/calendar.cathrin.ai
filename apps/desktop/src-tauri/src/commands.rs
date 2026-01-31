@@ -559,3 +559,27 @@ pub async fn prune_local_cache() -> Result<usize, String> {
     let cache = get_cache()?;
     cache.prune_old_events(90).map_err(|e| e.to_string())
 }
+
+/// Delete events for specific weeks from local cache
+/// week_ids: Array of ISO week IDs like ["2025-W05", "2025-W06"]
+/// week_bounds: Array of {start, end} date strings for each week
+#[tauri::command]
+pub async fn delete_cached_weeks(week_bounds: Vec<WeekBound>) -> Result<usize, String> {
+    let cache = get_cache()?;
+    let mut total_deleted = 0;
+
+    for bound in week_bounds {
+        let deleted = cache
+            .delete_events_in_range(&bound.start, &bound.end)
+            .map_err(|e| e.to_string())?;
+        total_deleted += deleted;
+    }
+
+    Ok(total_deleted)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekBound {
+    pub start: String,
+    pub end: String,
+}
