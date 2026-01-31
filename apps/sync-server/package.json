@@ -18,11 +18,13 @@
     "@cathrin/shared-types": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@hono/oauth-providers": "^0.8.5",
+    "@hono/zod-validator": "^0.7.6",
     "@paralleldrive/cuid2": "^2.2.2",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.3",
     "hono": "^4.6.16",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

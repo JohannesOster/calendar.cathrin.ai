@@ -93,6 +93,9 @@ importers:
       '@hono/oauth-providers':
         specifier: ^0.8.5
         version: 0.8.5(hono@4.11.7)
+      '@hono/zod-validator':
+        specifier: ^0.7.6
+        version: 0.7.6(hono@4.11.7)(zod@4.3.6)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.3.1
@@ -108,6 +111,9 @@ importers:
       postgres:
         specifier: ^3.4.5
         version: 3.4.8
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
@@ -839,6 +845,12 @@ packages:
     engines: {node: '>=18.4.0'}
     peerDependencies:
       hono: '>=3.0.0'
+
+  '@hono/zod-validator@0.7.6':
+    resolution: {integrity: sha512-Io1B6d011Gj1KknV4rXYz4le5+5EubcWEU/speUjuw9XMMIaP3n78yXLhjd2A3PXaXaUwEAluOiAyLqhBEJgsw==}
+    peerDependencies:
+      hono: '>=3.9.0'
+      zod: ^3.25.0 || ^4.0.0
 
   '@internationalized/date@3.10.0':
     resolution: {integrity: sha512-oxDR/NTEJ1k+UFVQElaNIk65E/Z83HK1z1WI3lQyhTtnNg4R5oVXaPzK3jcpKG8UHKDVuDQHzn+wsxSz8RP3aw==}
@@ -2134,6 +2146,9 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
@@ -2640,6 +2655,11 @@ snapshots:
   '@hono/oauth-providers@0.8.5(hono@4.11.7)':
     dependencies:
       hono: 4.11.7
+
+  '@hono/zod-validator@0.7.6(hono@4.11.7)(zod@4.3.6)':
+    dependencies:
+      hono: 4.11.7
+      zod: 4.3.6
 
   '@internationalized/date@3.10.0':
     dependencies:
@@ -4088,3 +4108,5 @@ snapshots:
       stackback: 0.0.2
 
   yallist@3.1.1: {}
+
+  zod@4.3.6: {}

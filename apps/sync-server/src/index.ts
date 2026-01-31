@@ -6,6 +6,7 @@ import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
 import { accountsRoute } from "./routes/accounts.js";
 import { calendarsRoute } from "./routes/calendars.js";
+import { eventsRoute } from "./routes/events.js";
 import { closeDatabase } from "./db/index.js";
 
 const app = new Hono();
@@ -18,7 +19,8 @@ const routes = app
   .route("/health", healthRoute)
   .route("/auth", authRoute)
   .route("/api/accounts", accountsRoute)
-  .route("/api/calendars", calendarsRoute);
+  .route("/api/calendars", calendarsRoute)
+  .route("/api/events", eventsRoute);
 
 // Export type for RPC client (future use)
 export type AppType = typeof routes;
