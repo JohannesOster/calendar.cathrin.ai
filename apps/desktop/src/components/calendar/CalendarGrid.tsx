@@ -14,7 +14,11 @@ import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
-import { AllDaySection, ALL_DAY_SECTION_HEIGHT } from "./AllDaySection";
+import {
+  AllDaySection,
+  ALL_DAY_SECTION_HEIGHT,
+  type AllDayEventLayout,
+} from "./AllDaySection";
 import {
   addDays,
   isSameDay,
@@ -22,8 +26,9 @@ import {
   formatMonthYear,
   getWeekId,
 } from "../../lib/date-utils";
-import { isLoadingWeeks } from "../../stores/events";
-import { isAnySyncing } from "../../stores/accounts";
+import { events, isLoadingWeeks } from "../../stores/events";
+import { connectedAccounts, isAnySyncing } from "../../stores/accounts";
+import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import { currentView } from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
@@ -195,6 +200,72 @@ export function CalendarGrid() {
       indices.push(i);
     }
     return indices;
+  });
+
+  // Get visible calendar IDs for filtering events
+  const visibleCalendarIds = createMemo(() => {
+    return new Set(
+      connectedAccounts()
+        .flatMap((a) => a.calendars)
+        .filter((c) => c.visible)
+        .map((c) => c.id)
+    );
+  });
+
+  // Calculate all-day event layouts for the visible week
+  const allDayEventLayouts = createMemo((): AllDayEventLayout[] => {
+    const days = visibleDays();
+    if (days.length === 0) return [];
+
+    // Find first and last visible day (excluding buffer days)
+    // Buffer days extend beyond visible area, so find the actual visible 7-day range
+    const width = colWidth();
+    const currentScrollLeft = scrollLeft();
+    const timeColWidth = getTimeColWidth();
+
+    // Calculate which days are actually visible (not buffer)
+    const visibleStartLeft = currentScrollLeft + timeColWidth;
+    const visibleEndLeft = currentScrollLeft + (containerWidth() || window.innerWidth);
+
+    const visibleDaysOnly = days.filter(
+      (d) => d.left >= visibleStartLeft - width && d.left < visibleEndLeft
+    );
+
+    if (visibleDaysOnly.length === 0) return [];
+
+    const viewStart = visibleDaysOnly[0].date;
+    const viewEnd = visibleDaysOnly[visibleDaysOnly.length - 1].date;
+
+    // Filter to visible calendars
+    const visibleIds = visibleCalendarIds();
+    const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
+
+    // Calculate layouts
+    const layouts = calculateAllDayLayouts(visibleEvents, viewStart, viewEnd);
+
+    // Convert to pixel positions
+    const result: AllDayEventLayout[] = [];
+    const firstDayLeft = visibleDaysOnly[0].left;
+
+    for (const [eventId, layoutInfo] of layouts) {
+      const event = visibleEvents.find((e) => e.id === eventId);
+      if (!event) continue;
+
+      // Calculate pixel position from column info
+      const left = firstDayLeft + layoutInfo.startCol * width;
+      const chipWidth = layoutInfo.span * width - 4; // 4px gap
+
+      result.push({
+        event,
+        left,
+        width: chipWidth,
+        row: layoutInfo.row,
+        startsBeforeView: layoutInfo.startsBeforeView,
+        endsAfterView: layoutInfo.endsAfterView,
+      });
+    }
+
+    return result;
   });
 
   // Calculate day index from scroll position
@@ -540,6 +611,7 @@ export function CalendarGrid() {
                 <AllDaySection
                   visibleDays={visibleDays()}
                   colWidth={colWidth()}
+                  eventLayouts={allDayEventLayouts()}
                 />
               </div>
 
