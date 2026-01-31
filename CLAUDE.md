@@ -309,3 +309,56 @@ Minimal Rust backend in `apps/desktop/src-tauri/src/`:
 - `lib.rs` - Core Tauri setup with fullscreen event hooks
 - Uses `tauri-plugin-opener` for opening URLs
 - macOS-specific dependencies: `objc2` ecosystem (`objc2`, `objc2-foundation`, `objc2-app-kit`) for native integrations
+
+## Coding Standards
+
+### Philosophy: YAGNI & KISS
+- Don't build for hypothetical futures. Build for today.
+- Three similar lines of code is better than one abstraction you'll fight later.
+- Before adding code, ask: can I delete something instead?
+
+### SolidJS Rules (Critical)
+```typescript
+// DON'T destructure props - breaks reactivity
+function Bad({ date }: Props) { return <div>{date}</div>; }
+
+// DO access props directly
+function Good(props: Props) { return <div>{props.date}</div>; }
+
+// DON'T use .map() for lists
+{events().map(e => <Event event={e} />)}
+
+// DO use <For> component
+<For each={events()}>{(e) => <Event event={e} />}</For>
+
+// DO use on() for explicit effect dependencies
+createEffect(on(centerDate, (date) => fetchEvents(date)));
+
+// DO use createMemo for derived state
+const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props.date)));
+```
+
+### Validation Boundaries
+- **Validate at:** User input, external API responses, file system reads
+- **Don't validate:** Internal function calls, data you just created, store values
+
+### File Organization
+- **No barrel files** (index.ts re-exports) - import from specific files
+- **Flat over nested** - don't create folders until 5+ related files
+- **Colocate tests** - `date-utils.ts` next to `date-utils.test.ts`
+
+### Backend (Hono)
+- One route file per resource, mount with `app.route()`
+- Validate with Zod at route level: `zValidator('query', schema)`
+- Return errors explicitly, don't throw across layers
+
+### Size Limits (extract if exceeded)
+- Components: ~200 lines
+- Stores: ~150 lines (extract logic to `lib/`)
+- Route handlers: ~50 lines (extract to `services/`)
+
+### Naming
+- Functions: verb first (`getWeekId`, `fetchEvents`)
+- Booleans: `is`/`has`/`should` prefix
+- Signals: `[value, setValue]`
+- Constants: `UPPER_SNAKE_CASE`
