@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
+import { performInitialSync } from "./initial-sync.js";
 
 // =============================================================================
 // Sync Timing Configuration
@@ -19,9 +20,11 @@ import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes - sync with Google
 const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts (rate limiting)
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after startup
+const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - consider account stuck
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
+let recoveryRan = false; // Ensure recovery only runs once per server lifetime
 
 /**
  * Start the background sync service
@@ -44,8 +47,11 @@ export function startBackgroundSync(): void {
     });
   }, SYNC_INTERVAL_MS);
 
-  // Run first sync after short delay
-  setTimeout(() => {
+  // Run recovery and first sync after short delay
+  setTimeout(async () => {
+    // Recover stuck accounts before first sync cycle
+    await recoverStuckAccounts();
+
     runSyncCycle().catch((err) => {
       console.error("[background-sync] Initial sync cycle failed:", err);
     });
@@ -75,6 +81,89 @@ export function isBackgroundSyncRunning(): boolean {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Recover accounts stuck in "pending" or "syncing" state
+ * This runs once on server startup to handle accounts that were interrupted
+ * by a server crash or restart during initial sync
+ */
+async function recoverStuckAccounts(): Promise<void> {
+  if (recoveryRan) {
+    return; // Only run once per server lifetime
+  }
+  recoveryRan = true;
+
+  if (!db) {
+    console.log("[recovery] Database not configured, skipping");
+    return;
+  }
+
+  try {
+    const cutoffTime = new Date(Date.now() - STUCK_THRESHOLD_MS);
+
+    // Find accounts that are stuck in pending/syncing state
+    // Consider stuck if: status is pending/syncing AND (updatedAt is old OR updatedAt is null)
+    const stuckAccounts = await db.query.accounts.findMany({
+      where: or(
+        eq(accounts.syncStatus, "pending"),
+        eq(accounts.syncStatus, "syncing")
+      ),
+    });
+
+    // Filter to only truly stuck accounts (updated more than 5 minutes ago)
+    const reallyStuck = stuckAccounts.filter((account) => {
+      if (!account.updatedAt) return true; // No timestamp = definitely stuck
+      return account.updatedAt < cutoffTime;
+    });
+
+    if (reallyStuck.length === 0) {
+      console.log("[recovery] No stuck accounts found");
+      return;
+    }
+
+    console.log(
+      `[recovery] Found ${reallyStuck.length} stuck accounts, attempting recovery`
+    );
+
+    for (const account of reallyStuck) {
+      try {
+        console.log(
+          `[recovery] Retrying initial sync for ${account.email} (was: ${account.syncStatus})`
+        );
+
+        // Reset status to pending before retry
+        await db
+          .update(accounts)
+          .set({
+            syncStatus: "pending",
+            syncError: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(accounts.id, account.id));
+
+        // Retry initial sync (fire-and-forget, will update status on completion)
+        performInitialSync(account.id).catch((error) => {
+          console.error(
+            `[recovery] Failed to recover ${account.email}:`,
+            error
+          );
+        });
+
+        // Stagger recovery attempts
+        await sleep(ACCOUNT_STAGGER_MS);
+      } catch (error) {
+        console.error(
+          `[recovery] Error recovering account ${account.email}:`,
+          error
+        );
+      }
+    }
+
+    console.log(`[recovery] Recovery initiated for ${reallyStuck.length} accounts`);
+  } catch (error) {
+    console.error("[recovery] Recovery check failed:", error);
+  }
 }
 
 /**
