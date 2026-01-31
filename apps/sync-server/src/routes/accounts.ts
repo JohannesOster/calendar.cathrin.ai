@@ -20,10 +20,23 @@ export const accountsRoute = new Hono()
         id: true,
         email: true,
         provider: true,
+        syncStatus: true,
+        syncError: true,
+        lastSyncAt: true,
       },
     });
 
-    return c.json(userAccounts as ApiAccount[]);
+    // Map to API format (convert Date to ISO string)
+    const apiAccounts: ApiAccount[] = userAccounts.map((account) => ({
+      id: account.id,
+      email: account.email,
+      provider: account.provider as ApiAccount["provider"],
+      syncStatus: (account.syncStatus as ApiAccount["syncStatus"]) ?? "pending",
+      syncError: account.syncError,
+      lastSyncAt: account.lastSyncAt?.toISOString() ?? null,
+    }));
+
+    return c.json(apiAccounts);
   })
   .delete("/:id", async (c) => {
     if (!db) {

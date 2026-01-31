@@ -6,6 +6,7 @@ import { users, accounts, sessions } from "../db/schema.js";
 import { encrypt } from "../lib/crypto.js";
 import { createSessionToken, getSessionExpiresAt } from "../lib/jwt.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { performInitialSync } from "../services/initial-sync.js";
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -77,6 +78,9 @@ export const authRoute = new Hono()
         ? new Date(Date.now() + accessToken.expires_in * 1000)
         : null;
 
+      let accountId: string;
+      let isNewAccount = false;
+
       if (existingAccount) {
         // Update existing account with new tokens
         await db
@@ -90,18 +94,32 @@ export const authRoute = new Hono()
             updatedAt: new Date(),
           })
           .where(eq(accounts.id, existingAccount.id));
+        accountId = existingAccount.id;
       } else {
         // Create new account
-        await db.insert(accounts).values({
-          userId: user.id,
-          provider: "google",
-          providerAccountId: googleUser.id,
-          email: googleUser.email,
-          encryptedRefreshToken: encrypt(refreshToken.token),
-          encryptedAccessToken: accessToken.token
-            ? encrypt(accessToken.token)
-            : null,
-          tokenExpiresAt,
+        const [newAccount] = await db
+          .insert(accounts)
+          .values({
+            userId: user.id,
+            provider: "google",
+            providerAccountId: googleUser.id,
+            email: googleUser.email,
+            encryptedRefreshToken: encrypt(refreshToken.token),
+            encryptedAccessToken: accessToken.token
+              ? encrypt(accessToken.token)
+              : null,
+            tokenExpiresAt,
+            syncStatus: "pending",
+          })
+          .returning();
+        accountId = newAccount.id;
+        isNewAccount = true;
+      }
+
+      // Trigger initial sync for new accounts (fire and forget)
+      if (isNewAccount) {
+        performInitialSync(accountId).catch((err) => {
+          console.error(`[auth] Initial sync failed for account ${accountId}:`, err);
         });
       }
 

@@ -8,6 +8,13 @@
       "when": 1769856362415,
       "tag": "0000_first_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1769860157761,
+      "tag": "0001_needy_sunset_bain",
+      "breakpoints": true
     }
   ]
 }

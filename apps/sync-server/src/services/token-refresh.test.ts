@@ -41,6 +41,32 @@ describe("token-refresh service", () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
 
+  // Helper to create a mock account with all required fields
+  function createMockAccount(overrides: Partial<{
+    id: string;
+    encryptedAccessToken: string;
+    encryptedRefreshToken: string;
+    tokenExpiresAt: Date;
+  }> = {}) {
+    return {
+      id: mockAccountId,
+      encryptedAccessToken: `encrypted:${mockAccessToken}`,
+      encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
+      tokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      userId: "user-1",
+      provider: "google",
+      providerAccountId: "google-123",
+      email: "test@example.com",
+      syncToken: null,
+      syncStatus: "complete",
+      syncError: null,
+      lastSyncAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = {
@@ -61,19 +87,9 @@ describe("token-refresh service", () => {
     it("returns cached token when still valid", async () => {
       const futureExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: futureExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: futureExpiry })
+      );
 
       const token = await getAccessToken(mockAccountId);
 
@@ -84,19 +100,9 @@ describe("token-refresh service", () => {
     it("refreshes token when expired", async () => {
       const pastExpiry = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: pastExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: pastExpiry })
+      );
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -124,19 +130,9 @@ describe("token-refresh service", () => {
       // Token expires in 30 seconds (within buffer)
       const nearExpiry = new Date(Date.now() + 30 * 1000);
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: nearExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: nearExpiry })
+      );
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -158,19 +154,9 @@ describe("token-refresh service", () => {
     it("throws TokenRevokedError when refresh token is invalid", async () => {
       const pastExpiry = new Date(Date.now() - 10 * 60 * 1000);
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: pastExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: pastExpiry })
+      );
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -192,19 +178,9 @@ describe("token-refresh service", () => {
     it("throws TokenRefreshError for other Google errors", async () => {
       const pastExpiry = new Date(Date.now() - 10 * 60 * 1000);
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: pastExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: pastExpiry })
+      );
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -233,19 +209,9 @@ describe("token-refresh service", () => {
     it("always refreshes token regardless of expiry", async () => {
       const futureExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue({
-        id: mockAccountId,
-        encryptedAccessToken: `encrypted:${mockAccessToken}`,
-        encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
-        tokenExpiresAt: futureExpiry,
-        userId: "user-1",
-        provider: "google",
-        providerAccountId: "google-123",
-        email: "test@example.com",
-        syncToken: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
+        createMockAccount({ tokenExpiresAt: futureExpiry })
+      );
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,

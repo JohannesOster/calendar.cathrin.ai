@@ -48,12 +48,20 @@ export interface ApiCalendar {
 }
 
 /**
+ * Sync status for an account
+ */
+export type SyncStatus = "pending" | "syncing" | "complete" | "failed";
+
+/**
  * A connected calendar account as transported over the API
  */
 export interface ApiAccount {
   id: string;
   email: string;
   provider: Provider;
+  syncStatus?: SyncStatus;
+  syncError?: string | null;
+  lastSyncAt?: string | null;
 }
 
 // =============================================================================

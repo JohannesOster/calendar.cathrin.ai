@@ -4,6 +4,8 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -36,6 +38,10 @@ export const accounts = pgTable(
     encryptedAccessToken: text("encrypted_access_token"),
     tokenExpiresAt: timestamp("token_expires_at"),
     syncToken: text("sync_token"),
+    // Sync status tracking
+    syncStatus: text("sync_status").default("pending"), // pending, syncing, complete, failed
+    syncError: text("sync_error"),
+    lastSyncAt: timestamp("last_sync_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -61,4 +67,64 @@ export const sessions = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)]
+);
+
+/**
+ * Server-side event cache
+ * Stores events fetched from Google Calendar for quick access
+ */
+export const serverEvents = pgTable(
+  "events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    calendarId: text("calendar_id").notNull(),
+    googleEventId: text("google_event_id").notNull(),
+    title: text("title").notNull(),
+    start: timestamp("start").notNull(),
+    end: timestamp("end").notNull(),
+    isAllDay: boolean("is_all_day").default(false),
+    color: text("color"),
+    status: text("status"), // confirmed, tentative, cancelled
+    raw: jsonb("raw"), // Store raw Google event for future fields
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("events_account_calendar_idx").on(table.accountId, table.calendarId),
+    index("events_start_end_idx").on(table.start, table.end),
+    uniqueIndex("events_account_google_id_idx").on(
+      table.accountId,
+      table.googleEventId
+    ),
+  ]
+);
+
+/**
+ * Tracks sync state per calendar for incremental sync
+ */
+export const calendarSyncState = pgTable(
+  "calendar_sync_state",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    calendarId: text("calendar_id").notNull(),
+    syncToken: text("sync_token"),
+    lastSyncAt: timestamp("last_sync_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sync_state_account_calendar_idx").on(
+      table.accountId,
+      table.calendarId
+    ),
+  ]
 );
