@@ -30,6 +30,7 @@ const anchorDate = (() => {
   const d = new Date(today);
   d.setDate(today.getDate() - today.getDay()); // Start with Sunday
   d.setHours(0, 0, 0, 0);
+  console.log('[MonthView] anchorDate:', d.toISOString());
   return d;
 })();
 
@@ -73,7 +74,7 @@ const getWeekKey = (weekIndex: number): string => `week-${weekIndex}`;
 
 export function MonthView() {
   let scrollContainerRef: HTMLDivElement | undefined;
-  let isInitialized = false;
+  const [isInitialized, setIsInitialized] = createSignal(false);
 
   // Track scroll position for virtualization
   const [scrollTop, setScrollTop] = createSignal(CENTER_OFFSET);
@@ -150,21 +151,38 @@ export function MonthView() {
     const weekIds: string[] = [];
     for (let i = startIndex; i <= endIndex; i++) {
       const weekStartDate = getWeekStartDate(i);
-      weekIds.push(getWeekId(weekStartDate));
+      // Use Wednesday (mid-week) to get the correct ISO week ID
+      // Sunday is the last day of an ISO week, so getWeekId(Sunday) returns the previous week
+      const midWeekDate = addDays(weekStartDate, 3);
+      weekIds.push(getWeekId(midWeekDate));
     }
 
     return weekIds;
   });
 
   // Sync computed week IDs to the shared signal for event fetching
+  // Only sync after initialized to prevent wrong weeks from being set
   createEffect(() => {
     const weekIds = computedWeekIds();
+    if (!isInitialized()) {
+      console.log('[MonthView] Skipping monthVisibleWeekIds sync - not initialized');
+      return;
+    }
+    console.log('[MonthView] Setting monthVisibleWeekIds:', weekIds);
     setMonthVisibleWeekIds(weekIds);
   });
 
   // Handle scroll events
   const handleScroll = () => {
     if (!scrollContainerRef) return;
+
+    // Don't update shared state until initialized - prevents corrupting visibleStartDate
+    // before onMount has set the correct scroll position
+    if (!isInitialized()) {
+      console.log('[MonthView] handleScroll skipped - not initialized yet');
+      return;
+    }
+
     const currentScrollTop = scrollContainerRef.scrollTop;
     setScrollTop(currentScrollTop);
 
@@ -191,6 +209,7 @@ export function MonthView() {
 
     const weekIndex = getWeekIndex(date);
     const targetScrollTop = CENTER_OFFSET + (weekIndex * WEEK_ROW_HEIGHT);
+    console.log('[MonthView] scrollToDate:', date.toISOString(), 'weekIndex:', weekIndex, 'targetScrollTop:', targetScrollTop);
 
     scrollContainerRef.scrollTop = targetScrollTop;
 
@@ -206,16 +225,20 @@ export function MonthView() {
 
       requestAnimationFrame(() => {
         // Scroll to current visible start date (synced from week view or navigation)
+        console.log('[MonthView] onMount visibleStartDate:', visibleStartDate().toISOString());
         scrollToDate(visibleStartDate());
+        // Update scrollTop signal to match actual DOM position
+        setScrollTop(scrollContainerRef!.scrollTop);
+        setIsInitialized(true);
+        // Now handleScroll can safely update shared state
         handleScroll();
-        isInitialized = true;
       });
 
       // Resize observer
       const resizeObserver = new ResizeObserver((entries) => {
         if (entries[0]?.contentRect.height > 0) {
           setContainerHeight(entries[0].contentRect.height);
-          if (isInitialized) {
+          if (isInitialized()) {
             scrollToDate(visibleStartDate());
           }
         }
@@ -231,7 +254,7 @@ export function MonthView() {
   // React to external centerDate changes (from navigation or mini-calendar)
   createEffect(() => {
     const target = centerDate();
-    if (isInitialized && scrollContainerRef) {
+    if (isInitialized() && scrollContainerRef) {
       scrollToDate(target);
     }
   });

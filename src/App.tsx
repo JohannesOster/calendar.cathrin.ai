@@ -17,7 +17,7 @@ import {
 import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
 
 // Debounce delay for fetch trigger (ms)
-const FETCH_DEBOUNCE_MS = 500;
+const FETCH_DEBOUNCE_MS = 100;
 
 function App() {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -38,6 +38,7 @@ function App() {
   // Uses activeVisibleWeeks which switches between week view (1-2 weeks) and month view (~6 weeks)
   createEffect(
     on(activeVisibleWeeks, (weeks) => {
+      console.log('[activeVisibleWeeks] Changed:', weeks);
       if (weeks.length === 0) return;
 
       // Update visible weeks immediately (triggers cancellation of non-visible fetches)
@@ -62,10 +63,8 @@ function App() {
         if (missingWeeks.length > 0) {
           console.log(`[progressive-load] Fetching missing weeks:`, missingWeeks);
 
-          // Fetch each missing week
-          for (const week of missingWeeks) {
-            fetchEventsForWeek(week);
-          }
+          // Fetch all missing weeks in parallel
+          Promise.all(missingWeeks.map(week => fetchEventsForWeek(week)));
         }
 
         // Directional prefetching: fetch next week in scroll direction

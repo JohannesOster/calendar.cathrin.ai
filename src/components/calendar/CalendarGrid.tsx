@@ -8,7 +8,7 @@ import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
 import { addDays, isSameDay, isToday, formatMonthYear, getWeekId } from "../../lib/date-utils";
 import { isLoadingWeeks } from "../../stores/events";
-import { currentView } from "../layout/CalendarHeader";
+import { currentView } from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -57,6 +57,7 @@ const anchorDate = (() => {
   const d = new Date(today);
   d.setDate(today.getDate() - today.getDay()); // Start with Sunday
   d.setHours(0, 0, 0, 0);
+  console.log('[CalendarGrid] anchorDate:', d.toISOString());
   return d;
 })();
 
@@ -213,6 +214,7 @@ export function CalendarGrid() {
       // Note: centerDate is only set externally (e.g., from mini-calendar clicks)
       // to avoid feedback loops with the scroll effect
       if (!isSameDay(currentDate, visibleStartDate())) {
+        console.log('[CalendarGrid] Setting visibleStartDate to:', currentDate.toISOString());
         setVisibleStartDate(currentDate);
       }
 
