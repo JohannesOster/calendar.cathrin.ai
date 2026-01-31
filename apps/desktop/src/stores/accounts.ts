@@ -1,6 +1,7 @@
 import { createSignal, createMemo } from "solid-js";
 import { startServerOAuth, isAuthenticated, onAuthComplete } from "./auth";
 import { apiFetch } from "../lib/api";
+import { refreshEvents } from "./events";
 import type { ApiAccount, ApiCalendar } from "@cathrin/shared-types";
 
 /**
@@ -402,6 +403,8 @@ export async function refreshAccounts(): Promise<void> {
 
 // Register callback to reload accounts when auth completes
 // This handles both initial login and adding additional accounts
-onAuthComplete(() => {
-  reloadAccounts();
+onAuthComplete(async () => {
+  await reloadAccounts();
+  // Also refresh events to fetch data from the new account
+  refreshEvents();
 });

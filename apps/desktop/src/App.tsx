@@ -26,6 +26,14 @@ const FETCH_DEBOUNCE_MS = 100;
 function App() {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Handle Cmd+R / Ctrl+R for full app reload
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "r") {
+      e.preventDefault();
+      window.location.reload();
+    }
+  };
+
   onMount(async () => {
     // Initialize auth first to load session token
     await initAuth();
@@ -38,6 +46,9 @@ function App() {
 
     // Listen for visibility changes to pause/resume polling
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Listen for Cmd+R to manually refresh
+    document.addEventListener("keydown", handleKeyDown);
   });
 
   // Cleanup on unmount
@@ -47,6 +58,7 @@ function App() {
     }
     stopPolling();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
+    document.removeEventListener("keydown", handleKeyDown);
   });
 
   // Watch visible weeks and trigger fetches for missing weeks
