@@ -10,6 +10,17 @@ const [authError, setAuthError] = createSignal<string | null>(null);
 // Export readable signals
 export { sessionToken, isAuthenticated, isAuthLoading, authError };
 
+// Callback for when auth completes (used by accounts store to reload)
+let onAuthCompleteCallback: (() => void) | null = null;
+
+/**
+ * Register a callback to be called when auth completes (after OAuth callback)
+ * Used by accounts store to reload accounts after login
+ */
+export function onAuthComplete(callback: () => void): void {
+  onAuthCompleteCallback = callback;
+}
+
 // Server URL from environment
 const SYNC_SERVER_URL =
   import.meta.env.VITE_SYNC_SERVER_URL || "http://localhost:5000";
@@ -100,6 +111,9 @@ export async function handleAuthCallback(token: string): Promise<void> {
     setSessionToken(token);
     setIsAuthenticated(true);
     setAuthError(null);
+
+    // Notify listeners that auth completed (e.g., accounts store reloads)
+    onAuthCompleteCallback?.();
   } catch (error) {
     console.error("Failed to save session token:", error);
     setAuthError(
