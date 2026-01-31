@@ -48,6 +48,9 @@ const MAX_LRU_WEEKS = 50; // Maximum weeks to keep in LRU cache (excluding hot z
 // Staleness configuration
 const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes - revalidate after this
 
+// Polling configuration
+const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes - matches staleness threshold
+
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
 export const [isLoading, setIsLoading] = createSignal(false);
@@ -137,9 +140,14 @@ function isWeekStale(weekId: string): boolean {
 let currentRequestId = 0;
 
 /**
- * Track which weeks are currently visible (for cancellation)
+ * Track which weeks are currently visible (for cancellation and polling)
  */
 let currentVisibleWeeks: Set<string> = new Set();
+
+/**
+ * Polling state
+ */
+let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Convert API event to frontend CalendarEvent
@@ -686,10 +694,92 @@ export function getEventsForRange(
 }
 
 /**
+ * Poll currently visible weeks for updates
+ * Only re-fetches weeks that are stale (> 3 minutes old)
+ */
+async function pollVisibleWeeks(): Promise<void> {
+  if (currentVisibleWeeks.size === 0) {
+    console.log("[events] Skipping poll - no visible weeks");
+    return;
+  }
+
+  if (!isAuthenticated()) {
+    console.log("[events] Skipping poll - not authenticated");
+    return;
+  }
+
+  const staleWeeks = getStaleWeeks([...currentVisibleWeeks]);
+
+  if (staleWeeks.length === 0) {
+    console.log("[events] Skipping poll - all visible weeks are fresh");
+    return;
+  }
+
+  console.log(`[events] Polling ${staleWeeks.length} stale visible weeks:`, staleWeeks);
+
+  // Revalidate stale weeks in parallel
+  await Promise.all(staleWeeks.map((weekId) => revalidateWeekBackground(weekId)));
+}
+
+/**
+ * Start periodic polling for visible weeks
+ * Polling revalidates stale weeks every POLL_INTERVAL_MS
+ */
+export function startPolling(): void {
+  if (pollIntervalId) {
+    console.log("[events] Polling already running");
+    return;
+  }
+
+  console.log(`[events] Starting polling (interval: ${POLL_INTERVAL_MS / 1000}s)`);
+
+  pollIntervalId = setInterval(() => {
+    pollVisibleWeeks().catch((error) => {
+      console.warn("[events] Poll failed:", error);
+    });
+  }, POLL_INTERVAL_MS);
+}
+
+/**
+ * Stop periodic polling
+ */
+export function stopPolling(): void {
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId);
+    pollIntervalId = null;
+    console.log("[events] Stopped polling");
+  }
+}
+
+/**
+ * Check if polling is currently running
+ */
+export function isPollingActive(): boolean {
+  return pollIntervalId !== null;
+}
+
+/**
+ * Handle visibility change - pause polling when hidden, resume when visible
+ * Also immediately polls on resume to catch up on changes
+ */
+export function handleVisibilityChange(): void {
+  if (document.hidden) {
+    stopPolling();
+  } else {
+    startPolling();
+    // Immediately poll to catch up after being hidden
+    pollVisibleWeeks().catch((error) => {
+      console.warn("[events] Resume poll failed:", error);
+    });
+  }
+}
+
+/**
  * Clear all events and reset state
  * Call this when user logs out
  */
 export function clearEvents(): void {
+  stopPolling();
   setEvents([]);
   setFetchedWeeks(new Set());
   setFetchingWeeks(new Set());

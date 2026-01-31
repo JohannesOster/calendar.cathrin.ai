@@ -14,6 +14,9 @@ import {
   updateVisibleWeeks,
   getFetchedWeeks,
   getFetchingWeeks,
+  startPolling,
+  stopPolling,
+  handleVisibilityChange,
 } from "./stores/events";
 import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
 
@@ -29,13 +32,21 @@ function App() {
     // Then load accounts and events (both check isAuthenticated)
     await initializeAccounts();
     await initializeEvents();
+
+    // Start polling for visible week updates
+    startPolling();
+
+    // Listen for visibility changes to pause/resume polling
+    document.addEventListener("visibilitychange", handleVisibilityChange);
   });
 
-  // Cleanup debounce timer on unmount
+  // Cleanup on unmount
   onCleanup(() => {
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
+    stopPolling();
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
   });
 
   // Watch visible weeks and trigger fetches for missing weeks
