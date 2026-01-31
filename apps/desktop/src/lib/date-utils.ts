@@ -156,3 +156,14 @@ export function getPreviousWeek(weekId: string): string {
   const prevWeekDate = addDays(start, -1);
   return getWeekId(prevWeekDate);
 }
+
+/**
+ * Get the set of week IDs that fall within the "hot zone" (today ± specified days)
+ * Hot zone weeks should never be evicted from cache
+ */
+export function getHotZoneWeeks(hotZoneDays: number = 30): Set<string> {
+  const today = new Date();
+  const start = addDays(today, -hotZoneDays);
+  const end = addDays(today, hotZoneDays);
+  return new Set(getWeeksInRange(start, end));
+}

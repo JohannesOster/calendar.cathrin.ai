@@ -6,7 +6,7 @@ import {
   getWeekId,
   getWeekBounds,
   getWeeksInRange,
-  addDays,
+  getHotZoneWeeks,
 } from "../lib/date-utils";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
@@ -41,8 +41,9 @@ export interface CalendarEvent {
 const DAYS_BEFORE = 7;
 const DAYS_AFTER = 30;
 
-// Pruning window: keep events within ±90 days of center date
-const PRUNE_WINDOW_DAYS = 90;
+// Tiered cache configuration
+const HOT_ZONE_DAYS = 30; // Days each direction from today - never evicted
+const MAX_LRU_WEEKS = 50; // Maximum weeks to keep in LRU cache (excluding hot zone)
 
 // Signals for events state
 export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
@@ -62,6 +63,29 @@ const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
  * Prevents duplicate fetches for the same week
  */
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
+
+/**
+ * LRU tracking: Map of weekId -> last accessed timestamp
+ * Used to determine which weeks to evict when cache is full
+ */
+const weekAccessTimes = new Map<string, number>();
+
+/**
+ * Record a week access for LRU tracking
+ */
+function recordWeekAccess(weekId: string): void {
+  weekAccessTimes.set(weekId, Date.now());
+}
+
+/**
+ * Record access for multiple weeks
+ */
+function recordWeeksAccess(weekIds: string[]): void {
+  const now = Date.now();
+  for (const weekId of weekIds) {
+    weekAccessTimes.set(weekId, now);
+  }
+}
 
 /**
  * Request ID for cancellation pattern
@@ -136,45 +160,54 @@ function processEvents(
 }
 
 /**
- * Prune events outside a time window around the center date
- * Keeps events that overlap with the window (multi-day events spanning boundary are kept)
+ * Evict stale weeks from cache using tiered eviction strategy:
+ * 1. Hot zone (today ±30 days) - never evicted
+ * 2. LRU cache - keep most recently accessed weeks up to limit
  */
-function pruneEvents(
-  events: CalendarEvent[],
-  centerDate: Date,
-): CalendarEvent[] {
-  const minTime = addDays(centerDate, -PRUNE_WINDOW_DAYS).getTime();
-  const maxTime = addDays(centerDate, PRUNE_WINDOW_DAYS).getTime();
+function evictStaleWeeks(): void {
+  const hotZone = getHotZoneWeeks(HOT_ZONE_DAYS);
+  const currentWeeks = fetchedWeeks();
 
-  return events.filter((event) => {
-    // Keep event if any part of it overlaps with the prune window
-    // Event overlaps if it starts before window ends AND ends after window starts
-    const eventStart = event.start.getTime();
-    const eventEnd = event.end.getTime();
-    return eventStart <= maxTime && eventEnd >= minTime;
-  });
-}
+  // Start with hot zone weeks (always kept)
+  const toKeep = new Set<string>(hotZone);
 
-/**
- * Prune fetched weeks outside the prune window
- * This ensures scrolling back to pruned weeks will trigger re-fetch
- */
-function pruneFetchedWeeks(weeks: Set<string>, centerDate: Date): Set<string> {
-  const minDate = addDays(centerDate, -PRUNE_WINDOW_DAYS);
-  const maxDate = addDays(centerDate, PRUNE_WINDOW_DAYS);
+  // Get non-hot-zone weeks sorted by last access time (most recent first)
+  const lruCandidates = [...currentWeeks]
+    .filter((w) => !hotZone.has(w))
+    .sort((a, b) => {
+      const aTime = weekAccessTimes.get(a) ?? 0;
+      const bTime = weekAccessTimes.get(b) ?? 0;
+      return bTime - aTime; // Most recent first
+    });
 
-  const prunedWeeks = new Set<string>();
-  for (const weekId of weeks) {
-    const { start, end } = getWeekBounds(weekId);
-    // Keep week if any part of it overlaps with prune window
-    if (
-      start.getTime() <= maxDate.getTime() &&
-      end.getTime() >= minDate.getTime()
-    ) {
-      prunedWeeks.add(weekId);
-    }
+  // Keep up to MAX_LRU_WEEKS non-hot-zone weeks
+  const lruToKeep = lruCandidates.slice(0, MAX_LRU_WEEKS);
+  for (const weekId of lruToKeep) {
+    toKeep.add(weekId);
   }
-  return prunedWeeks;
+
+  // Calculate evicted weeks for logging
+  const evicted = [...currentWeeks].filter((w) => !toKeep.has(w));
+
+  if (evicted.length > 0) {
+    console.log(`[events] Evicting ${evicted.length} stale weeks:`, evicted);
+
+    // Clean up LRU tracking for evicted weeks
+    for (const weekId of evicted) {
+      weekAccessTimes.delete(weekId);
+    }
+
+    // Update fetched weeks
+    setFetchedWeeks(toKeep);
+
+    // Remove events for evicted weeks
+    setEvents((prev) =>
+      prev.filter((event) => {
+        const weekId = getWeekId(event.start);
+        return toKeep.has(weekId);
+      }),
+    );
+  }
 }
 
 /**
@@ -289,11 +322,23 @@ export async function refreshEvents(window?: {
     // Update UI with fresh data
     const now = new Date();
     if (window) {
-      setEvents((prev) => {
-        const merged = processEvents(newEvents, prev);
-        return pruneEvents(merged, now);
+      // Record access for all weeks in the window
+      const weeksInWindow = getWeeksInRange(new Date(timeMin), new Date(timeMax));
+      recordWeeksAccess(weeksInWindow);
+
+      setEvents((prev) => processEvents(newEvents, prev));
+
+      // Mark weeks as fetched
+      setFetchedWeeks((prev) => {
+        const updated = new Set(prev);
+        for (const weekId of weeksInWindow) {
+          updated.add(weekId);
+        }
+        return updated;
       });
-      setFetchedWeeks((prev) => pruneFetchedWeeks(prev, now));
+
+      // Evict stale weeks based on tiered cache strategy
+      evictStaleWeeks();
     } else {
       setEvents(processEvents(newEvents, []));
     }
@@ -454,19 +499,21 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
 
     const newEvents = apiEvents.map(convertApiEvent);
 
-    // Merge new events with existing and prune old events
-    const now = new Date();
-    setEvents((prev) => {
-      const merged = processEvents(newEvents, prev);
-      return pruneEvents(merged, now);
-    });
+    // Record week access for LRU tracking
+    recordWeekAccess(weekId);
 
-    // Update local fetched weeks tracker and prune old weeks
+    // Merge new events with existing
+    setEvents((prev) => processEvents(newEvents, prev));
+
+    // Mark week as fetched
     setFetchedWeeks((prev) => {
       const updated = new Set(prev);
       updated.add(weekId);
-      return pruneFetchedWeeks(updated, now);
+      return updated;
     });
+
+    // Evict stale weeks based on tiered cache strategy
+    evictStaleWeeks();
 
     console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);
   } catch (error) {
@@ -522,6 +569,7 @@ export function clearEvents(): void {
   setFetchingWeeks(new Set());
   setLastRefreshed(null);
   setEventsError(null);
+  weekAccessTimes.clear();
   currentRequestId++;
 }
 
