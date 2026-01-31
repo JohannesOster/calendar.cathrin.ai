@@ -79,8 +79,14 @@ const weekAccessTimes = new Map<string, number>();
 /**
  * Staleness tracking: Map of weekId -> fetchedAt timestamp
  * Used to determine if week data needs background revalidation
+ * Persisted to SQLite to survive app restarts
  */
 const weekFetchTimes = new Map<string, number>();
+
+/**
+ * Track whether fetch times have been loaded from disk
+ */
+let fetchTimesLoaded = false;
 
 /**
  * Track which weeks are currently being revalidated
@@ -108,20 +114,62 @@ function recordWeeksAccess(weekIds: string[]): void {
 }
 
 /**
- * Record fetch time for staleness tracking
+ * Record fetch time for staleness tracking and persist to disk
  */
 function recordWeekFetch(weekId: string): void {
   weekFetchTimes.set(weekId, Date.now());
+  persistWeekFetchTimes();
 }
 
 /**
- * Record fetch times for multiple weeks
+ * Record fetch times for multiple weeks and persist to disk
  */
 function recordWeeksFetch(weekIds: string[]): void {
   const now = Date.now();
   for (const weekId of weekIds) {
     weekFetchTimes.set(weekId, now);
   }
+  persistWeekFetchTimes();
+}
+
+/**
+ * Load week fetch times from SQLite on startup
+ * Prevents "startup storm" of revalidation requests
+ */
+async function loadWeekFetchTimes(): Promise<void> {
+  try {
+    const times = await invoke<Array<{ week_id: string; fetched_at: number }>>(
+      "get_week_fetch_times"
+    );
+    for (const { week_id, fetched_at } of times) {
+      weekFetchTimes.set(week_id, fetched_at);
+    }
+    fetchTimesLoaded = true;
+    console.log(`[events] Loaded ${times.length} week fetch times from disk`);
+  } catch (error) {
+    console.warn("[events] Failed to load week fetch times:", error);
+    fetchTimesLoaded = true; // Mark as loaded even on error to prevent blocking
+  }
+}
+
+/**
+ * Persist week fetch times to SQLite
+ * Debounced to avoid excessive writes
+ */
+let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+function persistWeekFetchTimes(): void {
+  // Debounce persistence to avoid writing on every fetch
+  if (persistTimeout) {
+    clearTimeout(persistTimeout);
+  }
+  persistTimeout = setTimeout(() => {
+    const times = Array.from(weekFetchTimes.entries()).map(
+      ([week_id, fetched_at]) => ({ week_id, fetched_at })
+    );
+    invoke("save_week_fetch_times", { times }).catch((error) => {
+      console.warn("[events] Failed to persist week fetch times:", error);
+    });
+  }, 1000); // 1 second debounce
 }
 
 /**
@@ -250,6 +298,9 @@ function evictStaleWeeks(): void {
       weekAccessTimes.delete(weekId);
       weekFetchTimes.delete(weekId);
     }
+
+    // Persist updated fetch times (with evicted weeks removed)
+    persistWeekFetchTimes();
 
     // Update fetched weeks
     setFetchedWeeks(toKeep);
@@ -505,6 +556,10 @@ export async function refreshEvents(window?: {
  */
 export async function initializeEvents(): Promise<void> {
   if (isAuthenticated()) {
+    // Load week fetch times first to prevent "startup storm"
+    // This must happen before loading cached events so staleness checks work
+    await loadWeekFetchTimes();
+
     // Load from cache first for instant display
     const defaultWindow = getTimeWindow();
     const cached = await loadFromCache(
@@ -816,7 +871,13 @@ export function clearEvents(): void {
   setEventsError(null);
   weekAccessTimes.clear();
   weekFetchTimes.clear();
+  fetchTimesLoaded = false;
   currentRequestId++;
+
+  // Clear persisted fetch times from SQLite
+  invoke("clear_week_fetch_times").catch((error) => {
+    console.warn("[events] Failed to clear week fetch times:", error);
+  });
 }
 
 // Re-export week utilities for convenience

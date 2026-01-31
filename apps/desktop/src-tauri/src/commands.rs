@@ -583,3 +583,46 @@ pub struct WeekBound {
     pub start: String,
     pub end: String,
 }
+
+/// Week fetch time entry for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekFetchTime {
+    pub week_id: String,
+    pub fetched_at: i64, // Unix timestamp in milliseconds
+}
+
+const WEEK_FETCH_TIMES_KEY: &str = "week_fetch_times";
+
+/// Get persisted week fetch times from SQLite
+/// Returns a list of {week_id, fetched_at} entries
+#[tauri::command]
+pub async fn get_week_fetch_times() -> Result<Vec<WeekFetchTime>, String> {
+    let cache = get_cache()?;
+    let json = cache
+        .get_metadata(WEEK_FETCH_TIMES_KEY)
+        .map_err(|e| e.to_string())?;
+
+    match json {
+        Some(data) => serde_json::from_str(&data).map_err(|e| e.to_string()),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// Save week fetch times to SQLite for persistence across restarts
+#[tauri::command]
+pub async fn save_week_fetch_times(times: Vec<WeekFetchTime>) -> Result<(), String> {
+    let cache = get_cache()?;
+    let json = serde_json::to_string(&times).map_err(|e| e.to_string())?;
+    cache
+        .set_metadata(WEEK_FETCH_TIMES_KEY, &json)
+        .map_err(|e| e.to_string())
+}
+
+/// Clear week fetch times (called on logout)
+#[tauri::command]
+pub async fn clear_week_fetch_times() -> Result<(), String> {
+    let cache = get_cache()?;
+    cache
+        .delete_metadata(WEEK_FETCH_TIMES_KEY)
+        .map_err(|e| e.to_string())
+}

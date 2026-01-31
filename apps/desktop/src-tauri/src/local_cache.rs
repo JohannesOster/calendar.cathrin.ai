@@ -177,7 +177,6 @@ impl LocalCache {
     }
 
     /// Get cache metadata value
-    #[allow(dead_code)]
     pub fn get_metadata(&self, key: &str) -> Result<Option<String>, CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
         let value: Option<String> = conn
@@ -191,13 +190,19 @@ impl LocalCache {
     }
 
     /// Set cache metadata value
-    #[allow(dead_code)]
     pub fn set_metadata(&self, key: &str, value: &str) -> Result<(), CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
         conn.execute(
             "INSERT OR REPLACE INTO cache_metadata (key, value) VALUES (?1, ?2)",
             params![key, value],
         )?;
+        Ok(())
+    }
+
+    /// Delete cache metadata value
+    pub fn delete_metadata(&self, key: &str) -> Result<(), CacheError> {
+        let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
+        conn.execute("DELETE FROM cache_metadata WHERE key = ?1", params![key])?;
         Ok(())
     }
 }
