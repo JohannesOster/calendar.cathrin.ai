@@ -7,7 +7,9 @@ export interface JwtPayload {
   exp: number; // expires at
 }
 
-const DEFAULT_SESSION_DAYS = 30;
+// Desktop app sessions should be effectively permanent
+// Users only need to re-auth if they explicitly logout or Google revokes access
+const DEFAULT_SESSION_DAYS = 365 * 10; // 10 years
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
