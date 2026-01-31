@@ -318,11 +318,22 @@ export function CalendarGrid() {
     // Initial setup
     getColumnWidth();
 
-    // Set initial scroll to "Today" (Sunday of current week)
+    // Set initial scroll position directly (no RAF dance needed on mount)
     requestAnimationFrame(() => {
       if (scrollContainerRef) {
-        // Scroll to Today (or initial CenterDate if set)
-        scrollToDate(centerDate());
+        // Calculate initial scroll position for today
+        const today = centerDate();
+        const normalizedDate = new Date(today);
+        normalizedDate.setHours(0, 0, 0, 0);
+        const currentAnchor = anchorDate();
+        const diffTime = normalizedDate.getTime() - currentAnchor.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        const timeColWidth = getTimeColWidth();
+        const currentColWidth = colWidth();
+        const targetScrollLeft = CENTER_OFFSET + (diffDays * currentColWidth) - timeColWidth;
+
+        // Set scroll position directly
+        scrollContainerRef.scrollLeft = targetScrollLeft;
 
         // Vertical scroll to show current time with some context above
         const currentHour = new Date().getHours();
