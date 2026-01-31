@@ -90,6 +90,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.9(hono@4.11.7)
+      '@hono/oauth-providers':
+        specifier: ^0.8.5
+        version: 0.8.5(hono@4.11.7)
       '@paralleldrive/cuid2':
         specifier: ^2.2.2
         version: 2.3.1
@@ -830,6 +833,12 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
+
+  '@hono/oauth-providers@0.8.5':
+    resolution: {integrity: sha512-hgEDH/gUmB/opman9jvT8dLItZsSC9M9yFiaam0b6InK7WQkdzIcaRAkdda47QpixnK9S1Ah2vjDB2U16LkMnA==}
+    engines: {node: '>=18.4.0'}
+    peerDependencies:
+      hono: '>=3.0.0'
 
   '@internationalized/date@3.10.0':
     resolution: {integrity: sha512-oxDR/NTEJ1k+UFVQElaNIk65E/Z83HK1z1WI3lQyhTtnNg4R5oVXaPzK3jcpKG8UHKDVuDQHzn+wsxSz8RP3aw==}
@@ -2625,6 +2634,10 @@ snapshots:
   '@formkit/auto-animate@0.9.0': {}
 
   '@hono/node-server@1.19.9(hono@4.11.7)':
+    dependencies:
+      hono: 4.11.7
+
+  '@hono/oauth-providers@0.8.5(hono@4.11.7)':
     dependencies:
       hono: 4.11.7
 
