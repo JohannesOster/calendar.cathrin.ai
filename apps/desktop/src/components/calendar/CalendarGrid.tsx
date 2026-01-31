@@ -16,7 +16,7 @@ import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
 import {
   AllDaySection,
-  ALL_DAY_SECTION_HEIGHT,
+  calculateAllDaySectionHeight,
   type AllDayEventLayout,
 } from "./AllDaySection";
 import {
@@ -52,7 +52,10 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
-const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT;
+// Use max possible all-day section height for virtual container
+// (10 rows * 24px + 4px padding = 244px max)
+const MAX_ALL_DAY_HEIGHT = 244;
+const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT + MAX_ALL_DAY_HEIGHT;
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -129,6 +132,10 @@ export function CalendarGrid() {
 
   // Disable scroll snap during programmatic scrolls to prevent feedback loops
   const [snapEnabled, setSnapEnabled] = createSignal(true);
+
+  // All-day section expand/collapse state
+  const [allDayExpanded, setAllDayExpanded] = createSignal(false);
+  const toggleAllDayExpanded = () => setAllDayExpanded((prev) => !prev);
 
   // Track scroll direction for prefetching
   let lastScrollLeft = CENTER_OFFSET;
@@ -266,6 +273,14 @@ export function CalendarGrid() {
     }
 
     return result;
+  });
+
+  // Calculate all-day section height based on max row and expanded state
+  const allDayHeight = createMemo(() => {
+    const layouts = allDayEventLayouts();
+    const maxRow =
+      layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
+    return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
   // Calculate day index from scroll position
@@ -599,19 +614,22 @@ export function CalendarGrid() {
 
               {/* Sticky All-Day Section Row */}
               <div
-                class="flex bg-white border-b border-[#e8e8e8]"
+                class="flex bg-white border-b border-[#e8e8e8] transition-[height] duration-200 ease-out"
                 style={{
                   position: "sticky",
                   top: `${HEADER_HEIGHT}px`,
                   "z-index": "9",
-                  height: `${ALL_DAY_SECTION_HEIGHT}px`,
+                  height: `${allDayHeight()}px`,
                   width: "100%",
+                  overflow: "hidden",
                 }}
               >
                 <AllDaySection
                   visibleDays={visibleDays()}
                   colWidth={colWidth()}
                   eventLayouts={allDayEventLayouts()}
+                  isExpanded={allDayExpanded()}
+                  onToggleExpand={toggleAllDayExpanded}
                 />
               </div>
 
@@ -636,12 +654,12 @@ export function CalendarGrid() {
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
-                    class="absolute border-r border-[#e8e8e8]"
+                    class="absolute border-r border-[#e8e8e8] transition-[top] duration-200 ease-out"
                     style={{
                       left: `${item().left}px`,
                       width: `${colWidth()}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT}px`, // Below header and all-day section
+                      top: `${HEADER_HEIGHT + allDayHeight()}px`, // Below header and all-day section
                       "z-index": "1",
                     }}
                   >
@@ -652,10 +670,11 @@ export function CalendarGrid() {
 
               {/* Current Time Line - spans full width at current time position */}
               <div
+                class="transition-[top] duration-200 ease-out"
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${HEADER_HEIGHT + ALL_DAY_SECTION_HEIGHT}px`,
+                  top: `${HEADER_HEIGHT + allDayHeight()}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
