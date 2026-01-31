@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
+import { calendarsRoute } from "./routes/calendars.js";
 import { closeDatabase } from "./db/index.js";
 
 const app = new Hono();
@@ -14,7 +15,8 @@ app.use("*", logger());
 // Routes
 const routes = app
   .route("/health", healthRoute)
-  .route("/auth", authRoute);
+  .route("/auth", authRoute)
+  .route("/api/calendars", calendarsRoute);
 
 // Export type for RPC client (future use)
 export type AppType = typeof routes;

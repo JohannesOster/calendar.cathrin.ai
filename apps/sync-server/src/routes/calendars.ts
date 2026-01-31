@@ -1,0 +1,78 @@
+import { Hono } from "hono";
+import { eq } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { accounts } from "../db/schema.js";
+import { authMiddleware } from "../middlewares/auth.js";
+import { getAccessToken, TokenRevokedError } from "../services/token-refresh.js";
+import {
+  GoogleCalendarService,
+  TokenExpiredError,
+} from "../services/google-calendar.js";
+import type { ApiCalendar } from "@cathrin/shared-types";
+
+interface AccountCalendarsResult {
+  accountId: string;
+  calendars: ApiCalendar[];
+  error?: string;
+}
+
+export const calendarsRoute = new Hono()
+  .use("*", authMiddleware)
+  .get("/", async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    const userId = c.get("userId");
+
+    // Get all accounts for this user
+    const userAccounts = await db.query.accounts.findMany({
+      where: eq(accounts.userId, userId),
+    });
+
+    // Fetch calendars for each account in parallel
+    const results: AccountCalendarsResult[] = await Promise.all(
+      userAccounts.map(async (account) => {
+        try {
+          // Get a valid access token (refreshes if needed)
+          const accessToken = await getAccessToken(account.id);
+
+          const service = new GoogleCalendarService(accessToken);
+          const calendars = await service.fetchCalendarList();
+
+          return {
+            accountId: account.id,
+            calendars: calendars.map((cal) => ({
+              ...cal,
+              accountId: account.id,
+            })),
+          };
+        } catch (error) {
+          console.error(
+            `Failed to fetch calendars for account ${account.email}:`,
+            error
+          );
+
+          // Return partial results with error info
+          if (
+            error instanceof TokenRevokedError ||
+            error instanceof TokenExpiredError
+          ) {
+            return {
+              accountId: account.id,
+              calendars: [],
+              error: "Token expired or revoked - re-authorization required",
+            };
+          }
+
+          return {
+            accountId: account.id,
+            calendars: [],
+            error: error instanceof Error ? error.message : "Failed to fetch calendars",
+          };
+        }
+      })
+    );
+
+    return c.json(results);
+  });

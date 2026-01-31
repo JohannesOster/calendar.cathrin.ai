@@ -1,0 +1,278 @@
+import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
+
+const GOOGLE_CALENDAR_LIST_URL =
+  "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const GOOGLE_CALENDAR_EVENTS_URL =
+  "https://www.googleapis.com/calendar/v3/calendars";
+
+/**
+ * Error thrown when access token is expired or invalid
+ */
+export class TokenExpiredError extends Error {
+  constructor() {
+    super("Access token expired");
+    this.name = "TokenExpiredError";
+  }
+}
+
+/**
+ * Error thrown when sync token is expired (410 Gone)
+ */
+export class SyncTokenExpiredError extends Error {
+  constructor() {
+    super("Sync token expired - full sync required");
+    this.name = "SyncTokenExpiredError";
+  }
+}
+
+/**
+ * Error thrown for other Google API errors
+ */
+export class GoogleApiError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "GoogleApiError";
+  }
+}
+
+// Google API response types
+interface GoogleCalendar {
+  id: string;
+  summary: string;
+  description?: string;
+  backgroundColor?: string;
+  foregroundColor?: string;
+  primary?: boolean;
+  accessRole?: string;
+}
+
+interface CalendarListResponse {
+  kind: string;
+  etag: string;
+  items?: GoogleCalendar[];
+  nextPageToken?: string;
+}
+
+interface EventDateTime {
+  dateTime?: string;
+  date?: string;
+  timeZone?: string;
+}
+
+interface GoogleEvent {
+  id: string;
+  summary?: string;
+  start: EventDateTime;
+  end: EventDateTime;
+  colorId?: string;
+  status?: string;
+}
+
+interface EventsListResponse {
+  kind: string;
+  etag: string;
+  items?: GoogleEvent[];
+  nextPageToken?: string;
+  nextSyncToken?: string;
+}
+
+/**
+ * Google Calendar API client service
+ *
+ * Fetches calendars and events from Google's Calendar API using OAuth access tokens.
+ */
+export class GoogleCalendarService {
+  constructor(private accessToken: string) {}
+
+  /**
+   * Fetch all calendars for the authenticated user
+   */
+  async fetchCalendarList(): Promise<ApiCalendar[]> {
+    const allCalendars: GoogleCalendar[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = new URL(GOOGLE_CALENDAR_LIST_URL);
+      url.searchParams.set("maxResults", "250");
+      url.searchParams.set("minAccessRole", "reader");
+      if (pageToken) {
+        url.searchParams.set("pageToken", pageToken);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      this.handleErrorResponse(response);
+
+      const data = (await response.json()) as CalendarListResponse;
+      if (data.items) {
+        allCalendars.push(...data.items);
+      }
+
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    return allCalendars.map((cal) => this.mapCalendar(cal));
+  }
+
+  /**
+   * Fetch events for a calendar within a time range
+   */
+  async fetchEvents(
+    calendarId: string,
+    timeMin: string,
+    timeMax: string,
+    calendarColor: string
+  ): Promise<ApiCalendarEvent[]> {
+    const allEvents: GoogleEvent[] = [];
+    let pageToken: string | undefined;
+
+    const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
+
+    do {
+      const url = new URL(baseUrl);
+      url.searchParams.set("timeMin", timeMin);
+      url.searchParams.set("timeMax", timeMax);
+      url.searchParams.set("singleEvents", "true");
+      url.searchParams.set("orderBy", "startTime");
+      url.searchParams.set("maxResults", "2500");
+      if (pageToken) {
+        url.searchParams.set("pageToken", pageToken);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      this.handleErrorResponse(response);
+
+      const data = (await response.json()) as EventsListResponse;
+      if (data.items) {
+        // Filter out cancelled events
+        const activeEvents = data.items.filter(
+          (event) => event.status !== "cancelled"
+        );
+        allEvents.push(...activeEvents);
+      }
+
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    return allEvents.map((event) =>
+      this.mapEvent(event, calendarId, calendarColor)
+    );
+  }
+
+  /**
+   * Fetch events incrementally using a sync token
+   */
+  async fetchEventsIncremental(
+    calendarId: string,
+    syncToken: string,
+    calendarColor: string
+  ): Promise<{ events: ApiCalendarEvent[]; nextSyncToken: string }> {
+    const allEvents: GoogleEvent[] = [];
+    let pageToken: string | undefined;
+    let nextSyncToken: string | undefined;
+
+    const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
+
+    do {
+      const url = new URL(baseUrl);
+      url.searchParams.set("syncToken", syncToken);
+      if (pageToken) {
+        url.searchParams.set("pageToken", pageToken);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      // Handle 410 Gone - sync token expired
+      if (response.status === 410) {
+        throw new SyncTokenExpiredError();
+      }
+
+      this.handleErrorResponse(response);
+
+      const data = (await response.json()) as EventsListResponse;
+      if (data.items) {
+        allEvents.push(...data.items);
+      }
+
+      pageToken = data.nextPageToken;
+      nextSyncToken = data.nextSyncToken;
+    } while (pageToken);
+
+    if (!nextSyncToken) {
+      throw new GoogleApiError("No sync token returned", 500);
+    }
+
+    // Note: For incremental sync, we include cancelled events so the caller
+    // knows to remove them. The caller should handle status === 'cancelled'.
+    return {
+      events: allEvents.map((event) =>
+        this.mapEvent(event, calendarId, calendarColor)
+      ),
+      nextSyncToken,
+    };
+  }
+
+  /**
+   * Handle non-2xx responses
+   */
+  private handleErrorResponse(response: Response): void {
+    if (response.status === 401) {
+      throw new TokenExpiredError();
+    }
+
+    if (response.status === 429) {
+      throw new GoogleApiError("Rate limit exceeded", 429);
+    }
+
+    if (!response.ok) {
+      throw new GoogleApiError(
+        `Google API error: ${response.statusText}`,
+        response.status
+      );
+    }
+  }
+
+  /**
+   * Map Google calendar to ApiCalendar
+   */
+  private mapCalendar(calendar: GoogleCalendar): ApiCalendar {
+    return {
+      id: calendar.id,
+      accountId: "", // Will be filled in by the caller
+      name: calendar.summary,
+      color: calendar.backgroundColor ?? "#4285f4",
+      visible: true, // Default to visible, will be user preference later
+      provider: "google",
+    };
+  }
+
+  /**
+   * Map Google event to ApiCalendarEvent
+   */
+  private mapEvent(
+    event: GoogleEvent,
+    calendarId: string,
+    calendarColor: string
+  ): ApiCalendarEvent {
+    return {
+      id: event.id,
+      calendarId,
+      title: event.summary || "(No title)",
+      start: event.start.dateTime || event.start.date || "",
+      end: event.end.dateTime || event.end.date || "",
+      isAllDay: !!event.start.date,
+      color: calendarColor,
+      provider: "google",
+    };
+  }
+}
