@@ -217,7 +217,6 @@ export function CalendarGrid() {
       // Note: centerDate is only set externally (e.g., from mini-calendar clicks)
       // to avoid feedback loops with the scroll effect
       if (!isSameDay(currentDate, visibleStartDate())) {
-        console.log('[CalendarGrid] Setting visibleStartDate to:', currentDate.toISOString());
         setVisibleStartDate(currentDate);
       }
 
@@ -240,10 +239,7 @@ export function CalendarGrid() {
 
   // Virtual Scroll to a specific date
   const scrollToDate = (date: Date) => {
-    if (!scrollContainerRef) {
-      console.log('[CalendarGrid] scrollToDate: no scrollContainerRef');
-      return;
-    }
+    if (!scrollContainerRef) return;
 
     // Normalize to midnight to avoid time component affecting day calculation
     const normalizedDate = new Date(date);
@@ -259,7 +255,6 @@ export function CalendarGrid() {
     // Use a slightly smaller threshold to ensure we have snap points around the target
     const reanchorThreshold = SNAP_TRACK_RANGE - 30; // Leave 30-day buffer
     if (Math.abs(diffDays) > reanchorThreshold) {
-      console.log('[CalendarGrid] Re-anchoring from', currentAnchor.toISOString(), 'to', normalizedDate.toISOString());
       // Set new anchor to be the Sunday of the target week
       const newAnchor = new Date(normalizedDate);
       newAnchor.setDate(normalizedDate.getDate() - normalizedDate.getDay());
@@ -274,15 +269,6 @@ export function CalendarGrid() {
     const currentColWidth = colWidth();
     const targetScrollLeft = CENTER_OFFSET + (diffDays * currentColWidth) - timeColWidth;
 
-    console.log('[CalendarGrid] scrollToDate:', {
-      date: normalizedDate.toISOString(),
-      anchor: anchorDate().toISOString(),
-      diffDays,
-      colWidth: currentColWidth,
-      targetScrollLeft,
-      currentScrollLeft: scrollContainerRef.scrollLeft,
-    });
-
     // Disable snap, wait for DOM update, then scroll
     setSnapEnabled(false);
 
@@ -291,6 +277,10 @@ export function CalendarGrid() {
       requestAnimationFrame(() => {
         if (scrollContainerRef) {
           scrollContainerRef.scrollLeft = targetScrollLeft;
+
+          // Explicitly update state after programmatic scroll
+          // (browser scroll events may not fire reliably for programmatic changes)
+          handleScroll();
 
           // Re-enable snap after scroll completes (give it time to settle)
           setTimeout(() => {

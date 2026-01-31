@@ -74,7 +74,9 @@ export function DayColumn(props: DayColumnProps) {
   // Filter events for this day: must be on this day, from a visible calendar, and not all-day
   const dayEvents = () => {
     const visible = visibleCalendarIds();
-    return events().filter(
+    const allEvents = events();
+
+    return allEvents.filter(
       (event) =>
         isSameDay(event.start, props.date) &&
         visible.has(event.calendarId) &&
