@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import { googleAuth } from "@hono/oauth-providers/google";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { users, accounts } from "../db/schema.js";
+import { users, accounts, sessions } from "../db/schema.js";
 import { encrypt } from "../lib/crypto.js";
+import { createSessionToken, getSessionExpiresAt } from "../lib/jwt.js";
+import { authMiddleware } from "../middlewares/auth.js";
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -103,12 +105,25 @@ export const authRoute = new Hono()
         });
       }
 
-      // Success page that can be closed or redirect to app
+      // Create session and JWT
+      const [session] = await db
+        .insert(sessions)
+        .values({
+          userId: user.id,
+          expiresAt: getSessionExpiresAt(),
+        })
+        .returning();
+
+      const jwt = await createSessionToken(user.id, session.id);
+
+      // Success page that shows the token for the desktop app to capture
+      // The desktop app will read this from the page or we can use a custom protocol
       return c.html(`
         <!DOCTYPE html>
         <html>
           <head>
             <title>Connected!</title>
+            <meta name="session-token" content="${jwt}">
             <style>
               body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -128,6 +143,16 @@ export const authRoute = new Hono()
               }
               h1 { color: #10b981; margin-bottom: 0.5rem; }
               p { color: #666; }
+              .token {
+                margin-top: 1rem;
+                padding: 0.5rem;
+                background: #f0f0f0;
+                border-radius: 4px;
+                font-family: monospace;
+                font-size: 0.75rem;
+                word-break: break-all;
+                max-width: 400px;
+              }
             </style>
           </head>
           <body>
@@ -135,7 +160,14 @@ export const authRoute = new Hono()
               <h1>Connected!</h1>
               <p>Your Google Calendar account has been connected.</p>
               <p>You can close this window.</p>
+              <div class="token" id="token" style="display: none;">${jwt}</div>
             </div>
+            <script>
+              // Notify the desktop app via custom protocol or window message
+              if (window.opener) {
+                window.opener.postMessage({ type: 'oauth-success', token: '${jwt}' }, '*');
+              }
+            </script>
           </body>
         </html>
       `);
@@ -146,4 +178,38 @@ export const authRoute = new Hono()
         500
       );
     }
+  })
+  // Logout endpoint - invalidates session
+  .post("/logout", authMiddleware, async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    const sessionId = c.get("sessionId");
+
+    // Delete session from database
+    await db.delete(sessions).where(eq(sessions.id, sessionId));
+
+    return c.json({ success: true });
+  })
+  // Get current user info
+  .get("/me", authMiddleware, async (c) => {
+    if (!db) {
+      return c.json({ error: "Database not configured" }, 500);
+    }
+
+    const userId = c.get("userId");
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    return c.json({
+      id: user.id,
+      email: user.email,
+    });
   });
