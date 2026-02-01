@@ -29,6 +29,9 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
           props.onSetDefault?.();
         }}
         class="w-3 h-3 rounded shrink-0 cursor-pointer transition-transform hover:scale-110"
+        classList={{
+          "opacity-40": !props.calendar.visible,
+        }}
         style={{
           "background-color": props.calendar.color,
           "box-shadow": props.isDefault
@@ -43,7 +46,7 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
         class="flex-1 text-sm truncate"
         classList={{
           "text-[var(--color-text-primary)]": props.calendar.visible,
-          "text-[var(--color-text-secondary)] line-through": !props.calendar.visible,
+          "text-[var(--color-text-secondary)]": !props.calendar.visible,
         }}
       >
         {props.calendar.name}
