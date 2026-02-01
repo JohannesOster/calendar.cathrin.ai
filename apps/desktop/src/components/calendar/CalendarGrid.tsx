@@ -7,6 +7,7 @@ import {
   on,
   Show,
   For,
+  type Accessor,
 } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { LoaderCircle, ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
@@ -115,6 +116,39 @@ export const activeVisibleWeeks = createMemo(() => {
   }
   return visibleWeeks();
 });
+
+// Helper component for all-day section flash overlay
+// Needs its own state to track 2-second animation duration independently
+function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
+  const [flashKey, setFlashKey] = createSignal(0);
+  const [showFlash, setShowFlash] = createSignal(false);
+
+  let flashTimeout: number | undefined;
+  createEffect(() => {
+    const flash = flashDate();
+    if (!flash) return;
+
+    if (isSameDay(flash, props.date())) {
+      setFlashKey((k) => k + 1);
+      setShowFlash(true);
+      if (flashTimeout) clearTimeout(flashTimeout);
+      flashTimeout = window.setTimeout(() => setShowFlash(false), 2000);
+    } else {
+      setShowFlash(false);
+    }
+  });
+  onCleanup(() => {
+    if (flashTimeout) clearTimeout(flashTimeout);
+  });
+
+  return (
+    <For each={showFlash() ? [flashKey()] : []}>
+      {() => (
+        <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+      )}
+    </For>
+  );
+}
 
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
@@ -555,12 +589,30 @@ export function CalendarGrid() {
 
     // Resize Observer
     if (scrollContainerRef) {
+      // Capture the visible date to preserve during resize
+      // This prevents drift when multiple resize events fire during sidebar animation
+      let preservedDate: Date | null = null;
+
       const resizeObserver = new ResizeObserver((entries) => {
         if (entries[0]?.contentRect.width > 0) {
+          // On first resize event, capture the current visible date
+          // before updating column width
+          if (preservedDate === null) {
+            preservedDate = visibleStartDate();
+          }
+
           getColumnWidth();
-          if (isInitialized) {
-            // Stay on current date during resize
-            scrollToDate(visibleStartDate());
+
+          if (isInitialized && preservedDate) {
+            // Clear the preserved date after a delay (after animation completes)
+            // This allows us to use the preserved date for all resize events
+            // during the animation, then reset for the next resize sequence
+            scrollToDate(preservedDate);
+
+            // Reset after animation settles (sidebar animation is 200ms)
+            setTimeout(() => {
+              preservedDate = null;
+            }, 250);
           }
         }
       });
@@ -783,7 +835,9 @@ export function CalendarGrid() {
                         height: `${allDayHeight()}px`,
                         top: 0,
                       }}
-                    />
+                    >
+                      <AllDayFlashOverlay date={() => item().date} />
+                    </div>
                   )}
                 </Key>
 

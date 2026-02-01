@@ -26,7 +26,8 @@ export function toggleRightSidebar() {
 export function AppShell(props: AppShellProps) {
   const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [isWindowFocused, setIsWindowFocused] = createSignal(true);
-  const [showTrafficLightOutlines, setShowTrafficLightOutlines] = createSignal(false);
+  const [showTrafficLightOutlines, setShowTrafficLightOutlines] =
+    createSignal(false);
   let unlistenResize: (() => void) | undefined;
   let unlistenFullscreen: (() => void) | undefined;
   let unlistenTransitionStart: (() => void) | undefined;
@@ -44,18 +45,24 @@ export function AppShell(props: AppShellProps) {
     setIsFullscreen(await appWindow.isFullscreen());
 
     // Listen for fullscreen transition starting (shows traffic light outlines)
-    unlistenTransitionStart = await listen("fullscreen-transition-start", () => {
-      setShowTrafficLightOutlines(true);
-    });
+    unlistenTransitionStart = await listen(
+      "fullscreen-transition-start",
+      () => {
+        setShowTrafficLightOutlines(true);
+      },
+    );
 
     // Listen to custom event from Rust (fires earlier than onResized)
-    unlistenFullscreen = await listen<boolean>("fullscreen-changed", (event) => {
-      setIsFullscreen(event.payload);
-      // Hide outlines when fullscreen transition completes
-      if (event.payload === true) {
-        setShowTrafficLightOutlines(false);
-      }
-    });
+    unlistenFullscreen = await listen<boolean>(
+      "fullscreen-changed",
+      (event) => {
+        setIsFullscreen(event.payload);
+        // Hide outlines when fullscreen transition completes
+        if (event.payload === true) {
+          setShowTrafficLightOutlines(false);
+        }
+      },
+    );
 
     // Fallback: also listen to resize events
     unlistenResize = await appWindow.onResized(async () => {
@@ -63,9 +70,12 @@ export function AppShell(props: AppShellProps) {
     });
 
     // Listen for window focus changes (traffic lights disappear when unfocused on macOS)
-    unlistenFocusChanged = await listen<boolean>("window-focus-changed", (event) => {
-      setIsWindowFocused(event.payload);
-    });
+    unlistenFocusChanged = await listen<boolean>(
+      "window-focus-changed",
+      (event) => {
+        setIsWindowFocused(event.payload);
+      },
+    );
   });
 
   onCleanup(() => {
@@ -89,10 +99,11 @@ export function AppShell(props: AppShellProps) {
       {/* Header row - draggable, with integrated toggle button */}
       <div
         data-tauri-drag-region
-        class="h-11 w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
+        class="h-13 w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
       >
         {/* Traffic light outlines - shown during fullscreen transition or when window unfocused */}
-        {(showTrafficLightOutlines() || (!isWindowFocused() && !isFullscreen())) && (
+        {(showTrafficLightOutlines() ||
+          (!isWindowFocused() && !isFullscreen())) && (
           <div class="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
             <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
             <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
