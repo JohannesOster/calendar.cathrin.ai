@@ -267,7 +267,7 @@ export function CalendarGrid() {
     return result;
   });
 
-  // Calculate event counts per visible day column (for collapsed "X events" label)
+  // Calculate event counts per day column (for collapsed "X events" label)
   const eventCountsPerDay = createMemo(() => {
     const layouts = allDayEventLayouts();
     const days = visibleDays();
@@ -294,6 +294,34 @@ export function CalendarGrid() {
     }
 
     return counts;
+  });
+
+  // Check if any VISIBLE (not buffer) day has multiple events - for toggle visibility
+  const hasVisibleMultiEventDay = createMemo(() => {
+    const counts = eventCountsPerDay();
+    const days = visibleDays();
+    const width = colWidth();
+    const timeColWidth = getTimeColWidth();
+    const currentScrollLeft = scrollLeft();
+
+    // Calculate the actual visible pixel range (after time column)
+    const visibleStartPx = currentScrollLeft + timeColWidth;
+    const visibleEndPx = currentScrollLeft + (containerWidth() || window.innerWidth);
+
+    // Check only days that are actually visible (not in buffer)
+    for (const day of days) {
+      const dayStartPx = day.left;
+      const dayEndPx = day.left + width;
+
+      // Day is visible if it overlaps with the visible range
+      const isVisible = dayStartPx < visibleEndPx && dayEndPx > visibleStartPx;
+      if (!isVisible) continue;
+
+      const count = counts.get(getDateKey(day.date)) ?? 0;
+      if (count > 1) return true;
+    }
+
+    return false;
   });
 
   // Calculate all-day section height based on max row of VISIBLE events only
@@ -690,7 +718,7 @@ export function CalendarGrid() {
                     when={
                       allDayEventLayouts().some(l => l.row >= 1) ||
                       allDayExpanded() ||
-                      Array.from(eventCountsPerDay().values()).some(count => count > 1)
+                      hasVisibleMultiEventDay()
                     }
                     fallback={
                       <Show when={allDayEventLayouts().length > 0}>
