@@ -143,6 +143,28 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
 }
 
+/* All-day event chip states */
+.all-day-chip {
+  background-color: color-mix(in srgb, var(--event-color) 15%, white);
+}
+
+.all-day-chip:hover {
+  background-color: color-mix(in srgb, var(--event-color) 25%, white);
+}
+
+.all-day-chip:focus {
+  outline: none;
+  background-color: var(--event-color);
+}
+
+.all-day-chip:focus span {
+  color: white;
+}
+
+.all-day-chip:focus .all-day-chip__ribbon {
+  background-color: color-mix(in srgb, var(--event-color), white 30%);
+}
+
 /* Paper burning animation - video-based fire effect */
 .event-burning {
   pointer-events: none;

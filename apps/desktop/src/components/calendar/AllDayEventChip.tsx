@@ -41,21 +41,27 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   return (
     <div
-      class="absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[filter] hover:brightness-95"
+      class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
       style={{
         left: `${props.left}px`,
         width: `${props.width}px`,
         top: `${props.row * ROW_HEIGHT + 4}px`, // 4px top padding
         height: "var(--grid-all-day-chip-height)",
-        "border-left": `3px solid ${props.event.color}`,
-        "background-color": `${props.event.color}15`,
+        "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
       }}
       tabIndex={0}
       role="button"
       aria-label={ariaLabel()}
     >
-      <span class="truncate text-[#37352f]">{props.event.title}</span>
+      <div
+        class="all-day-chip__ribbon absolute left-0 top-0 bottom-0 w-[3px]"
+        style={{
+          "background-color": props.event.color,
+          "border-radius": `${props.startsBeforeView ? "0" : "4px"} 0 0 ${props.startsBeforeView ? "0" : "4px"}`,
+        }}
+      />
+      <span class="truncate text-[#37352f] ml-0.5">{props.event.title}</span>
     </div>
   );
 }
