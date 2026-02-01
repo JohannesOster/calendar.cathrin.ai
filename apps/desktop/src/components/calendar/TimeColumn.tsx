@@ -11,16 +11,15 @@ function formatHour(hour: number): string {
 
 export function TimeColumn() {
   return (
-    <div class="relative">
+    <div class="flex flex-col">
       <For each={hours}>
         {(hour) => (
           <div
-            class="h-[var(--grid-hour-height)] relative"
+            class="h-[var(--grid-hour-height)] flex items-start justify-end pr-2"
             style={{ height: "var(--grid-hour-height)" }}
           >
-            {/* Time label - vertically centered on the grid line (top of this cell) */}
-            {/* Using -translate-y-1/2 to center the text on the line */}
-            <span class="absolute top-0 -translate-y-1/2 right-2 text-xs text-[#91918e] leading-none">
+            {/* Time label - use negative margin to center on grid line */}
+            <span class="text-xs text-[#91918e] leading-none -mt-[0.35rem]">
               {formatHour(hour)}
             </span>
           </div>

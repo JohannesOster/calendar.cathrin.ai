@@ -6,14 +6,20 @@ import {
   createMemo,
   on,
   Show,
+  For,
 } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { LoaderCircle } from "lucide-solid";
+import { LoaderCircle, ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
+import {
+  calculateAllDaySectionHeight,
+  type AllDayEventLayout,
+} from "./AllDaySection";
+import { AllDayEventChip } from "./AllDayEventChip";
 import {
   addDays,
   isSameDay,
@@ -21,8 +27,9 @@ import {
   formatMonthYear,
   getWeekId,
 } from "../../lib/date-utils";
-import { isLoadingWeeks } from "../../stores/events";
-import { isAnySyncing } from "../../stores/accounts";
+import { events, isLoadingWeeks } from "../../stores/events";
+import { connectedAccounts, isAnySyncing } from "../../stores/accounts";
+import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import { currentView } from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
@@ -46,7 +53,6 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
-const CONTENT_HEIGHT = TOTAL_HEIGHT + HEADER_HEIGHT;
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -124,6 +130,10 @@ export function CalendarGrid() {
   // Disable scroll snap during programmatic scrolls to prevent feedback loops
   const [snapEnabled, setSnapEnabled] = createSignal(true);
 
+  // All-day section expand/collapse state
+  const [allDayExpanded, setAllDayExpanded] = createSignal(false);
+  const toggleAllDayExpanded = () => setAllDayExpanded((prev) => !prev);
+
   // Track scroll direction for prefetching
   let lastScrollLeft = CENTER_OFFSET;
   let directionResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -195,6 +205,176 @@ export function CalendarGrid() {
     }
     return indices;
   });
+
+  // Get visible calendar IDs for filtering events
+  const visibleCalendarIds = createMemo(() => {
+    return new Set(
+      connectedAccounts()
+        .flatMap((a) => a.calendars)
+        .filter((c) => c.visible)
+        .map((c) => c.id)
+    );
+  });
+
+  // Calculate all-day event layouts for the visible week
+  const allDayEventLayouts = createMemo((): AllDayEventLayout[] => {
+    const days = visibleDays();
+    if (days.length === 0) return [];
+
+    // Find first and last visible day (excluding buffer days)
+    // Buffer days extend beyond visible area, so find the actual visible 7-day range
+    const width = colWidth();
+    const currentScrollLeft = scrollLeft();
+    const timeColWidth = getTimeColWidth();
+
+    // Use the full range of rendered days (including buffer) for all-day layout
+    // This ensures events render into non-visible columns and are ready when scrolled to
+    if (days.length === 0) return [];
+
+    const viewStart = days[0].date;
+    const viewEnd = days[days.length - 1].date;
+    const totalColumns = days.length;
+
+    // Filter to visible calendars
+    const visibleIds = visibleCalendarIds();
+    const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
+
+    // Calculate layouts using the full range of days
+    const layouts = calculateAllDayLayouts(visibleEvents, viewStart, viewEnd, totalColumns);
+
+    // Convert to pixel positions
+    const result: AllDayEventLayout[] = [];
+    const firstDayLeft = days[0].left;
+
+    for (const [eventId, layoutInfo] of layouts) {
+      const event = visibleEvents.find((e) => e.id === eventId);
+      if (!event) continue;
+
+      // Calculate pixel position from column info
+      const left = firstDayLeft + layoutInfo.startCol * width;
+      const chipWidth = layoutInfo.span * width - 4; // 4px gap
+
+      result.push({
+        event,
+        left,
+        width: chipWidth,
+        row: layoutInfo.row,
+        startsBeforeView: layoutInfo.startsBeforeView,
+        endsAfterView: layoutInfo.endsAfterView,
+      });
+    }
+
+    return result;
+  });
+
+  // Calculate event counts per day column (for collapsed "X events" label)
+  const eventCountsPerDay = createMemo(() => {
+    const layouts = allDayEventLayouts();
+    const days = visibleDays();
+    const width = colWidth();
+
+    const counts = new Map<string, number>();
+
+    for (const day of days) {
+      const dayKey = getDateKey(day.date);
+      const dayStartPx = day.left;
+      const dayEndPx = day.left + width;
+
+      let count = 0;
+      for (const layout of layouts) {
+        const eventStartPx = layout.left;
+        const eventEndPx = layout.left + layout.width;
+
+        // Event overlaps with this day column
+        if (eventStartPx < dayEndPx && eventEndPx > dayStartPx) {
+          count++;
+        }
+      }
+      counts.set(dayKey, count);
+    }
+
+    return counts;
+  });
+
+  // Check if toggle should show based on VISIBLE (not buffer) events only
+  const shouldShowToggle = createMemo(() => {
+    if (allDayExpanded()) return true;
+
+    const layouts = allDayEventLayouts();
+    if (layouts.length === 0) return false;
+
+    const timeColWidth = getTimeColWidth();
+    const currentScrollLeft = scrollLeft();
+
+    // Calculate the actual visible pixel range (after time column)
+    const visibleStartPx = currentScrollLeft + timeColWidth;
+    const visibleEndPx = currentScrollLeft + (containerWidth() || window.innerWidth);
+
+    // Filter to only visible layouts
+    const visibleLayouts = layouts.filter((layout) => {
+      const eventStartPx = layout.left;
+      const eventEndPx = layout.left + layout.width;
+      return eventStartPx < visibleEndPx && eventEndPx > visibleStartPx;
+    });
+
+    // Show toggle if any visible event is in row 1+
+    if (visibleLayouts.some(l => l.row >= 1)) return true;
+
+    // Also check if any visible day has multiple events
+    const counts = eventCountsPerDay();
+    const days = visibleDays();
+    const width = colWidth();
+
+    for (const day of days) {
+      const dayStartPx = day.left;
+      const dayEndPx = day.left + width;
+
+      // Day is visible if it overlaps with the visible range
+      const isVisible = dayStartPx < visibleEndPx && dayEndPx > visibleStartPx;
+      if (!isVisible) continue;
+
+      const count = counts.get(getDateKey(day.date)) ?? 0;
+      if (count > 1) return true;
+    }
+
+    return false;
+  });
+
+  // Calculate all-day section height based on max row of VISIBLE events only
+  // This prevents the section from expanding due to off-screen events in the buffer
+  const allDayHeight = createMemo(() => {
+    const layouts = allDayEventLayouts();
+    if (layouts.length === 0) return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const days = visibleDays();
+    if (days.length === 0) return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const width = colWidth();
+    const timeColWidth = getTimeColWidth();
+    const currentScrollLeft = scrollLeft();
+
+    // Calculate the actual visible pixel range (after time column)
+    const visibleStartPx = currentScrollLeft + timeColWidth;
+    const visibleEndPx = currentScrollLeft + (containerWidth() || window.innerWidth);
+
+    // Filter to events that overlap with the visible pixel range
+    const visibleLayouts = layouts.filter((layout) => {
+      const eventStartPx = layout.left;
+      const eventEndPx = layout.left + layout.width;
+
+      // Event is visible if it overlaps with the visible range
+      return eventStartPx < visibleEndPx && eventEndPx > visibleStartPx;
+    });
+
+    const maxRow =
+      visibleLayouts.length === 0 ? -1 : Math.max(...visibleLayouts.map((l) => l.row));
+    return calculateAllDaySectionHeight(maxRow, allDayExpanded());
+  });
+
+  // Total content height = header + all-day section + time grid
+  const contentHeight = createMemo(() =>
+    HEADER_HEIGHT + allDayHeight() + TOTAL_HEIGHT
+  );
 
   // Calculate day index from scroll position
   // Account for sticky time column - the visible day starts after the time column
@@ -469,6 +649,7 @@ export function CalendarGrid() {
               position: "relative",
               "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
               "scroll-padding-left": "var(--grid-time-col-width)",
+              "overscroll-behavior": "none",
             }}
             onScroll={handleScroll}
           >
@@ -476,7 +657,7 @@ export function CalendarGrid() {
             <div
               style={{
                 width: `${CONTAINER_WIDTH}px`,
-                height: `${CONTENT_HEIGHT}px`,
+                height: `${contentHeight()}px`,
                 position: "relative",
               }}
             >
@@ -501,6 +682,7 @@ export function CalendarGrid() {
                     position: "sticky",
                     left: "0",
                     "z-index": "20", // Higher than date headers
+                    overflow: "hidden", // Prevent horizontal jitter during scroll
                   }}
                 />
 
@@ -525,7 +707,154 @@ export function CalendarGrid() {
                 </Key>
               </div>
 
-              {/* Sticky Time Column Body - Sticky Left */}
+              {/* Sticky All-Day Section Row - matches header row structure */}
+              <div
+                class="flex bg-white border-b border-[#e8e8e8] transition-[height] duration-200 ease-out"
+                style={{
+                  position: "sticky",
+                  top: `${HEADER_HEIGHT}px`,
+                  "z-index": "10", // Same as header row
+                  height: `${allDayHeight()}px`,
+                  width: "100%",
+                }}
+              >
+                {/* Sticky corner - matches time column header corner */}
+                <div
+                  class="bg-white border-r border-b border-[#e8e8e8] flex items-start justify-end pt-1 pr-2"
+                  style={{
+                    width: "var(--grid-time-col-width)",
+                    height: `${allDayHeight()}px`,
+                    "flex-shrink": "0",
+                    position: "sticky",
+                    left: "0",
+                    "z-index": "20", // Higher than event chips
+                    overflow: "hidden", // Prevent horizontal jitter during scroll
+                  }}
+                >
+                  {/* Show toggle button if multiple events, or "All day" label if single events */}
+                  <Show
+                    when={shouldShowToggle()}
+                    fallback={
+                      <Show when={allDayEventLayouts().length > 0}>
+                        <span class="text-[10px] text-[#91918e] font-light">All day</span>
+                      </Show>
+                    }
+                  >
+                    <button
+                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded py-0.5 pl-0.5 transition-colors"
+                      onClick={toggleAllDayExpanded}
+                      tabIndex={0}
+                      aria-label={allDayExpanded() ? "Collapse all-day events" : "Expand all-day events"}
+                    >
+                      {allDayExpanded() ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+                    </button>
+                  </Show>
+                </div>
+
+                {/* Absolute day slots - matches header date slots */}
+                <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                  {(item) => (
+                    <div
+                      class="absolute border-r border-b border-[#e8e8e8] bg-white"
+                      style={{
+                        left: `${item().left}px`,
+                        width: `${colWidth()}px`,
+                        height: `${allDayHeight()}px`,
+                        top: 0,
+                      }}
+                    />
+                  )}
+                </Key>
+
+                {/* All-day event chips (when expanded, or for columns with single events when collapsed) */}
+                <Show
+                  when={allDayExpanded()}
+                  fallback={
+                    <>
+                      {/* When collapsed: show chips only for columns with single events */}
+                      {/* Use Key with event.id to preserve DOM focus during scroll */}
+                      <Key each={allDayEventLayouts().filter(l => l.row < 1)} by={(l) => l.event.id}>
+                        {(layout) => {
+                          // Check if this chip spans any column with multiple events
+                          // Use accessors inside to stay reactive
+                          const shouldHide = () => {
+                            const width = colWidth();
+                            const days = visibleDays();
+                            const counts = eventCountsPerDay();
+                            const chipStartPx = layout().left;
+                            const chipEndPx = layout().left + layout().width;
+
+                            return days.some(day => {
+                              const dayStartPx = day.left;
+                              const dayEndPx = day.left + width;
+                              const overlaps = chipStartPx < dayEndPx && chipEndPx > dayStartPx;
+                              const count = counts.get(getDateKey(day.date)) ?? 0;
+                              return overlaps && count > 1;
+                            });
+                          };
+
+                          return (
+                            <Show when={!shouldHide()}>
+                              <AllDayEventChip
+                                event={layout().event}
+                                left={layout().left}
+                                width={layout().width}
+                                row={layout().row}
+                                startsBeforeView={layout().startsBeforeView}
+                                endsAfterView={layout().endsAfterView}
+                              />
+                            </Show>
+                          );
+                        }}
+                      </Key>
+
+                      {/* "X events" labels for columns with multiple events */}
+                      <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                        {(day) => {
+                          const count = () => eventCountsPerDay().get(getDateKey(day().date)) ?? 0;
+
+                          return (
+                            <Show when={count() > 1}>
+                              <div
+                                class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
+                                style={{
+                                  left: `${day().left}px`,
+                                  width: `${colWidth()}px`,
+                                  top: "4px",
+                                  height: "var(--grid-all-day-chip-height)",
+                                }}
+                                onClick={toggleAllDayExpanded}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`${count()} all-day events. Click to expand.`}
+                              >
+                                {count()} events
+                              </div>
+                            </Show>
+                          );
+                        }}
+                      </Key>
+                    </>
+                  }
+                >
+                  {/* When expanded: show all chips */}
+                  {/* Use Key with event.id to preserve DOM focus during scroll */}
+                  <Key each={allDayEventLayouts()} by={(l) => l.event.id}>
+                    {(layout) => (
+                      <AllDayEventChip
+                        event={layout().event}
+                        left={layout().left}
+                        width={layout().width}
+                        row={layout().row}
+                        startsBeforeView={layout().startsBeforeView}
+                        endsAfterView={layout().endsAfterView}
+                      />
+                    )}
+                  </Key>
+                </Show>
+              </div>
+
+              {/* Sticky Time Column Body - Sticky Left, below all-day section */}
               <div
                 class="bg-white border-r border-[#e8e8e8]"
                 style={{
@@ -533,7 +862,8 @@ export function CalendarGrid() {
                   height: `${TOTAL_HEIGHT}px`,
                   position: "sticky",
                   left: "0",
-                  "z-index": "15",
+                  "z-index": "5", // Below all-day section (z-index 10) so it scrolls beneath
+                  overflow: "hidden", // Prevent horizontal jitter during scroll
                 }}
               >
                 <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
@@ -546,12 +876,12 @@ export function CalendarGrid() {
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
-                    class="absolute border-r border-[#e8e8e8]"
+                    class="absolute border-r border-[#e8e8e8] transition-[top] duration-200 ease-out"
                     style={{
                       left: `${item().left}px`,
                       width: `${colWidth()}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${HEADER_HEIGHT}px`, // Below header
+                      top: `${HEADER_HEIGHT + allDayHeight()}px`, // Below header and all-day section
                       "z-index": "1",
                     }}
                   >
@@ -562,10 +892,11 @@ export function CalendarGrid() {
 
               {/* Current Time Line - spans full width at current time position */}
               <div
+                class="transition-[top] duration-200 ease-out"
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${HEADER_HEIGHT}px`,
+                  top: `${HEADER_HEIGHT + allDayHeight()}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
@@ -588,7 +919,7 @@ export function CalendarGrid() {
                         top: "0",
                         left: `${getDayLeftPosition(dayIndex(), colWidth())}px`,
                         width: `${colWidth()}px`,
-                        height: `${CONTENT_HEIGHT}px`,
+                        height: `${contentHeight()}px`,
                         "z-index": "-1",
                         "scroll-snap-align": "start",
                         "scroll-snap-stop": isWeekStart(date)
