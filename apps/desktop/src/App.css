@@ -17,7 +17,7 @@ body {
 :root {
   /* Grid dimensions */
   --grid-col-width: 120px;
-  --grid-header-height: 53px;
+  --grid-header-height: 30px;
   --grid-hour-height: 48px;
   --grid-time-col-width: 64px;
   --grid-all-day-chip-height: 20px;

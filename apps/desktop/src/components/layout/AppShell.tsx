@@ -89,7 +89,7 @@ export function AppShell(props: AppShellProps) {
       {/* Header row - draggable, with integrated toggle button */}
       <div
         data-tauri-drag-region
-        class="h-[var(--grid-header-height)] w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
+        class="h-11 w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
       >
         {/* Traffic light outlines - shown during fullscreen transition or when window unfocused */}
         {(showTrafficLightOutlines() || (!isWindowFocused() && !isFullscreen())) && (

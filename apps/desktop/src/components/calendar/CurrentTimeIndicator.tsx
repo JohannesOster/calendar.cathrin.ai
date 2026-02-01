@@ -40,12 +40,13 @@ export function CurrentTimeBadge() {
   return (
     <div
       class="absolute left-0 right-0 z-20 pointer-events-none"
-      style={{ top: `${getTimePosition(now())}px` }}
+      style={{
+        top: `${getTimePosition(now())}px`,
+        transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
+      }}
     >
       {/* Time badge */}
-      <div
-        class="absolute right-0 -translate-y-1/2 bg-[#ea4335] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap"
-      >
+      <div class="absolute right-0 -translate-y-1/2 bg-[#ea4335] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
         {formatCurrentTime(now())}
       </div>
     </div>
@@ -71,7 +72,8 @@ export function CurrentTimeLine(props: CurrentTimeIndicatorProps) {
       class="absolute left-0 z-20 pointer-events-none"
       style={{
         top: `${getTimePosition(now())}px`,
-        width: `${(props.totalDays / props.visibleDaysCount) * 100}%`
+        width: `${(props.totalDays / props.visibleDaysCount) * 100}%`,
+        transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
       }}
     >
       {/* Thin line spanning all columns */}
