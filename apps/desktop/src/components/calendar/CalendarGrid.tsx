@@ -719,7 +719,7 @@ export function CalendarGrid() {
               >
                 {/* Sticky corner - matches time column header corner */}
                 <div
-                  class="bg-white border-r border-b border-[#e8e8e8] flex items-start justify-center pt-1"
+                  class="bg-white border-r border-b border-[#e8e8e8] flex items-start justify-end pt-1 pr-2"
                   style={{
                     width: "var(--grid-time-col-width)",
                     height: `${allDayHeight()}px`,
