@@ -267,11 +267,34 @@ export function CalendarGrid() {
     return result;
   });
 
-  // Calculate all-day section height based on max row and expanded state
+  // Calculate all-day section height based on max row of VISIBLE events only
+  // This prevents the section from expanding due to off-screen events in the buffer
   const allDayHeight = createMemo(() => {
     const layouts = allDayEventLayouts();
+    if (layouts.length === 0) return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const days = visibleDays();
+    if (days.length === 0) return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const width = colWidth();
+    const timeColWidth = getTimeColWidth();
+    const currentScrollLeft = scrollLeft();
+
+    // Calculate the actual visible pixel range (after time column)
+    const visibleStartPx = currentScrollLeft + timeColWidth;
+    const visibleEndPx = currentScrollLeft + (containerWidth() || window.innerWidth);
+
+    // Filter to events that overlap with the visible pixel range
+    const visibleLayouts = layouts.filter((layout) => {
+      const eventStartPx = layout.left;
+      const eventEndPx = layout.left + layout.width;
+
+      // Event is visible if it overlaps with the visible range
+      return eventStartPx < visibleEndPx && eventEndPx > visibleStartPx;
+    });
+
     const maxRow =
-      layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
+      visibleLayouts.length === 0 ? -1 : Math.max(...visibleLayouts.map((l) => l.row));
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
@@ -553,6 +576,7 @@ export function CalendarGrid() {
               position: "relative",
               "scroll-snap-type": snapEnabled() ? "x mandatory" : "none",
               "scroll-padding-left": "var(--grid-time-col-width)",
+              "overscroll-behavior": "none",
             }}
             onScroll={handleScroll}
           >
@@ -620,9 +644,9 @@ export function CalendarGrid() {
                   width: "100%",
                 }}
               >
-                {/* Sticky "All day" label - matches time column header corner */}
+                {/* Sticky corner - matches time column header corner */}
                 <div
-                  class="bg-white border-r border-b border-[#e8e8e8] flex flex-col items-end justify-start pt-1 pr-2"
+                  class="bg-white border-r border-b border-[#e8e8e8] flex items-center justify-center"
                   style={{
                     width: "var(--grid-time-col-width)",
                     height: `${allDayHeight()}px`,
@@ -632,11 +656,10 @@ export function CalendarGrid() {
                     "z-index": "20", // Higher than event chips
                   }}
                 >
-                  <span class="text-xs text-[#91918e]">All day</span>
                   {/* Expand/collapse button */}
-                  <Show when={allDayEventLayouts().some(l => l.row >= 2) || allDayExpanded()}>
+                  <Show when={allDayEventLayouts().some(l => l.row >= 1) || allDayExpanded()}>
                     <button
-                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded p-0.5 mt-1 transition-colors"
+                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded p-0.5 transition-colors"
                       onClick={toggleAllDayExpanded}
                       tabIndex={0}
                       aria-label={allDayExpanded() ? "Collapse all-day events" : "Expand all-day events"}
@@ -662,7 +685,7 @@ export function CalendarGrid() {
                 </Key>
 
                 {/* All-day event chips */}
-                <For each={allDayExpanded() ? allDayEventLayouts() : allDayEventLayouts().filter(l => l.row < 2)}>
+                <For each={allDayExpanded() ? allDayEventLayouts() : allDayEventLayouts().filter(l => l.row < 1)}>
                   {(layout) => (
                     <AllDayEventChip
                       event={layout.event}

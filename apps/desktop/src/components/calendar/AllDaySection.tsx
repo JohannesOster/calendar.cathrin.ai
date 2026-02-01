@@ -29,7 +29,7 @@ interface AllDaySectionProps {
 // Layout constants
 const ROW_HEIGHT = 24; // chip height (20px) + gap (4px)
 const BASE_PADDING = 4; // top padding
-const MAX_COLLAPSED_ROWS = 2;
+const MAX_COLLAPSED_ROWS = 1;
 const MIN_SECTION_HEIGHT = 28; // minimum height when empty
 
 /**

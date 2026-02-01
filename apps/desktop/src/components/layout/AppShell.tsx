@@ -85,7 +85,7 @@ export function AppShell(props: AppShellProps) {
   });
 
   return (
-    <div class="h-screen flex flex-col bg-white">
+    <div class="h-screen flex flex-col bg-white overflow-hidden">
       {/* Header row - draggable, with integrated toggle button */}
       <div
         data-tauri-drag-region
