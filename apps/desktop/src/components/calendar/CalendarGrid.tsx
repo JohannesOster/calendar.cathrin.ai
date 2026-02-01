@@ -685,8 +685,12 @@ export function CalendarGrid() {
                     "z-index": "20", // Higher than event chips
                   }}
                 >
-                  {/* Expand/collapse button */}
-                  <Show when={allDayEventLayouts().some(l => l.row >= 1) || allDayExpanded()}>
+                  {/* Expand/collapse button - show if there are stacked events OR any day has multiple events */}
+                  <Show when={
+                    allDayEventLayouts().some(l => l.row >= 1) ||
+                    allDayExpanded() ||
+                    Array.from(eventCountsPerDay().values()).some(count => count > 1)
+                  }>
                     <button
                       class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded p-0.5 transition-colors"
                       onClick={toggleAllDayExpanded}
