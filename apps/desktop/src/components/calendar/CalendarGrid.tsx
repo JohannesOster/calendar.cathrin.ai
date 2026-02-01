@@ -589,31 +589,28 @@ export function CalendarGrid() {
 
     // Resize Observer
     if (scrollContainerRef) {
-      // Capture the visible date to preserve during resize
-      // This prevents drift when multiple resize events fire during sidebar animation
-      let preservedDate: Date | null = null;
-
       const resizeObserver = new ResizeObserver((entries) => {
-        if (entries[0]?.contentRect.width > 0) {
-          // On first resize event, capture the current visible date
-          // before updating column width
-          if (preservedDate === null) {
-            preservedDate = visibleStartDate();
-          }
+        if (entries[0]?.contentRect.width > 0 && isInitialized) {
+          // Capture current position as a day index BEFORE updating column width
+          const previousColWidth = colWidth();
+          const currentScrollLeft = scrollContainerRef!.scrollLeft;
+          const timeColWidth = getTimeColWidth();
+          // Use float for precision - represents exact position within day columns
+          const dayIndex =
+            (currentScrollLeft + timeColWidth - CENTER_OFFSET) / previousColWidth;
 
+          // Update column width based on new container size
           getColumnWidth();
 
-          if (isInitialized && preservedDate) {
-            // Clear the preserved date after a delay (after animation completes)
-            // This allows us to use the preserved date for all resize events
-            // during the animation, then reset for the next resize sequence
-            scrollToDate(preservedDate);
-
-            // Reset after animation settles (sidebar animation is 200ms)
-            setTimeout(() => {
-              preservedDate = null;
-            }, 250);
-          }
+          // Immediately reposition to keep the same day visible
+          // No RAF delays - synchronous update prevents visual glitch
+          const newColWidth = colWidth();
+          const newScrollLeft =
+            CENTER_OFFSET + dayIndex * newColWidth - timeColWidth;
+          scrollContainerRef!.scrollLeft = newScrollLeft;
+        } else if (entries[0]?.contentRect.width > 0) {
+          // Not initialized yet, just update column width
+          getColumnWidth();
         }
       });
       resizeObserver.observe(scrollContainerRef);
