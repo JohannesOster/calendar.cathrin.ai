@@ -682,6 +682,7 @@ export function CalendarGrid() {
                     position: "sticky",
                     left: "0",
                     "z-index": "20", // Higher than date headers
+                    overflow: "hidden", // Prevent horizontal jitter during scroll
                   }}
                 />
 
@@ -727,6 +728,7 @@ export function CalendarGrid() {
                     position: "sticky",
                     left: "0",
                     "z-index": "20", // Higher than event chips
+                    overflow: "hidden", // Prevent horizontal jitter during scroll
                   }}
                 >
                   {/* Show toggle button if multiple events, or "All day" label if single events */}
@@ -739,7 +741,7 @@ export function CalendarGrid() {
                     }
                   >
                     <button
-                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded p-0.5 transition-colors"
+                      class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded py-0.5 pl-0.5 transition-colors"
                       onClick={toggleAllDayExpanded}
                       tabIndex={0}
                       aria-label={allDayExpanded() ? "Collapse all-day events" : "Expand all-day events"}
@@ -861,6 +863,7 @@ export function CalendarGrid() {
                   position: "sticky",
                   left: "0",
                   "z-index": "5", // Below all-day section (z-index 10) so it scrolls beneath
+                  overflow: "hidden", // Prevent horizontal jitter during scroll
                 }}
               >
                 <div class="relative" style={{ height: `${TOTAL_HEIGHT}px` }}>
