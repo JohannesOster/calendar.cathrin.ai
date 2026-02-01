@@ -267,6 +267,35 @@ export function CalendarGrid() {
     return result;
   });
 
+  // Calculate event counts per visible day column (for collapsed "X events" label)
+  const eventCountsPerDay = createMemo(() => {
+    const layouts = allDayEventLayouts();
+    const days = visibleDays();
+    const width = colWidth();
+
+    const counts = new Map<string, number>();
+
+    for (const day of days) {
+      const dayKey = getDateKey(day.date);
+      const dayStartPx = day.left;
+      const dayEndPx = day.left + width;
+
+      let count = 0;
+      for (const layout of layouts) {
+        const eventStartPx = layout.left;
+        const eventEndPx = layout.left + layout.width;
+
+        // Event overlaps with this day column
+        if (eventStartPx < dayEndPx && eventEndPx > dayStartPx) {
+          count++;
+        }
+      }
+      counts.set(dayKey, count);
+    }
+
+    return counts;
+  });
+
   // Calculate all-day section height based on max row of VISIBLE events only
   // This prevents the section from expanding due to off-screen events in the buffer
   const allDayHeight = createMemo(() => {
@@ -646,7 +675,7 @@ export function CalendarGrid() {
               >
                 {/* Sticky corner - matches time column header corner */}
                 <div
-                  class="bg-white border-r border-b border-[#e8e8e8] flex items-center justify-center"
+                  class="bg-white border-r border-b border-[#e8e8e8] flex items-start justify-center pt-1"
                   style={{
                     width: "var(--grid-time-col-width)",
                     height: `${allDayHeight()}px`,
@@ -684,19 +713,90 @@ export function CalendarGrid() {
                   )}
                 </Key>
 
-                {/* All-day event chips */}
-                <For each={allDayExpanded() ? allDayEventLayouts() : allDayEventLayouts().filter(l => l.row < 1)}>
-                  {(layout) => (
-                    <AllDayEventChip
-                      event={layout.event}
-                      left={layout.left}
-                      width={layout.width}
-                      row={layout.row}
-                      startsBeforeView={layout.startsBeforeView}
-                      endsAfterView={layout.endsAfterView}
-                    />
-                  )}
-                </For>
+                {/* All-day event chips (when expanded, or for columns with single events when collapsed) */}
+                <Show
+                  when={allDayExpanded()}
+                  fallback={
+                    <>
+                      {/* When collapsed: show chips only for columns with single events */}
+                      <For each={allDayEventLayouts().filter(l => l.row < 1)}>
+                        {(layout) => {
+                          // Check if this chip spans any column with multiple events
+                          const width = colWidth();
+                          const days = visibleDays();
+                          const counts = eventCountsPerDay();
+
+                          // Find which columns this chip overlaps
+                          const chipStartPx = layout.left;
+                          const chipEndPx = layout.left + layout.width;
+
+                          // Check if any overlapping column has multiple events
+                          const hasMultiEventColumn = days.some(day => {
+                            const dayStartPx = day.left;
+                            const dayEndPx = day.left + width;
+                            const overlaps = chipStartPx < dayEndPx && chipEndPx > dayStartPx;
+                            const count = counts.get(getDateKey(day.date)) ?? 0;
+                            return overlaps && count > 1;
+                          });
+
+                          // Hide chip if it overlaps any multi-event column
+                          if (hasMultiEventColumn) return null;
+
+                          return (
+                            <AllDayEventChip
+                              event={layout.event}
+                              left={layout.left}
+                              width={layout.width}
+                              row={layout.row}
+                              startsBeforeView={layout.startsBeforeView}
+                              endsAfterView={layout.endsAfterView}
+                            />
+                          );
+                        }}
+                      </For>
+
+                      {/* "X events" labels for columns with multiple events */}
+                      <For each={visibleDays()}>
+                        {(day) => {
+                          const count = eventCountsPerDay().get(getDateKey(day.date)) ?? 0;
+                          if (count <= 1) return null;
+
+                          return (
+                            <div
+                              class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
+                              style={{
+                                left: `${day.left}px`,
+                                width: `${colWidth()}px`,
+                                top: "4px",
+                                height: "var(--grid-all-day-chip-height)",
+                              }}
+                              onClick={toggleAllDayExpanded}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`${count} all-day events. Click to expand.`}
+                            >
+                              {count} events
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </>
+                  }
+                >
+                  {/* When expanded: show all chips */}
+                  <For each={allDayEventLayouts()}>
+                    {(layout) => (
+                      <AllDayEventChip
+                        event={layout.event}
+                        left={layout.left}
+                        width={layout.width}
+                        row={layout.row}
+                        startsBeforeView={layout.startsBeforeView}
+                        endsAfterView={layout.endsAfterView}
+                      />
+                    )}
+                  </For>
+                </Show>
               </div>
 
               {/* Sticky Time Column Body - Sticky Left, below all-day section */}
