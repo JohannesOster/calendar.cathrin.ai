@@ -296,11 +296,13 @@ export function CalendarGrid() {
     return counts;
   });
 
-  // Check if any VISIBLE (not buffer) day has multiple events - for toggle visibility
-  const hasVisibleMultiEventDay = createMemo(() => {
-    const counts = eventCountsPerDay();
-    const days = visibleDays();
-    const width = colWidth();
+  // Check if toggle should show based on VISIBLE (not buffer) events only
+  const shouldShowToggle = createMemo(() => {
+    if (allDayExpanded()) return true;
+
+    const layouts = allDayEventLayouts();
+    if (layouts.length === 0) return false;
+
     const timeColWidth = getTimeColWidth();
     const currentScrollLeft = scrollLeft();
 
@@ -308,7 +310,21 @@ export function CalendarGrid() {
     const visibleStartPx = currentScrollLeft + timeColWidth;
     const visibleEndPx = currentScrollLeft + (containerWidth() || window.innerWidth);
 
-    // Check only days that are actually visible (not in buffer)
+    // Filter to only visible layouts
+    const visibleLayouts = layouts.filter((layout) => {
+      const eventStartPx = layout.left;
+      const eventEndPx = layout.left + layout.width;
+      return eventStartPx < visibleEndPx && eventEndPx > visibleStartPx;
+    });
+
+    // Show toggle if any visible event is in row 1+
+    if (visibleLayouts.some(l => l.row >= 1)) return true;
+
+    // Also check if any visible day has multiple events
+    const counts = eventCountsPerDay();
+    const days = visibleDays();
+    const width = colWidth();
+
     for (const day of days) {
       const dayStartPx = day.left;
       const dayEndPx = day.left + width;
@@ -715,11 +731,7 @@ export function CalendarGrid() {
                 >
                   {/* Show toggle button if multiple events, or "All day" label if single events */}
                   <Show
-                    when={
-                      allDayEventLayouts().some(l => l.row >= 1) ||
-                      allDayExpanded() ||
-                      hasVisibleMultiEventDay()
-                    }
+                    when={shouldShowToggle()}
                     fallback={
                       <Show when={allDayEventLayouts().length > 0}>
                         <span class="text-[10px] text-[#91918e] font-light">All day</span>
