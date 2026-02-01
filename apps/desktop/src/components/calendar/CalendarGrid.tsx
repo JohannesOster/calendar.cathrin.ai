@@ -719,83 +719,85 @@ export function CalendarGrid() {
                   fallback={
                     <>
                       {/* When collapsed: show chips only for columns with single events */}
-                      <For each={allDayEventLayouts().filter(l => l.row < 1)}>
+                      {/* Use Key with event.id to preserve DOM focus during scroll */}
+                      <Key each={allDayEventLayouts().filter(l => l.row < 1)} by={(l) => l.event.id}>
                         {(layout) => {
                           // Check if this chip spans any column with multiple events
-                          const width = colWidth();
-                          const days = visibleDays();
-                          const counts = eventCountsPerDay();
+                          // Use accessors inside to stay reactive
+                          const shouldHide = () => {
+                            const width = colWidth();
+                            const days = visibleDays();
+                            const counts = eventCountsPerDay();
+                            const chipStartPx = layout().left;
+                            const chipEndPx = layout().left + layout().width;
 
-                          // Find which columns this chip overlaps
-                          const chipStartPx = layout.left;
-                          const chipEndPx = layout.left + layout.width;
-
-                          // Check if any overlapping column has multiple events
-                          const hasMultiEventColumn = days.some(day => {
-                            const dayStartPx = day.left;
-                            const dayEndPx = day.left + width;
-                            const overlaps = chipStartPx < dayEndPx && chipEndPx > dayStartPx;
-                            const count = counts.get(getDateKey(day.date)) ?? 0;
-                            return overlaps && count > 1;
-                          });
-
-                          // Hide chip if it overlaps any multi-event column
-                          if (hasMultiEventColumn) return null;
+                            return days.some(day => {
+                              const dayStartPx = day.left;
+                              const dayEndPx = day.left + width;
+                              const overlaps = chipStartPx < dayEndPx && chipEndPx > dayStartPx;
+                              const count = counts.get(getDateKey(day.date)) ?? 0;
+                              return overlaps && count > 1;
+                            });
+                          };
 
                           return (
-                            <AllDayEventChip
-                              event={layout.event}
-                              left={layout.left}
-                              width={layout.width}
-                              row={layout.row}
-                              startsBeforeView={layout.startsBeforeView}
-                              endsAfterView={layout.endsAfterView}
-                            />
+                            <Show when={!shouldHide()}>
+                              <AllDayEventChip
+                                event={layout().event}
+                                left={layout().left}
+                                width={layout().width}
+                                row={layout().row}
+                                startsBeforeView={layout().startsBeforeView}
+                                endsAfterView={layout().endsAfterView}
+                              />
+                            </Show>
                           );
                         }}
-                      </For>
+                      </Key>
 
                       {/* "X events" labels for columns with multiple events */}
-                      <For each={visibleDays()}>
+                      <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                         {(day) => {
-                          const count = eventCountsPerDay().get(getDateKey(day.date)) ?? 0;
-                          if (count <= 1) return null;
+                          const count = () => eventCountsPerDay().get(getDateKey(day().date)) ?? 0;
 
                           return (
-                            <div
-                              class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
-                              style={{
-                                left: `${day.left}px`,
-                                width: `${colWidth()}px`,
-                                top: "4px",
-                                height: "var(--grid-all-day-chip-height)",
-                              }}
-                              onClick={toggleAllDayExpanded}
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`${count} all-day events. Click to expand.`}
-                            >
-                              {count} events
-                            </div>
+                            <Show when={count() > 1}>
+                              <div
+                                class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
+                                style={{
+                                  left: `${day().left}px`,
+                                  width: `${colWidth()}px`,
+                                  top: "4px",
+                                  height: "var(--grid-all-day-chip-height)",
+                                }}
+                                onClick={toggleAllDayExpanded}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`${count()} all-day events. Click to expand.`}
+                              >
+                                {count()} events
+                              </div>
+                            </Show>
                           );
                         }}
-                      </For>
+                      </Key>
                     </>
                   }
                 >
                   {/* When expanded: show all chips */}
-                  <For each={allDayEventLayouts()}>
+                  {/* Use Key with event.id to preserve DOM focus during scroll */}
+                  <Key each={allDayEventLayouts()} by={(l) => l.event.id}>
                     {(layout) => (
                       <AllDayEventChip
-                        event={layout.event}
-                        left={layout.left}
-                        width={layout.width}
-                        row={layout.row}
-                        startsBeforeView={layout.startsBeforeView}
-                        endsAfterView={layout.endsAfterView}
+                        event={layout().event}
+                        left={layout().left}
+                        width={layout().width}
+                        row={layout().row}
+                        startsBeforeView={layout().startsBeforeView}
+                        endsAfterView={layout().endsAfterView}
                       />
                     )}
-                  </For>
+                  </Key>
                 </Show>
               </div>
 
