@@ -787,6 +787,7 @@ export function CalendarGrid() {
                   "z-index": "11",
                   height: `${MONTH_LABEL_HEIGHT}px`,
                   width: "100%",
+                  transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                 }}
               >
                 <div
@@ -795,6 +796,7 @@ export function CalendarGrid() {
                     position: "sticky",
                     left: "0",
                     "z-index": "21",
+                    transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                   }}
                 >
                   <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
@@ -812,6 +814,7 @@ export function CalendarGrid() {
                   "z-index": "10",
                   height: `${HEADER_HEIGHT}px`,
                   width: "100%",
+                  transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                 }}
               >
                 {/* Sticky Time Column Header - Sticky Left */}
@@ -825,6 +828,7 @@ export function CalendarGrid() {
                     left: "0",
                     "z-index": "20", // Higher than date headers
                     overflow: "hidden", // Prevent horizontal jitter during scroll
+                    transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                   }}
                 />
 
@@ -858,6 +862,7 @@ export function CalendarGrid() {
                   "z-index": "10", // Same as header row
                   height: `${allDayHeight()}px`,
                   width: "100%",
+                  transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                 }}
               >
                 {/* Sticky corner - matches time column header corner */}
@@ -871,6 +876,7 @@ export function CalendarGrid() {
                     left: "0",
                     "z-index": "20", // Higher than event chips
                     overflow: "hidden", // Prevent horizontal jitter during scroll
+                    transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                   }}
                 >
                   {/* Show toggle button if multiple events, or "All day" label if single events */}
