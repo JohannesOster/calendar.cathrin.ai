@@ -111,14 +111,14 @@ export function CalendarHeader() {
       {/* Right section - View switch and sidebar toggle */}
       <div class="flex items-center gap-3 min-w-[200px] justify-end">
         {/* View switch */}
-        <div class="flex items-center gap-0.5 rounded-lg border border-[#e8e8e8] p-0.5">
+        <div class="flex items-center rounded-md border border-[#e8e8e8] overflow-hidden">
           {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
             <button
               onClick={() => setCurrentView(view)}
-              class="px-2.5 py-0.5 text-xs font-medium transition-colors rounded"
+              class="px-2.5 py-1 text-xs font-medium transition-colors"
               classList={{
-                "bg-white text-[#37352f] shadow-sm": currentView() === view,
-                "text-[#91918e] hover:text-[#37352f]": currentView() !== view,
+                "bg-[#efefef] text-[#37352f]": currentView() === view,
+                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": currentView() !== view,
               }}
             >
               {view}
