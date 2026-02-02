@@ -2,7 +2,7 @@ import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show }
 import { Key } from "@solid-primitives/keyed";
 import { MonthDayCell, type DayInfo } from "./MonthDayCell";
 import { visibleStartDate, setVisibleStartDate, setDisplayedMonth, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
-import { formatMonthYear, addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
+import { addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
 
 // ============================================================================
 // Constants - Grid Dimensions
@@ -63,7 +63,9 @@ const getMonthLabel = (weekStartDate: Date): string | null => {
   for (let i = 0; i < 7; i++) {
     const day = addDays(weekStartDate, i);
     if (day.getDate() === 1) {
-      return formatMonthYear(day);
+      const month = day.toLocaleDateString("en-US", { month: "long" });
+      const year = day.getFullYear();
+      return `${month} ${year}`;
     }
   }
   return null;
@@ -172,6 +174,44 @@ export function MonthView() {
     setMonthVisibleWeekIds(weekIds);
   });
 
+  // Compute the month/year label for the header
+  // Format: "January 2025" (single month visible), "January – February 2025" (same year),
+  // or "December 2025 – January 2026" (year boundary)
+  const monthYearLabel = createMemo(() => {
+    const currentScrollTop = scrollTop();
+    const currentContainerHeight = containerHeight() || window.innerHeight;
+
+    // Get first and last visible week
+    const startPixel = currentScrollTop;
+    const endPixel = currentScrollTop + currentContainerHeight;
+
+    const startWeekIndex = Math.floor((startPixel - CENTER_OFFSET) / WEEK_ROW_HEIGHT);
+    const endWeekIndex = Math.ceil((endPixel - CENTER_OFFSET) / WEEK_ROW_HEIGHT);
+
+    // Get the date at the start of the first visible week
+    const startDate = getWeekStartDate(startWeekIndex);
+    // Get the date at the end of the last visible week (Saturday)
+    const endDate = addDays(getWeekStartDate(endWeekIndex), 6);
+
+    const startMonth = startDate.toLocaleDateString("en-US", { month: "long" });
+    const endMonth = endDate.toLocaleDateString("en-US", { month: "long" });
+    const startYear = startDate.getFullYear();
+    const endYear = endDate.getFullYear();
+
+    if (startYear !== endYear) {
+      // Year boundary: "December 2025 – January 2026"
+      return `${startMonth} ${startYear} – ${endMonth} ${endYear}`;
+    }
+
+    if (startMonth !== endMonth) {
+      // Different months same year: "January – February 2025"
+      return `${startMonth} – ${endMonth} ${endYear}`;
+    }
+
+    // Same month: "January 2025"
+    return `${startMonth} ${startYear}`;
+  });
+
   // Handle scroll events
   const handleScroll = () => {
     if (!scrollContainerRef) return;
@@ -192,8 +232,9 @@ export function MonthView() {
 
     // Update displayed month - use the month that has most days visible
     // For simplicity, use the month of the first day of the visible week
-    const newMonth = formatMonthYear(currentDate);
-    setDisplayedMonth(newMonth);
+    const month = currentDate.toLocaleDateString("en-US", { month: "long" });
+    const year = currentDate.getFullYear();
+    setDisplayedMonth(`${month} ${year}`);
 
     // Update visible start date for mini-calendar sync
     if (!isSameDay(currentDate, visibleStartDate())) {
@@ -261,7 +302,17 @@ export function MonthView() {
 
   return (
     <div class="flex-1 flex flex-col min-h-0">
-      {/* Weekday headers - fixed at top */}
+      {/* Month/year label row */}
+      <div
+        class="flex items-end pb-1 pl-3 bg-white shrink-0"
+        style={{ height: "36px" }}
+      >
+        <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
+          {monthYearLabel()}
+        </span>
+      </div>
+
+      {/* Weekday headers row */}
       <div
         class="grid grid-cols-7 border-b border-[#e8e8e8] bg-white shrink-0"
         style={{ height: `${WEEKDAY_HEADER_HEIGHT}px` }}
@@ -278,7 +329,7 @@ export function MonthView() {
       {/* Scrollable week rows */}
       <div
         ref={scrollContainerRef}
-        class="flex-1 overflow-auto overscroll-none"
+        class="flex-1 overflow-auto overscroll-none scrollbar-hidden"
         style={{
           position: "relative",
           "scroll-snap-type": snapEnabled() ? "y mandatory" : "none",
@@ -297,7 +348,7 @@ export function MonthView() {
                   height: `${WEEK_ROW_HEIGHT}px`,
                 }}
               >
-                {/* Month label overlay */}
+                {/* Month label overlay - positioned in the first column */}
                 <Show when={week().monthLabel}>
                   <div
                     class="absolute left-2 top-1 text-sm font-medium text-[#37352f] z-10 pointer-events-none"

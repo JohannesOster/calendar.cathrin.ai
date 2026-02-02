@@ -1,14 +1,20 @@
-import { createSignal } from "solid-js";
+import { Show } from "solid-js";
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   PanelRight,
   PanelRightClose,
+  LoaderCircle,
 } from "lucide-solid";
 import { rightSidebarOpen, toggleRightSidebar } from "./AppShell";
-import { visibleStartDate, setCenterDate, setFlashDate } from "../calendar/CalendarGrid";
+import {
+  visibleStartDate,
+  setCenterDate,
+  setFlashDate,
+} from "../calendar/CalendarGrid";
 import { currentView, setCurrentView, type ViewType } from "../../stores/view";
+import { isLoadingWeeks } from "../../stores/events";
+import { isAnySyncing } from "../../stores/accounts";
 
 // Helper to add days to a date
 function addDays(date: Date, days: number): Date {
@@ -18,8 +24,6 @@ function addDays(date: Date, days: number): Date {
 }
 
 export function CalendarHeader() {
-  const [viewDropdownOpen, setViewDropdownOpen] = createSignal(false);
-
   const navigatePrev = () => {
     const date = visibleStartDate();
     const view = currentView();
@@ -68,59 +72,32 @@ export function CalendarHeader() {
   };
 
   return (
-    <header class="flex items-center px-3 h-full">
-      {/* Center section - View selector and navigation */}
-      <div class="flex-1 flex justify-center">
-        {/* View Selector */}
-      <div class="relative">
-          <button
-            onClick={() => setViewDropdownOpen((v) => !v)}
-            class="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors "
-          >
-            <span>{currentView()}</span>
-            <ChevronDown size={14} class="text-[#91918e]" />
-          </button>
+    <header class="relative flex items-center justify-between px-3 h-full">
+      {/* Left section - Loading indicator */}
+      <div class="flex items-center gap-2 min-w-[200px]">
+        <Show when={isLoadingWeeks() || isAnySyncing()}>
+          <LoaderCircle
+            size={14}
+            class="text-[#91918e] animate-spin"
+            aria-label="Loading events"
+          />
+        </Show>
+      </div>
 
-          {viewDropdownOpen() && (
-            <>
-              <div
-                class="fixed inset-0 z-10"
-                onClick={() => setViewDropdownOpen(false)}
-              />
-              <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white rounded-lg shadow-lg border border-[#e8e8e8] py-1 z-20 min-w-[100px]">
-                {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
-                  <button
-                    onClick={() => {
-                      setCurrentView(view);
-                      setViewDropdownOpen(false);
-                    }}
-                    class="w-full px-3 py-1.5 text-left text-sm hover:bg-[#efefef] text-[#37352f] "
-                    classList={{
-                      "bg-[#efefef]": currentView() === view,
-                    }}
-                  >
-                    {view}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-                {/* Today button */}
-                <button
-          onClick={goToToday}
-          class="px-2.5 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors "
-        >
-          Today
-        </button>
-
-        {/* Navigation arrows */}
+      {/* Center section - Navigation with Today (absolutely centered) */}
+      <div class="absolute left-1/2 -translate-x-1/2 flex items-center">
         <button
           onClick={navigatePrev}
-          class="ml-1 p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
+          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
           title="Previous"
         >
           <ChevronLeft size={18} />
+        </button>
+        <button
+          onClick={goToToday}
+          class="px-2.5 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors"
+        >
+          Today
         </button>
         <button
           onClick={navigateNext}
@@ -129,15 +106,30 @@ export function CalendarHeader() {
         >
           <ChevronRight size={18} />
         </button>
-
       </div>
 
-      {/* Right section - Sidebar toggle */}
-      <div class="flex items-center gap-2">
+      {/* Right section - View switch and sidebar toggle */}
+      <div class="flex items-center gap-3 min-w-[200px] justify-end">
+        {/* View switch */}
+        <div class="flex items-center gap-0.5 rounded-lg border border-[#e8e8e8] p-0.5">
+          {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
+            <button
+              onClick={() => setCurrentView(view)}
+              class="px-2.5 py-0.5 text-xs font-medium transition-colors rounded"
+              classList={{
+                "bg-white text-[#37352f] shadow-sm": currentView() === view,
+                "text-[#91918e] hover:text-[#37352f]": currentView() !== view,
+              }}
+            >
+              {view}
+            </button>
+          ))}
+        </div>
+
         {/* Right sidebar toggle */}
         <button
           onClick={toggleRightSidebar}
-          class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors "
+          class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
           title={rightSidebarOpen() ? "Hide right sidebar" : "Show right sidebar"}
         >
           {rightSidebarOpen() ? (

@@ -25,7 +25,6 @@ import {
   addDays,
   isSameDay,
   isToday,
-  formatMonthYear,
   getWeekId,
 } from "../../lib/date-utils";
 import { events } from "../../stores/events";
@@ -46,6 +45,7 @@ const isWeekStart = (date: Date): boolean => date.getDay() === 0;
 // ============================================================================
 const HOURS_PER_DAY = 24;
 const HOUR_HEIGHT = 48; // px - matches --grid-hour-height
+const MONTH_LABEL_HEIGHT = 36; // px - height of the month/year label row
 const HEADER_HEIGHT = 30; // px - matches --grid-header-height
 const TIME_COL_WIDTH_FALLBACK = 64; // px - fallback for --grid-time-col-width
 const VISIBLE_DAYS_COUNT = 7; // Number of day columns visible at once
@@ -153,6 +153,9 @@ function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
 export function CalendarGrid() {
   let scrollContainerRef: HTMLDivElement | undefined;
   let isInitialized = false;
+  // Flag to prevent handleScroll from updating visibleStartDate during view switch
+  // (browser scroll restoration can cause stale scroll positions to be read)
+  let isRestoringScrollPosition = false;
 
   // Track scroll position for virtualization
   const [scrollLeft, setScrollLeft] = createSignal(CENTER_OFFSET);
@@ -250,16 +253,38 @@ export function CalendarGrid() {
     );
   });
 
+  // Compute the month/year label for the header
+  // Format: "January 2025" (single month), "January – February 2025" (same year),
+  // or "December 2025 – January 2026" (year boundary)
+  const monthYearLabel = createMemo(() => {
+    const start = visibleStartDate();
+    const end = addDays(start, 6);
+
+    const startMonth = start.toLocaleDateString("en-US", { month: "long" });
+    const endMonth = end.toLocaleDateString("en-US", { month: "long" });
+    const startYear = start.getFullYear();
+    const endYear = end.getFullYear();
+
+    if (startYear !== endYear) {
+      // Year boundary: "December 2025 – January 2026"
+      return `${startMonth} ${startYear} – ${endMonth} ${endYear}`;
+    }
+
+    if (startMonth !== endMonth) {
+      // Different months same year: "January – February 2025"
+      return `${startMonth} – ${endMonth} ${endYear}`;
+    }
+
+    // Same month: "January 2025"
+    return `${startMonth} ${startYear}`;
+  });
+
   // Calculate all-day event layouts for the visible week
   const allDayEventLayouts = createMemo((): AllDayEventLayout[] => {
     const days = visibleDays();
     if (days.length === 0) return [];
 
-    // Find first and last visible day (excluding buffer days)
-    // Buffer days extend beyond visible area, so find the actual visible 7-day range
     const width = colWidth();
-    const currentScrollLeft = scrollLeft();
-    const timeColWidth = getTimeColWidth();
 
     // Use the full range of rendered days (including buffer) for all-day layout
     // This ensures events render into non-visible columns and are ready when scrolled to
@@ -391,7 +416,6 @@ export function CalendarGrid() {
     if (days.length === 0)
       return calculateAllDaySectionHeight(-1, allDayExpanded());
 
-    const width = colWidth();
     const timeColWidth = getTimeColWidth();
     const currentScrollLeft = scrollLeft();
 
@@ -416,9 +440,9 @@ export function CalendarGrid() {
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
-  // Total content height = header + all-day section + time grid
+  // Total content height = month label + header + all-day section + time grid
   const contentHeight = createMemo(
-    () => HEADER_HEIGHT + allDayHeight() + TOTAL_HEIGHT,
+    () => MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight() + TOTAL_HEIGHT,
   );
 
   // Calculate day index from scroll position
@@ -432,6 +456,7 @@ export function CalendarGrid() {
   const handleScroll = () => {
     if (!scrollContainerRef) return;
     const currentScrollLeft = scrollContainerRef.scrollLeft;
+    console.log('[CalendarGrid] handleScroll called, scrollLeft:', currentScrollLeft, 'colWidth:', colWidth());
     setScrollLeft(currentScrollLeft);
 
     // Track scroll direction for prefetching
@@ -459,34 +484,43 @@ export function CalendarGrid() {
       const currentDate = addDays(anchorDate(), dayIndex);
 
       // Update displayed month if changed
-      const newMonth = formatMonthYear(currentDate);
-      if (newMonth !== displayedMonth()) {
-        setDisplayedMonth(newMonth);
+      // Skip during scroll position restoration to prevent stale values from flashing
+      if (!isRestoringScrollPosition) {
+        const month = currentDate.toLocaleDateString("en-US", { month: "long" });
+        const year = currentDate.getFullYear();
+        const newMonth = `${month} ${year}`;
+        if (newMonth !== displayedMonth()) {
+          setDisplayedMonth(newMonth);
+        }
       }
 
       // Update visible start date for mini-calendar highlighting
       // Note: centerDate is only set externally (e.g., from mini-calendar clicks)
       // to avoid feedback loops with the scroll effect
-      if (!isSameDay(currentDate, visibleStartDate())) {
+      // Skip during scroll position restoration to prevent stale values from overwriting
+      if (!isRestoringScrollPosition && !isSameDay(currentDate, visibleStartDate())) {
         setVisibleStartDate(currentDate);
       }
 
       // Update visible weeks - compute week IDs for visible range
-      const endDate = addDays(currentDate, VISIBLE_DAYS_COUNT - 1);
-      const startWeek = getWeekId(currentDate);
-      const endWeek = getWeekId(endDate);
+      // Skip during scroll position restoration to prevent stale values
+      if (!isRestoringScrollPosition) {
+        const endDate = addDays(currentDate, VISIBLE_DAYS_COUNT - 1);
+        const startWeek = getWeekId(currentDate);
+        const endWeek = getWeekId(endDate);
 
-      // Build new weeks array (1 or 2 weeks depending on boundary crossing)
-      const newWeeks =
-        startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
+        // Build new weeks array (1 or 2 weeks depending on boundary crossing)
+        const newWeeks =
+          startWeek === endWeek ? [startWeek] : [startWeek, endWeek];
 
-      // Only update if weeks actually changed
-      const currentWeeks = visibleWeeks();
-      if (
-        newWeeks.length !== currentWeeks.length ||
-        newWeeks.some((w, i) => w !== currentWeeks[i])
-      ) {
-        setVisibleWeeks(newWeeks);
+        // Only update if weeks actually changed
+        const currentWeeks = visibleWeeks();
+        if (
+          newWeeks.length !== currentWeeks.length ||
+          newWeeks.some((w, i) => w !== currentWeeks[i])
+        ) {
+          setVisibleWeeks(newWeeks);
+        }
       }
     }
   };
@@ -494,6 +528,8 @@ export function CalendarGrid() {
   // Virtual Scroll to a specific date
   const scrollToDate = (date: Date) => {
     if (!scrollContainerRef) return;
+
+    console.log('[CalendarGrid] scrollToDate called with:', date.toISOString());
 
     // Normalize to midnight to avoid time component affecting day calculation
     const normalizedDate = new Date(date);
@@ -527,6 +563,8 @@ export function CalendarGrid() {
     const targetScrollLeft =
       CENTER_OFFSET + diffDays * currentColWidth - timeColWidth;
 
+    console.log('[CalendarGrid] scrollToDate: diffDays:', diffDays, 'colWidth:', currentColWidth, 'targetScrollLeft:', targetScrollLeft);
+
     // Disable snap, wait for DOM update, then scroll
     setSnapEnabled(false);
 
@@ -535,6 +573,9 @@ export function CalendarGrid() {
       requestAnimationFrame(() => {
         if (scrollContainerRef) {
           scrollContainerRef.scrollLeft = targetScrollLeft;
+
+          // Now that scroll position is correct, allow handleScroll to update visibleStartDate
+          isRestoringScrollPosition = false;
 
           // Explicitly update state after programmatic scroll
           // (browser scroll events may not fire reliably for programmatic changes)
@@ -686,15 +727,25 @@ export function CalendarGrid() {
           isInitialized &&
           scrollContainerRef
         ) {
+          // Prevent handleScroll from overwriting visibleStartDate with stale scroll position
+          // (browser scroll restoration can restore old positions to the new element)
+          isRestoringScrollPosition = true;
+          // Capture the target date NOW, before RAF - something might modify
+          // visibleStartDate during the frame (e.g., scroll events on new container)
+          const targetDate = new Date(visibleStartDate());
+          console.log('[CalendarGrid] Switching from Month to Week, targetDate:', targetDate.toISOString());
+          console.log('[CalendarGrid] anchorDate:', anchorDate().toISOString());
           // Give the DOM time to render the week view container
           requestAnimationFrame(() => {
+            console.log('[CalendarGrid] RAF callback, visibleStartDate now:', visibleStartDate().toISOString());
             // Re-attach ResizeObserver to the new scroll container element
             // (the old one was unmounted when we switched to Month view)
             setupResizeObserver();
             // Update column width for the new container size
             getColumnWidth();
-            scrollToDate(visibleStartDate());
-            handleScroll();
+            // scrollToDate handles calling handleScroll internally after setting position
+            // It will clear isRestoringScrollPosition after the scroll completes
+            scrollToDate(targetDate);
           });
         }
       },
@@ -727,12 +778,37 @@ export function CalendarGrid() {
                 position: "relative",
               }}
             >
-              {/* Sticky Header Row */}
+              {/* Sticky Month/Year Label Row */}
+              <div
+                class="flex bg-white"
+                style={{
+                  position: "sticky",
+                  top: "0",
+                  "z-index": "11",
+                  height: `${MONTH_LABEL_HEIGHT}px`,
+                  width: "100%",
+                }}
+              >
+                <div
+                  class="bg-white flex items-end pb-1 pl-3"
+                  style={{
+                    position: "sticky",
+                    left: "0",
+                    "z-index": "21",
+                  }}
+                >
+                  <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
+                    {monthYearLabel()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Sticky Date Header Row */}
               <div
                 class="flex bg-white border-b border-[#e8e8e8]"
                 style={{
                   position: "sticky",
-                  top: "0",
+                  top: `${MONTH_LABEL_HEIGHT}px`,
                   "z-index": "10",
                   height: `${HEADER_HEIGHT}px`,
                   width: "100%",
@@ -778,7 +854,7 @@ export function CalendarGrid() {
                 class="flex bg-white border-b border-[#e8e8e8] transition-[height] duration-200 ease-out"
                 style={{
                   position: "sticky",
-                  top: `${HEADER_HEIGHT}px`,
+                  top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT}px`,
                   "z-index": "10", // Same as header row
                   height: `${allDayHeight()}px`,
                   width: "100%",
@@ -968,7 +1044,7 @@ export function CalendarGrid() {
                       left: `${item().left}px`,
                       width: `${colWidth()}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${HEADER_HEIGHT + allDayHeight()}px`, // Below header and all-day section
+                      top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight()}px`, // Below month label, header and all-day section
                       "z-index": "1",
                     }}
                   >
@@ -983,7 +1059,7 @@ export function CalendarGrid() {
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${HEADER_HEIGHT + allDayHeight()}px`,
+                  top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight()}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
