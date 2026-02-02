@@ -152,7 +152,7 @@ export function AppShell(props: AppShellProps) {
         </aside>
 
         {/* Center content area - min-w-0 allows shrinking, overflow-hidden prevents layout issues during sidebar animation */}
-        <main class="flex-1 flex flex-col max-h-full bg-white min-w-0 overflow-hidden">
+        <main class="flex-1 flex flex-col max-h-full bg-white min-w-0 overflow-hidden pt-2">
           {props.children}
         </main>
 

@@ -47,6 +47,8 @@ export function MiniCalendar() {
   // Go to today - navigate to show this week (Sunday first), flash today
   const goToToday = () => {
     const today = new Date();
+    // Always reset mini-calendar to current month (even if main grid doesn't scroll)
+    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
     navigateToDate(today);
   };
 

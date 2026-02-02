@@ -19,7 +19,7 @@ export function TimeColumn() {
             style={{ height: "var(--grid-hour-height)" }}
           >
             {/* Time label - use negative margin to center on grid line */}
-            <span class="text-xs text-[#91918e] leading-none -mt-[0.35rem]">
+            <span class="text-[10px] text-[#91918e] leading-none -mt-[0.35rem]">
               {formatHour(hour)}
             </span>
           </div>
