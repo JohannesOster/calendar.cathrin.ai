@@ -10,7 +10,7 @@ import {
   type Accessor,
 } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { LoaderCircle, ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
+import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
@@ -28,8 +28,8 @@ import {
   formatMonthYear,
   getWeekId,
 } from "../../lib/date-utils";
-import { events, isLoadingWeeks } from "../../stores/events";
-import { connectedAccounts, isAnySyncing } from "../../stores/accounts";
+import { events } from "../../stores/events";
+import { connectedAccounts } from "../../stores/accounts";
 import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import { currentView } from "../../stores/view";
 
@@ -549,6 +549,45 @@ export function CalendarGrid() {
     });
   };
 
+  // ResizeObserver instance - stored so we can re-attach after view switches
+  let resizeObserver: ResizeObserver | null = null;
+
+  // Setup/re-attach ResizeObserver to the scroll container
+  const setupResizeObserver = () => {
+    // Disconnect any existing observer
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+    }
+
+    if (!scrollContainerRef) return;
+
+    resizeObserver = new ResizeObserver((entries) => {
+      if (entries[0]?.contentRect.width > 0 && isInitialized) {
+        // Capture current position as a day index BEFORE updating column width
+        const previousColWidth = colWidth();
+        const currentScrollLeft = scrollContainerRef!.scrollLeft;
+        const timeColWidth = getTimeColWidth();
+        // Use float for precision - represents exact position within day columns
+        const dayIndex =
+          (currentScrollLeft + timeColWidth - CENTER_OFFSET) / previousColWidth;
+
+        // Update column width based on new container size
+        getColumnWidth();
+
+        // Immediately reposition to keep the same day visible
+        // No RAF delays - synchronous update prevents visual glitch
+        const newColWidth = colWidth();
+        const newScrollLeft =
+          CENTER_OFFSET + dayIndex * newColWidth - timeColWidth;
+        scrollContainerRef!.scrollLeft = newScrollLeft;
+      } else if (entries[0]?.contentRect.width > 0) {
+        // Not initialized yet, just update column width
+        getColumnWidth();
+      }
+    });
+    resizeObserver.observe(scrollContainerRef);
+  };
+
   // Initialize on mount
   onMount(() => {
     // Initial setup
@@ -587,34 +626,10 @@ export function CalendarGrid() {
       }
     });
 
-    // Resize Observer
+    // Setup initial ResizeObserver
     if (scrollContainerRef) {
-      const resizeObserver = new ResizeObserver((entries) => {
-        if (entries[0]?.contentRect.width > 0 && isInitialized) {
-          // Capture current position as a day index BEFORE updating column width
-          const previousColWidth = colWidth();
-          const currentScrollLeft = scrollContainerRef!.scrollLeft;
-          const timeColWidth = getTimeColWidth();
-          // Use float for precision - represents exact position within day columns
-          const dayIndex =
-            (currentScrollLeft + timeColWidth - CENTER_OFFSET) / previousColWidth;
-
-          // Update column width based on new container size
-          getColumnWidth();
-
-          // Immediately reposition to keep the same day visible
-          // No RAF delays - synchronous update prevents visual glitch
-          const newColWidth = colWidth();
-          const newScrollLeft =
-            CENTER_OFFSET + dayIndex * newColWidth - timeColWidth;
-          scrollContainerRef!.scrollLeft = newScrollLeft;
-        } else if (entries[0]?.contentRect.width > 0) {
-          // Not initialized yet, just update column width
-          getColumnWidth();
-        }
-      });
-      resizeObserver.observe(scrollContainerRef);
-      onCleanup(() => resizeObserver.disconnect());
+      setupResizeObserver();
+      onCleanup(() => resizeObserver?.disconnect());
     }
 
     // Keyboard handlers
@@ -659,8 +674,8 @@ export function CalendarGrid() {
     ),
   );
 
-  // When switching from Month view back to Week view, restore scroll position
-  // and update visibleWeeks signal (since onMount doesn't run again)
+  // When switching from Month view back to Week view, restore scroll position,
+  // re-attach ResizeObserver, and update visibleWeeks signal (since onMount doesn't run again)
   createEffect(
     on(
       currentView,
@@ -673,6 +688,11 @@ export function CalendarGrid() {
         ) {
           // Give the DOM time to render the week view container
           requestAnimationFrame(() => {
+            // Re-attach ResizeObserver to the new scroll container element
+            // (the old one was unmounted when we switched to Month view)
+            setupResizeObserver();
+            // Update column width for the new container size
+            getColumnWidth();
             scrollToDate(visibleStartDate());
             handleScroll();
           });
@@ -684,20 +704,6 @@ export function CalendarGrid() {
 
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden">
-      {/* Month/Year indicator - outside scroll container */}
-      <div class="px-4 py-2 bg-white shrink-0 flex items-center gap-2">
-        <span class="text-lg font-medium text-[#37352f]">
-          {displayedMonth()}
-        </span>
-        <Show when={isLoadingWeeks() || isAnySyncing()}>
-          <LoaderCircle
-            size={16}
-            class="text-[#91918e] animate-spin"
-            aria-label="Loading events"
-          />
-        </Show>
-      </div>
-
       <Show
         when={currentView() === "Month"}
         fallback={
