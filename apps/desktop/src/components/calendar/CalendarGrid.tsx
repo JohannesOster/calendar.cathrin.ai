@@ -30,7 +30,12 @@ import {
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateAllDayLayouts } from "../../utils/allDayLayout";
-import { currentView } from "../../stores/view";
+import {
+  currentView,
+  visibleDaysCount,
+  initVisibleDaysCount,
+  createVisibleDaysPersistence,
+} from "../../stores/view";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -48,7 +53,7 @@ const HOUR_HEIGHT = 48; // px - matches --grid-hour-height
 const MONTH_LABEL_HEIGHT = 36; // px - height of the month/year label row
 const HEADER_HEIGHT = 30; // px - matches --grid-header-height
 const TIME_COL_WIDTH_FALLBACK = 64; // px - fallback for --grid-time-col-width
-const VISIBLE_DAYS_COUNT = 7; // Number of day columns visible at once
+// VISIBLE_DAYS_COUNT is now a reactive signal imported from stores/view.ts
 const VISIBLE_BUFFER_DAYS = 5; // Extra days to render off-screen for smooth scrolling
 const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on initial load
 
@@ -195,7 +200,7 @@ export function CalendarGrid() {
     const availableWidth = currentContainerWidth - timeColWidth;
     if (availableWidth <= 0) return colWidth();
 
-    const width = availableWidth / VISIBLE_DAYS_COUNT;
+    const width = availableWidth / visibleDaysCount();
     if (width > 0) {
       setColWidth(width);
     }
@@ -258,7 +263,7 @@ export function CalendarGrid() {
   // or "December 2025 – January 2026" (year boundary)
   const monthYearLabel = createMemo(() => {
     const start = visibleStartDate();
-    const end = addDays(start, 6);
+    const end = addDays(start, visibleDaysCount() - 1);
 
     const startMonth = start.toLocaleDateString("en-US", { month: "long" });
     const endMonth = end.toLocaleDateString("en-US", { month: "long" });
@@ -505,7 +510,7 @@ export function CalendarGrid() {
       // Update visible weeks - compute week IDs for visible range
       // Skip during scroll position restoration to prevent stale values
       if (!isRestoringScrollPosition) {
-        const endDate = addDays(currentDate, VISIBLE_DAYS_COUNT - 1);
+        const endDate = addDays(currentDate, visibleDaysCount() - 1);
         const startWeek = getWeekId(currentDate);
         const endWeek = getWeekId(endDate);
 
@@ -631,6 +636,9 @@ export function CalendarGrid() {
 
   // Initialize on mount
   onMount(() => {
+    // Initialize visible days count from localStorage
+    initVisibleDaysCount();
+
     // Initial setup
     getColumnWidth();
 
@@ -698,6 +706,22 @@ export function CalendarGrid() {
       }
     });
   });
+
+  // Persist visible days count to localStorage
+  createVisibleDaysPersistence();
+
+  // React to visible days count changes - recalculate column width
+  createEffect(
+    on(
+      visibleDaysCount,
+      () => {
+        if (isInitialized && scrollContainerRef) {
+          getColumnWidth();
+        }
+      },
+      { defer: true },
+    ),
+  );
 
   // React to external centerDate changes (e.g. from Mini Calendar or header navigation)
   // Using on() with defer to only react when centerDate actually changes,
@@ -1092,9 +1116,11 @@ export function CalendarGrid() {
                         height: `${contentHeight()}px`,
                         "z-index": "-1",
                         "scroll-snap-align": "start",
-                        "scroll-snap-stop": isWeekStart(date)
-                          ? "always"
-                          : "normal",
+                        // Only snap to week starts when viewing 7+ days
+                        "scroll-snap-stop":
+                          isWeekStart(date) && visibleDaysCount() >= 7
+                            ? "always"
+                            : "normal",
                       }}
                     />
                   );
