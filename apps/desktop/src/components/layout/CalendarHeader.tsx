@@ -15,6 +15,7 @@ import {
 import {
   currentView,
   setCurrentView,
+  visibleDaysCount,
   setVisibleDaysCount,
   type ViewType,
 } from "../../stores/view";
@@ -31,37 +32,25 @@ function addDays(date: Date, days: number): Date {
 export function CalendarHeader() {
   const navigatePrev = () => {
     const date = visibleStartDate();
-    const view = currentView();
-    switch (view) {
-      case "Day":
-        setCenterDate(addDays(date, -1));
-        break;
-      case "Week":
-        setCenterDate(addDays(date, -7));
-        break;
-      case "Month":
-        const prevMonth = new Date(date);
-        prevMonth.setMonth(prevMonth.getMonth() - 1);
-        setCenterDate(prevMonth);
-        break;
+    if (currentView() === "Month") {
+      const prevMonth = new Date(date);
+      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      setCenterDate(prevMonth);
+    } else {
+      // Day and Week views both use visibleDaysCount
+      setCenterDate(addDays(date, -visibleDaysCount()));
     }
   };
 
   const navigateNext = () => {
     const date = visibleStartDate();
-    const view = currentView();
-    switch (view) {
-      case "Day":
-        setCenterDate(addDays(date, 1));
-        break;
-      case "Week":
-        setCenterDate(addDays(date, 7));
-        break;
-      case "Month":
-        const nextMonth = new Date(date);
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-        setCenterDate(nextMonth);
-        break;
+    if (currentView() === "Month") {
+      const nextMonth = new Date(date);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      setCenterDate(nextMonth);
+    } else {
+      // Day and Week views both use visibleDaysCount
+      setCenterDate(addDays(date, visibleDaysCount()));
     }
   };
 
