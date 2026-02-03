@@ -139,8 +139,20 @@ export function CalendarHeader() {
               }}
               class="px-2.5 py-1 text-xs font-medium transition-colors"
               classList={{
-                "bg-[#efefef] text-[#37352f]": currentView() === view,
-                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": currentView() !== view,
+                // Day: highlighted when not Month view AND exactly 1 day
+                // Week: highlighted when not Month view AND exactly 7 days
+                // Month: highlighted when in Month view
+                "bg-[#efefef] text-[#37352f]":
+                  view === "Month"
+                    ? currentView() === "Month"
+                    : currentView() !== "Month" &&
+                      visibleDaysCount() === (view === "Day" ? 1 : 7),
+                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": !(
+                  view === "Month"
+                    ? currentView() === "Month"
+                    : currentView() !== "Month" &&
+                      visibleDaysCount() === (view === "Day" ? 1 : 7)
+                ),
               }}
             >
               {view}

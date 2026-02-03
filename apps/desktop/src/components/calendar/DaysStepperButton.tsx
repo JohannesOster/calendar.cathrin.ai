@@ -31,12 +31,29 @@ export function DaysStepperButton() {
   const isAtMin = () => visibleDaysCount() <= MIN_DAYS;
   const isAtMax = () => visibleDaysCount() >= MAX_DAYS;
 
+  // Show count badge when not a preset (1 = Day, 7 = Week)
+  const showCountBadge = () => {
+    const count = visibleDaysCount();
+    return count !== 1 && count !== 7;
+  };
+
   return (
     <div
       ref={containerRef}
-      class="relative"
+      class="relative flex items-center gap-1"
       style={{ transform: "translateZ(0)" }} // Force GPU layer to prevent scroll flickering
     >
+      {/* Count badge - shown when not a preset (1 or 7) */}
+      <Show when={showCountBadge()}>
+        <button
+          onClick={() => setIsOpen(!isOpen())}
+          class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-[#37352f] bg-[#efefef] hover:bg-[#e8e8e8] transition-colors text-xs font-medium"
+          aria-label={`${visibleDaysCount()} days visible`}
+        >
+          {visibleDaysCount()}
+        </button>
+      </Show>
+
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen())}
