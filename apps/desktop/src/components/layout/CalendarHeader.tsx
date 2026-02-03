@@ -12,7 +12,12 @@ import {
   setCenterDate,
   setFlashDate,
 } from "../calendar/CalendarGrid";
-import { currentView, setCurrentView, type ViewType } from "../../stores/view";
+import {
+  currentView,
+  setCurrentView,
+  setVisibleDaysCount,
+  type ViewType,
+} from "../../stores/view";
 import { isLoadingWeeks } from "../../stores/events";
 import { isAnySyncing } from "../../stores/accounts";
 
@@ -114,7 +119,13 @@ export function CalendarHeader() {
         <div class="flex items-center rounded-md border border-[#e8e8e8] overflow-hidden">
           {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
             <button
-              onClick={() => setCurrentView(view)}
+              onClick={() => {
+                setCurrentView(view);
+                // Set day count presets for Day/Week views
+                if (view === "Day") setVisibleDaysCount(1);
+                else if (view === "Week") setVisibleDaysCount(7);
+                // Month view uses separate component, doesn't change day count
+              }}
               class="px-2.5 py-1 text-xs font-medium transition-colors"
               classList={{
                 "bg-[#efefef] text-[#37352f]": currentView() === view,
