@@ -12,7 +12,13 @@ import {
   setCenterDate,
   setFlashDate,
 } from "../calendar/CalendarGrid";
-import { currentView, setCurrentView, type ViewType } from "../../stores/view";
+import {
+  currentView,
+  setCurrentView,
+  visibleDaysCount,
+  setVisibleDaysCount,
+  type ViewType,
+} from "../../stores/view";
 import { isLoadingWeeks } from "../../stores/events";
 import { isAnySyncing } from "../../stores/accounts";
 
@@ -23,49 +29,45 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+// Check if a date is within a range (inclusive)
+function isDateInRange(date: Date, start: Date, end: Date): boolean {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const s = new Date(start);
+  s.setHours(0, 0, 0, 0);
+  const e = new Date(end);
+  e.setHours(0, 0, 0, 0);
+  return d >= s && d <= e;
+}
+
 export function CalendarHeader() {
   const navigatePrev = () => {
     const date = visibleStartDate();
-    const view = currentView();
-    switch (view) {
-      case "Day":
-        setCenterDate(addDays(date, -1));
-        break;
-      case "Week":
-        setCenterDate(addDays(date, -7));
-        break;
-      case "Month":
-        const prevMonth = new Date(date);
-        prevMonth.setMonth(prevMonth.getMonth() - 1);
-        setCenterDate(prevMonth);
-        break;
+    if (currentView() === "Month") {
+      const prevMonth = new Date(date);
+      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      setCenterDate(prevMonth);
+    } else {
+      // Day and Week views both use visibleDaysCount
+      setCenterDate(addDays(date, -visibleDaysCount()));
     }
   };
 
   const navigateNext = () => {
     const date = visibleStartDate();
-    const view = currentView();
-    switch (view) {
-      case "Day":
-        setCenterDate(addDays(date, 1));
-        break;
-      case "Week":
-        setCenterDate(addDays(date, 7));
-        break;
-      case "Month":
-        const nextMonth = new Date(date);
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-        setCenterDate(nextMonth);
-        break;
+    if (currentView() === "Month") {
+      const nextMonth = new Date(date);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      setCenterDate(nextMonth);
+    } else {
+      // Day and Week views both use visibleDaysCount
+      setCenterDate(addDays(date, visibleDaysCount()));
     }
   };
 
   const goToToday = () => {
     const today = new Date();
-    const dayOfWeek = today.getDay();
-    const sunday = new Date(today);
-    sunday.setDate(today.getDate() - dayOfWeek);
-    setCenterDate(sunday);
+    setCenterDate(today);
     setFlashDate(today);
     // Clear after effects have captured the flash, prevents re-triggering on scroll
     setTimeout(() => setFlashDate(null), 50);
@@ -114,11 +116,43 @@ export function CalendarHeader() {
         <div class="flex items-center rounded-md border border-[#e8e8e8] overflow-hidden">
           {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
             <button
-              onClick={() => setCurrentView(view)}
+              onClick={() => {
+                setCurrentView(view);
+                // Set day count presets for Day/Week views
+                if (view === "Day") {
+                  // Check if today is visible BEFORE changing day count
+                  const start = visibleStartDate();
+                  const end = addDays(start, visibleDaysCount() - 1);
+                  const today = new Date();
+                  const shouldShowToday = isDateInRange(today, start, end);
+
+                  setVisibleDaysCount(1);
+
+                  // If today was visible, navigate to it after effects settle
+                  if (shouldShowToday) {
+                    queueMicrotask(() => setCenterDate(today));
+                  }
+                } else if (view === "Week") {
+                  setVisibleDaysCount(7);
+                }
+                // Month view uses separate component, doesn't change day count
+              }}
               class="px-2.5 py-1 text-xs font-medium transition-colors"
               classList={{
-                "bg-[#efefef] text-[#37352f]": currentView() === view,
-                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": currentView() !== view,
+                // Day: highlighted when not Month view AND exactly 1 day
+                // Week: highlighted when not Month view AND exactly 7 days
+                // Month: highlighted when in Month view
+                "bg-[#efefef] text-[#37352f]":
+                  view === "Month"
+                    ? currentView() === "Month"
+                    : currentView() !== "Month" &&
+                      visibleDaysCount() === (view === "Day" ? 1 : 7),
+                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": !(
+                  view === "Month"
+                    ? currentView() === "Month"
+                    : currentView() !== "Month" &&
+                      visibleDaysCount() === (view === "Day" ? 1 : 7)
+                ),
               }}
             >
               {view}
