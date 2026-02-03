@@ -29,6 +29,17 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+// Check if a date is within a range (inclusive)
+function isDateInRange(date: Date, start: Date, end: Date): boolean {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const s = new Date(start);
+  s.setHours(0, 0, 0, 0);
+  const e = new Date(end);
+  e.setHours(0, 0, 0, 0);
+  return d >= s && d <= e;
+}
+
 export function CalendarHeader() {
   const navigatePrev = () => {
     const date = visibleStartDate();
@@ -56,10 +67,7 @@ export function CalendarHeader() {
 
   const goToToday = () => {
     const today = new Date();
-    const dayOfWeek = today.getDay();
-    const sunday = new Date(today);
-    sunday.setDate(today.getDate() - dayOfWeek);
-    setCenterDate(sunday);
+    setCenterDate(today);
     setFlashDate(today);
     // Clear after effects have captured the flash, prevents re-triggering on scroll
     setTimeout(() => setFlashDate(null), 50);
@@ -111,8 +119,22 @@ export function CalendarHeader() {
               onClick={() => {
                 setCurrentView(view);
                 // Set day count presets for Day/Week views
-                if (view === "Day") setVisibleDaysCount(1);
-                else if (view === "Week") setVisibleDaysCount(7);
+                if (view === "Day") {
+                  // Check if today is visible BEFORE changing day count
+                  const start = visibleStartDate();
+                  const end = addDays(start, visibleDaysCount() - 1);
+                  const today = new Date();
+                  const shouldShowToday = isDateInRange(today, start, end);
+
+                  setVisibleDaysCount(1);
+
+                  // If today was visible, navigate to it after effects settle
+                  if (shouldShowToday) {
+                    queueMicrotask(() => setCenterDate(today));
+                  }
+                } else if (view === "Week") {
+                  setVisibleDaysCount(7);
+                }
                 // Month view uses separate component, doesn't change day count
               }}
               class="px-2.5 py-1 text-xs font-medium transition-colors"

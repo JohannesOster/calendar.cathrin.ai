@@ -571,6 +571,13 @@ export function CalendarGrid() {
 
     console.log('[CalendarGrid] scrollToDate: diffDays:', diffDays, 'colWidth:', currentColWidth, 'targetScrollLeft:', targetScrollLeft);
 
+    // Skip scroll if we're already at the target position (within 1px tolerance)
+    // This prevents micro-jumps when clicking Today while already viewing today
+    if (Math.abs(scrollContainerRef.scrollLeft - targetScrollLeft) < 1) {
+      console.log('[CalendarGrid] scrollToDate: already at target, skipping');
+      return;
+    }
+
     // Disable snap, wait for DOM update, then scroll
     setSnapEnabled(false);
 
@@ -711,13 +718,20 @@ export function CalendarGrid() {
   // Persist visible days count to localStorage
   createVisibleDaysPersistence();
 
-  // React to visible days count changes - recalculate column width
+  // React to visible days count changes - recalculate column width and adjust scroll
   createEffect(
     on(
       visibleDaysCount,
       () => {
         if (isInitialized && scrollContainerRef) {
+          // Capture current visible date before changing column width
+          const currentDate = visibleStartDate();
+
+          // Update column width for new day count
           getColumnWidth();
+
+          // Scroll to keep the same date visible
+          scrollToDate(currentDate);
         }
       },
       { defer: true },
@@ -828,6 +842,23 @@ export function CalendarGrid() {
                     {monthYearLabel()}
                   </span>
                 </div>
+
+                {/* Days Stepper Button - Sticky Right in label row */}
+                <div
+                  class="flex items-center pr-2"
+                  style={{
+                    position: "sticky",
+                    right: "0",
+                    "z-index": "21",
+                    "margin-left": "auto",
+                    "padding-left": "16px",
+                    background:
+                      "linear-gradient(to right, transparent, white 8px)",
+                    transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
+                  }}
+                >
+                  <DaysStepperButton />
+                </div>
               </div>
 
               {/* Sticky Date Header Row */}
@@ -876,22 +907,6 @@ export function CalendarGrid() {
                     </div>
                   )}
                 </Key>
-
-                {/* Days Stepper Button - Sticky Right */}
-                <div
-                  class="flex items-center justify-end pr-1 bg-white"
-                  style={{
-                    height: `${HEADER_HEIGHT}px`,
-                    position: "sticky",
-                    right: "0",
-                    "z-index": "20", // Same as time column header
-                    "padding-left": "8px", // Small gradient buffer
-                    background:
-                      "linear-gradient(to right, transparent, white 8px)",
-                  }}
-                >
-                  <DaysStepperButton />
-                </div>
               </div>
 
               {/* Sticky All-Day Section Row - matches header row structure */}

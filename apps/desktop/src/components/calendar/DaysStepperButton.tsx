@@ -32,7 +32,11 @@ export function DaysStepperButton() {
   const isAtMax = () => visibleDaysCount() >= MAX_DAYS;
 
   return (
-    <div ref={containerRef} class="relative">
+    <div
+      ref={containerRef}
+      class="relative"
+      style={{ transform: "translateZ(0)" }} // Force GPU layer to prevent scroll flickering
+    >
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen())}
