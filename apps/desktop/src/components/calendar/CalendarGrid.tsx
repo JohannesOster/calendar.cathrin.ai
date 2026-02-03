@@ -735,8 +735,19 @@ export function CalendarGrid() {
   // Persist visible days count to localStorage
   createVisibleDaysPersistence();
 
-  // Flag to skip centerDate effect when visibleDaysCount effect handles the scroll
-  let skipNextCenterDateScroll = false;
+  // Track if centerDate was just set (to use it as scroll target instead of visibleStartDate)
+  let pendingCenterDate: Date | null = null;
+
+  // Watch for centerDate changes and mark as pending
+  createEffect(
+    on(
+      centerDate,
+      (date) => {
+        pendingCenterDate = date;
+      },
+      { defer: true },
+    ),
+  );
 
   // React to visible days count changes - recalculate column width and adjust scroll
   createEffect(
@@ -744,13 +755,13 @@ export function CalendarGrid() {
       visibleDaysCount,
       () => {
         if (isInitialized && scrollContainerRef) {
-          // Use centerDate as target - it represents where we WANT to be
-          // (may have just been set by Day button with "show today" logic)
-          // This avoids double-scroll flicker when centerDate + dayCount change together
-          const targetDate = centerDate();
+          // Use pendingCenterDate if it was just set (e.g., Day button with "show today")
+          // Otherwise use visibleStartDate (the actual current scroll position)
+          const targetDate = pendingCenterDate ?? visibleStartDate();
 
-          // Mark that we're handling the scroll, so centerDate effect can skip
-          skipNextCenterDateScroll = true;
+          // Clear pending since we're handling it
+          const hadPendingCenter = pendingCenterDate !== null;
+          pendingCenterDate = null;
 
           // Disable snap BEFORE updating column width to prevent browser auto-snap
           // during the layout change (which causes visual flickering)
@@ -761,11 +772,19 @@ export function CalendarGrid() {
 
           // Scroll to target date (this will re-enable snap after settling)
           scrollToDate(targetDate);
+
+          // If we handled a pending centerDate, skip the centerDate effect
+          if (hadPendingCenter) {
+            skipNextCenterDateScroll = true;
+          }
         }
       },
       { defer: true },
     ),
   );
+
+  // Flag to skip centerDate effect when visibleDaysCount effect already handled it
+  let skipNextCenterDateScroll = false;
 
   // React to external centerDate changes (e.g. from Mini Calendar or header navigation)
   // Using on() with defer to only react when centerDate actually changes,
