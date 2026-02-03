@@ -11,6 +11,7 @@ import {
   visibleStartDate,
   setCenterDate,
   setFlashDate,
+  setNavigationTarget,
 } from "../calendar/CalendarGrid";
 import {
   currentView,
@@ -21,6 +22,7 @@ import {
 } from "../../stores/view";
 import { isLoadingWeeks } from "../../stores/events";
 import { isAnySyncing } from "../../stores/accounts";
+import { getSundayOfWeek } from "../../lib/date-utils";
 
 // Helper to add days to a date
 function addDays(date: Date, days: number): Date {
@@ -67,7 +69,10 @@ export function CalendarHeader() {
 
   const goToToday = () => {
     const today = new Date();
-    setCenterDate(today);
+    // In week view (7+ days), navigate to the week containing today (Sunday start)
+    // In day view or smaller, navigate directly to today
+    const targetDate = visibleDaysCount() >= 7 ? getSundayOfWeek(today) : today;
+    setCenterDate(targetDate);
     setFlashDate(today);
     // Clear after effects have captured the flash, prevents re-triggering on scroll
     setTimeout(() => setFlashDate(null), 50);
@@ -126,11 +131,23 @@ export function CalendarHeader() {
                   const today = new Date();
                   const shouldShowToday = isDateInRange(today, start, end);
 
-                  // Set centerDate FIRST if showing today, so visibleDaysCount
-                  // effect reads the correct target date (avoids double-scroll flicker)
-                  if (shouldShowToday) {
-                    setCenterDate(today);
-                  }
+                  // Set navigation target SYNCHRONOUSLY before changing visibleDaysCount.
+                  // This ensures the visibleDaysCount effect uses the correct target.
+                  // If today is visible, show today; otherwise show Sunday of the visible week.
+                  const targetDate = shouldShowToday
+                    ? today
+                    : getSundayOfWeek(start);
+
+                  console.log('[CalendarHeader] Day button clicked:', {
+                    start: start.toDateString(),
+                    end: end.toDateString(),
+                    today: today.toDateString(),
+                    shouldShowToday,
+                    targetDate: targetDate.toDateString(),
+                  });
+
+                  setNavigationTarget(targetDate);
+                  setCenterDate(targetDate);
 
                   setVisibleDaysCount(1);
                 } else if (view === "Week") {

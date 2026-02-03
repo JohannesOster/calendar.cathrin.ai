@@ -114,6 +114,11 @@ export const [scrollDirection, setScrollDirection] = createSignal<
   "left" | "right" | null
 >(null);
 
+// Navigation target signal - set this SYNCHRONOUSLY before changing visibleDaysCount
+// to ensure the visibleDaysCount effect uses the correct target date.
+// This avoids race conditions with deferred effects.
+export const [navigationTarget, setNavigationTarget] = createSignal<Date | null>(null);
+
 // Active visible weeks - switches between week view and month view based on currentView
 // This is the signal that the events store should react to
 export const activeVisibleWeeks = createMemo(() => {
@@ -534,10 +539,10 @@ export function CalendarGrid() {
   };
 
   // Virtual Scroll to a specific date
-  const scrollToDate = (date: Date) => {
+  const scrollToDate = (date: Date, immediate = false) => {
     if (!scrollContainerRef) return;
 
-    console.log('[CalendarGrid] scrollToDate called with:', date.toISOString());
+    console.log('[CalendarGrid] scrollToDate called with:', date.toISOString(), 'immediate:', immediate);
 
     // Normalize to midnight to avoid time component affecting day calculation
     const normalizedDate = new Date(date);
@@ -577,6 +582,20 @@ export function CalendarGrid() {
     // This prevents micro-jumps when clicking Today while already viewing today
     if (Math.abs(scrollContainerRef.scrollLeft - targetScrollLeft) < 1) {
       console.log('[CalendarGrid] scrollToDate: already at target, skipping');
+      // Still need to clean up state even when skipping the scroll:
+      // - Clear isRestoringScrollPosition so handleScroll can update visibleStartDate
+      // - Re-enable snap (it may have been disabled by the caller)
+      isRestoringScrollPosition = false;
+      if (!snapEnabled()) {
+        // Use a small delay to let any DOM updates settle before re-enabling snap
+        if (snapReEnableTimer) {
+          clearTimeout(snapReEnableTimer);
+        }
+        snapReEnableTimer = setTimeout(() => {
+          setSnapEnabled(true);
+          snapReEnableTimer = undefined;
+        }, 50);
+      }
       return;
     }
 
@@ -590,27 +609,35 @@ export function CalendarGrid() {
     // Disable snap, wait for DOM update, then scroll
     setSnapEnabled(false);
 
-    // Use double-RAF to ensure CSS change is applied before scroll
-    requestAnimationFrame(() => {
+    const performScroll = () => {
+      if (scrollContainerRef) {
+        scrollContainerRef.scrollLeft = targetScrollLeft;
+
+        // Now that scroll position is correct, allow handleScroll to update visibleStartDate
+        isRestoringScrollPosition = false;
+
+        // Explicitly update state after programmatic scroll
+        // (browser scroll events may not fire reliably for programmatic changes)
+        handleScroll();
+
+        // Re-enable snap after scroll completes (give it time to settle)
+        snapReEnableTimer = setTimeout(() => {
+          setSnapEnabled(true);
+          snapReEnableTimer = undefined;
+        }, 50);
+      }
+    };
+
+    if (immediate) {
+      performScroll();
+    } else {
+      // Use double-RAF to ensure CSS change is applied before scroll
       requestAnimationFrame(() => {
-        if (scrollContainerRef) {
-          scrollContainerRef.scrollLeft = targetScrollLeft;
-
-          // Now that scroll position is correct, allow handleScroll to update visibleStartDate
-          isRestoringScrollPosition = false;
-
-          // Explicitly update state after programmatic scroll
-          // (browser scroll events may not fire reliably for programmatic changes)
-          handleScroll();
-
-          // Re-enable snap after scroll completes (give it time to settle)
-          snapReEnableTimer = setTimeout(() => {
-            setSnapEnabled(true);
-            snapReEnableTimer = undefined;
-          }, 50);
-        }
+        requestAnimationFrame(() => {
+          performScroll();
+        });
       });
-    });
+    }
   };
 
   // ResizeObserver instance - stored so we can re-attach after view switches
@@ -755,26 +782,45 @@ export function CalendarGrid() {
       visibleDaysCount,
       () => {
         if (isInitialized && scrollContainerRef) {
-          // Use pendingCenterDate if it was just set (e.g., Day button with "show today")
-          // Otherwise use visibleStartDate (the actual current scroll position)
-          const targetDate = pendingCenterDate ?? visibleStartDate();
+          // Priority order for target date:
+          // 1. navigationTarget (module-level signal, set synchronously from click handlers)
+          // 2. pendingCenterDate (local var, set by deferred centerDate effect)
+          // 3. visibleStartDate (current scroll position)
+          const navTarget = navigationTarget();
+          const targetDate = navTarget ?? pendingCenterDate ?? visibleStartDate();
 
-          // Clear pending since we're handling it
-          const hadPendingCenter = pendingCenterDate !== null;
+          console.log('[CalendarGrid] visibleDaysCount effect:', {
+            navTarget: navTarget?.toDateString() ?? 'null',
+            pendingCenterDate: pendingCenterDate?.toDateString() ?? 'null',
+            visibleStartDate: visibleStartDate().toDateString(),
+            finalTarget: targetDate.toDateString(),
+          });
+
+          // Clear both pending values since we're handling them
+          const hadExplicitTarget = navTarget !== null || pendingCenterDate !== null;
+          setNavigationTarget(null);
           pendingCenterDate = null;
 
           // Disable snap BEFORE updating column width to prevent browser auto-snap
           // during the layout change (which causes visual flickering)
           setSnapEnabled(false);
 
+          // CRITICAL: Prevent handleScroll from updating visibleStartDate while we transition.
+          // When colWidth changes, the same scrollLeft maps to a different dayIndex.
+          // Any scroll event between getColumnWidth() and scrollToDate() would calculate
+          // the wrong day and cause the header to flicker.
+          isRestoringScrollPosition = true;
+
           // Update column width for new day count
           getColumnWidth();
 
           // Scroll to target date (this will re-enable snap after settling)
-          scrollToDate(targetDate);
+          // Use immediate mode to prevent flickering when changing visible days (column width)
+          // scrollToDate clears isRestoringScrollPosition after setting the correct position
+          scrollToDate(targetDate, true);
 
-          // If we handled a pending centerDate, skip the centerDate effect
-          if (hadPendingCenter) {
+          // If we handled an explicit target, skip the centerDate scroll effect
+          if (hadExplicitTarget) {
             skipNextCenterDateScroll = true;
           }
         }
@@ -794,15 +840,21 @@ export function CalendarGrid() {
     on(
       centerDate,
       (target) => {
-        // Skip if visibleDaysCount effect already handled this scroll
-        // (happens when Day button sets both centerDate and dayCount together)
-        if (skipNextCenterDateScroll) {
+        // Skip if visibleDaysCount effect will handle this scroll.
+        // This happens when Day button sets both centerDate and visibleDaysCount together.
+        // We check navigationTarget because it's set SYNCHRONOUSLY before the signals change,
+        // so it's reliable even though this effect may run before visibleDaysCount effect.
+        if (skipNextCenterDateScroll || navigationTarget() !== null) {
           skipNextCenterDateScroll = false;
           return;
         }
         if (currentView() !== "Month") {
           scrollToDate(target);
         }
+        // Clear pendingCenterDate since this effect handled the navigation.
+        // Without this, pendingCenterDate would persist and cause the +/- stepper
+        // to scroll back to an old position instead of staying at visibleStartDate.
+        pendingCenterDate = null;
       },
       { defer: true },
     ),
