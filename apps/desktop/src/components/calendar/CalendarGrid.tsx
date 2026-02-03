@@ -14,6 +14,7 @@ import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
+import { DaysStepperButton } from "./DaysStepperButton";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
 import {
@@ -875,6 +876,22 @@ export function CalendarGrid() {
                     </div>
                   )}
                 </Key>
+
+                {/* Days Stepper Button - Sticky Right */}
+                <div
+                  class="flex items-center justify-end pr-1 bg-white"
+                  style={{
+                    height: `${HEADER_HEIGHT}px`,
+                    position: "sticky",
+                    right: "0",
+                    "z-index": "20", // Same as time column header
+                    "padding-left": "8px", // Small gradient buffer
+                    background:
+                      "linear-gradient(to right, transparent, white 8px)",
+                  }}
+                >
+                  <DaysStepperButton />
+                </div>
               </div>
 
               {/* Sticky All-Day Section Row - matches header row structure */}
