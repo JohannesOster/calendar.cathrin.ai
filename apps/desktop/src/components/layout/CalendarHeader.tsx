@@ -126,12 +126,13 @@ export function CalendarHeader() {
                   const today = new Date();
                   const shouldShowToday = isDateInRange(today, start, end);
 
-                  setVisibleDaysCount(1);
-
-                  // If today was visible, navigate to it after effects settle
+                  // Set centerDate FIRST if showing today, so visibleDaysCount
+                  // effect reads the correct target date (avoids double-scroll flicker)
                   if (shouldShowToday) {
-                    queueMicrotask(() => setCenterDate(today));
+                    setCenterDate(today);
                   }
+
+                  setVisibleDaysCount(1);
                 } else if (view === "Week") {
                   setVisibleDaysCount(7);
                 }
