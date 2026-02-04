@@ -65,7 +65,6 @@ function App() {
   // Uses activeVisibleWeeks which switches between week view (1-2 weeks) and month view (~6 weeks)
   createEffect(
     on(activeVisibleWeeks, (weeks) => {
-      console.log('[activeVisibleWeeks] Changed:', weeks);
       if (weeks.length === 0) return;
 
       // Update visible weeks immediately (triggers cancellation of non-visible fetches)
@@ -88,8 +87,6 @@ function App() {
         const { missingWeeks } = getEventsForRange(rangeStart, rangeEnd);
 
         if (missingWeeks.length > 0) {
-          console.log(`[progressive-load] Fetching missing weeks:`, missingWeeks);
-
           // Fetch all missing weeks in parallel
           Promise.all(missingWeeks.map(week => fetchEventsForWeek(week)));
         }
@@ -106,7 +103,6 @@ function App() {
 
           // Only prefetch if not already cached or being fetched
           if (!cached.has(targetWeek) && !fetching.has(targetWeek)) {
-            console.log(`[prefetch] Prefetching ${targetWeek} (direction: ${direction})`);
             fetchEventsForWeek(targetWeek);
           }
         }

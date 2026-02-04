@@ -44,7 +44,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
       style={{
         left: "0",
-        transform: `translateX(${props.left}px)`,
+        transform: `translateX(${props.left}px) translateZ(0)`,
         width: `${props.width}px`,
         top: `${props.row * ROW_HEIGHT + 4}px`, // 4px top padding
         height: "var(--grid-all-day-chip-height)",

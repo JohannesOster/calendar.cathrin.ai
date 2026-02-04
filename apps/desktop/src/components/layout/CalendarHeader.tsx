@@ -138,14 +138,6 @@ export function CalendarHeader() {
                     ? today
                     : getSundayOfWeek(start);
 
-                  console.log('[CalendarHeader] Day button clicked:', {
-                    start: start.toDateString(),
-                    end: end.toDateString(),
-                    today: today.toDateString(),
-                    shouldShowToday,
-                    targetDate: targetDate.toDateString(),
-                  });
-
                   setNavigationTarget(targetDate);
                   setCenterDate(targetDate);
 
