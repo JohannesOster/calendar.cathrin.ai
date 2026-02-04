@@ -151,6 +151,11 @@ export function CalendarHeader() {
 
                   setVisibleDaysCount(1);
                 } else if (view === "Week") {
+                  // Anchor to the week containing the current visible day
+                  const start = visibleStartDate();
+                  const targetDate = getSundayOfWeek(start);
+                  setNavigationTarget(targetDate);
+                  setCenterDate(targetDate);
                   setVisibleDaysCount(7);
                 }
                 // Month view uses separate component, doesn't change day count
