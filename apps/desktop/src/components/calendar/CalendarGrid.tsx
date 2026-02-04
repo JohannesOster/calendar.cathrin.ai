@@ -193,6 +193,12 @@ export function CalendarGrid() {
     return Math.round(value * dpr) / dpr;
   };
 
+  // Round UP to device pixel - used for column widths to ensure they fill/overflow viewport
+  const ceilToDevicePixel = (value: number) => {
+    const dpr = window.devicePixelRatio || 1;
+    return Math.ceil(value * dpr) / dpr;
+  };
+
   // Disable scroll snap during programmatic scrolls to prevent feedback loops
   const [snapEnabled, setSnapEnabled] = createSignal(true);
   // Timer reference for re-enabling snap - allows cancellation if new scroll starts
@@ -226,7 +232,8 @@ export function CalendarGrid() {
     const availableWidth = currentContainerWidth - timeColWidth;
     if (availableWidth <= 0) return colWidth();
 
-    return snapToDevicePixel(availableWidth / visibleDaysCount());
+    // Use ceil to ensure columns fill/overflow viewport (hides partial next column)
+    return ceilToDevicePixel(availableWidth / visibleDaysCount());
   };
 
   // Get current column width based on visible area and update signal
@@ -241,7 +248,8 @@ export function CalendarGrid() {
     const availableWidth = currentContainerWidth - timeColWidth;
     if (availableWidth <= 0) return colWidth();
 
-    const width = snapToDevicePixel(availableWidth / visibleDaysCount());
+    // Use ceil to ensure columns fill/overflow viewport (hides partial next column)
+    const width = ceilToDevicePixel(availableWidth / visibleDaysCount());
     if (width > 0) {
       setColWidth(width);
     }
@@ -521,16 +529,27 @@ export function CalendarGrid() {
     return false;
   });
 
-  // Calculate all-day section height based on max row across ALL layouts (including buffer)
-  // Using all layouts instead of just visible ones prevents height changes during scroll,
-  // which eliminates flickering in sticky headers caused by layout shifts.
+  // Calculate all-day section height based on max row of VISIBLE layouts only
+  // This makes the height responsive to what's actually on screen
   const allDayHeight = createMemo(() => {
     const layouts = allDayEventLayouts();
     if (layouts.length === 0)
       return calculateAllDaySectionHeight(-1, allDayExpanded());
 
-    // Use max row from ALL layouts for stable height during scroll
-    const maxRow = Math.max(...layouts.map((l) => l.row));
+    // Filter to layouts that overlap with visible area
+    const visibleStartPx = scrollLeft();
+    const visibleEndPx = visibleStartPx + (containerWidth() || window.innerWidth);
+
+    const visibleLayouts = layouts.filter((l) => {
+      const eventEndPx = l.left + l.width;
+      // Event overlaps with visible range
+      return l.left < visibleEndPx && eventEndPx > visibleStartPx;
+    });
+
+    if (visibleLayouts.length === 0)
+      return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const maxRow = Math.max(...visibleLayouts.map((l) => l.row));
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
