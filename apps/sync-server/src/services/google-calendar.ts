@@ -174,7 +174,11 @@ export class GoogleCalendarService {
     calendarId: string,
     syncToken: string,
     calendarColor: string
-  ): Promise<{ events: ApiCalendarEvent[]; nextSyncToken: string }> {
+  ): Promise<{
+    events: ApiCalendarEvent[];
+    cancelledIds: string[];
+    nextSyncToken: string;
+  }> {
     const allEvents: GoogleEvent[] = [];
     let pageToken: string | undefined;
     let nextSyncToken: string | undefined;
@@ -212,12 +216,18 @@ export class GoogleCalendarService {
       throw new GoogleApiError("No sync token returned", 500);
     }
 
-    // Note: For incremental sync, we include cancelled events so the caller
-    // knows to remove them. The caller should handle status === 'cancelled'.
+    // Separate cancelled (deleted) events from active ones.
+    // Cancelled IDs are returned so the caller can delete them from storage.
+    const cancelledIds = allEvents
+      .filter((e) => e.status === "cancelled")
+      .map((e) => e.id);
+    const activeEvents = allEvents.filter((e) => e.status !== "cancelled");
+
     return {
-      events: allEvents.map((event) =>
+      events: activeEvents.map((event) =>
         this.mapEvent(event, calendarId, calendarColor)
       ),
+      cancelledIds,
       nextSyncToken,
     };
   }

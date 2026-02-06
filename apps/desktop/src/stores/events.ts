@@ -107,6 +107,30 @@ function processEvents(
   );
 }
 
+/**
+ * Replace events that overlap with a time range instead of additive merge.
+ * Events overlapping the range that are absent from the new response are removed,
+ * ensuring deletions on the server propagate to the client cache.
+ */
+function replaceEventsInRange(
+  rangeStart: Date,
+  rangeEnd: Date,
+  newEvents: CalendarEvent[],
+  existingEvents: CalendarEvent[]
+): CalendarEvent[] {
+  const startMs = rangeStart.getTime();
+  const endMs = rangeEnd.getTime();
+  const newEventIds = new Set(newEvents.map((e) => e.id));
+
+  const kept = existingEvents.filter((event) => {
+    const overlaps =
+      event.start.getTime() <= endMs && event.end.getTime() >= startMs;
+    return !overlaps || newEventIds.has(event.id);
+  });
+
+  return processEvents(newEvents, kept);
+}
+
 function evictStaleWeeks(): void {
   const currentWeeks = fetchedWeeks();
   const { weeksToKeep, evictedWeeks } = calculateEviction(currentWeeks);
@@ -142,7 +166,7 @@ async function revalidateWeekBackground(weekId: string): Promise<void> {
     const newEvents = apiEvents.map(convertApiEvent);
     recordWeekFetch(weekId);
     recordWeekAccess(weekId);
-    setEvents((prev) => processEvents(newEvents, prev));
+    setEvents((prev) => replaceEventsInRange(start, end, newEvents, prev));
     console.log(`[events] Revalidated ${weekId} - ${newEvents.length} events`);
   } catch (error) {
     console.warn(`[events] Failed to revalidate ${weekId}:`, error);
@@ -192,7 +216,9 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
       const weeksInWindow = getWeeksInRange(new Date(timeMin), new Date(timeMax));
       recordWeeksAccess(weeksInWindow);
       recordWeeksFetch(weeksInWindow);
-      setEvents((prev) => processEvents(newEvents, prev));
+      setEvents((prev) =>
+        replaceEventsInRange(new Date(timeMin), new Date(timeMax), newEvents, prev)
+      );
       setFetchedWeeks((prev) => {
         const updated = new Set(prev);
         for (const weekId of weeksInWindow) {
@@ -323,7 +349,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const newEvents = apiEvents.map(convertApiEvent);
     recordWeekAccess(weekId);
     recordWeekFetch(weekId);
-    setEvents((prev) => processEvents(newEvents, prev));
+    setEvents((prev) => replaceEventsInRange(start, end, newEvents, prev));
     setFetchedWeeks((prev) => new Set([...prev, weekId]));
     evictStaleWeeks();
     console.log(`[events] Fetched ${weekId} - ${newEvents.length} events`);

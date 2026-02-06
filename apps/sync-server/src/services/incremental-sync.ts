@@ -42,69 +42,64 @@ export async function syncCalendarIncremental(
   const service = new GoogleCalendarService(accessToken);
 
   try {
-    const { events, nextSyncToken } = await service.fetchEventsIncremental(
-      calendarId,
-      state.syncToken,
-      calendarColor
-    );
+    const { events, cancelledIds, nextSyncToken } =
+      await service.fetchEventsIncremental(
+        calendarId,
+        state.syncToken,
+        calendarColor
+      );
 
     let updated = 0;
     let deleted = 0;
     const affectedWeekIds = new Set<string>();
 
-    // Process each event
-    for (const event of events) {
-      // Check if this is a cancelled (deleted) event
-      // The API returns events with empty titles and we need to check raw status
-      // For incremental sync, deleted events come back in the response
+    // Delete cancelled events
+    for (const cancelledId of cancelledIds) {
       const existingEvent = await db.query.serverEvents.findFirst({
         where: and(
           eq(serverEvents.accountId, accountId),
-          eq(serverEvents.googleEventId, event.id)
+          eq(serverEvents.googleEventId, cancelledId)
         ),
       });
 
-      if (event.title === "(No title)" && !event.start && !event.end) {
-        // This is likely a deleted event - remove it
-        if (existingEvent) {
-          // Track the week of the deleted event for fetchedAt update
-          affectedWeekIds.add(getWeekId(existingEvent.start));
-          await db
-            .delete(serverEvents)
-            .where(eq(serverEvents.id, existingEvent.id));
-          deleted++;
-        }
-      } else {
-        // Track the week of this event
-        affectedWeekIds.add(getWeekId(new Date(event.start)));
-
-        // Upsert the event
+      if (existingEvent) {
+        affectedWeekIds.add(getWeekId(existingEvent.start));
         await db
-          .insert(serverEvents)
-          .values({
-            accountId,
-            calendarId,
-            googleEventId: event.id,
+          .delete(serverEvents)
+          .where(eq(serverEvents.id, existingEvent.id));
+        deleted++;
+      }
+    }
+
+    // Upsert active events
+    for (const event of events) {
+      affectedWeekIds.add(getWeekId(new Date(event.start)));
+
+      await db
+        .insert(serverEvents)
+        .values({
+          accountId,
+          calendarId,
+          googleEventId: event.id,
+          title: event.title,
+          start: new Date(event.start),
+          end: new Date(event.end),
+          isAllDay: event.isAllDay,
+          color: event.color,
+          status: "confirmed",
+        })
+        .onConflictDoUpdate({
+          target: [serverEvents.accountId, serverEvents.googleEventId],
+          set: {
             title: event.title,
             start: new Date(event.start),
             end: new Date(event.end),
             isAllDay: event.isAllDay,
             color: event.color,
-            status: "confirmed",
-          })
-          .onConflictDoUpdate({
-            target: [serverEvents.accountId, serverEvents.googleEventId],
-            set: {
-              title: event.title,
-              start: new Date(event.start),
-              end: new Date(event.end),
-              isAllDay: event.isAllDay,
-              color: event.color,
-              updatedAt: new Date(),
-            },
-          });
-        updated++;
-      }
+            updatedAt: new Date(),
+          },
+        });
+      updated++;
     }
 
     // Update fetchedAt for all affected weeks
