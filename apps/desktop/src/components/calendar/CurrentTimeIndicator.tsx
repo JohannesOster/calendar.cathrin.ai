@@ -42,7 +42,6 @@ export function CurrentTimeBadge() {
       class="absolute left-0 right-0 z-20 pointer-events-none"
       style={{
         top: `${getTimePosition(now())}px`,
-        transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
       }}
     >
       {/* Time badge */}
@@ -73,7 +72,6 @@ export function CurrentTimeLine(props: CurrentTimeIndicatorProps) {
       style={{
         top: `${getTimePosition(now())}px`,
         width: `${(props.totalDays / props.visibleDaysCount) * 100}%`,
-        transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
       }}
     >
       {/* Thin line spanning all columns */}

@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { MonthDayCell, type DayInfo } from "./MonthDayCell";
-import { visibleStartDate, setVisibleStartDate, setDisplayedMonth, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
+import { visibleStartDate, setVisibleStartDate, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
 import { addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
 
 // ============================================================================
@@ -229,12 +229,6 @@ export function MonthView() {
     // Calculate the week at the top of the visible area
     const weekIndex = getWeekIndexFromScroll(currentScrollTop);
     const currentDate = getWeekStartDate(weekIndex);
-
-    // Update displayed month - use the month that has most days visible
-    // For simplicity, use the month of the first day of the visible week
-    const month = currentDate.toLocaleDateString("en-US", { month: "long" });
-    const year = currentDate.getFullYear();
-    setDisplayedMonth(`${month} ${year}`);
 
     // Update visible start date for mini-calendar sync
     if (!isSameDay(currentDate, visibleStartDate())) {

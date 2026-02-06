@@ -41,7 +41,6 @@ export function DaysStepperButton() {
     <div
       ref={containerRef}
       class="relative flex items-center gap-1"
-      style={{ transform: "translateZ(0)" }} // Force GPU layer to prevent scroll flickering
     >
       {/* Count badge - shown when not a preset (1 or 7) */}
       <Show when={showCountBadge()}>

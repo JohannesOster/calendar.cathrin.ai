@@ -71,7 +71,7 @@ const CENTER_OFFSET = CONTAINER_WIDTH / 2; // Anchor point in middle
 // ============================================================================
 // Constants - Scroll Snap
 // ============================================================================
-const SNAP_TRACK_RANGE = 730; // Days in each direction from anchor for snap points (2 years)
+const SNAP_TRACK_RANGE = 90; // Days in each direction from anchor for snap points (~3 months)
 
 // ============================================================================
 // Constants - Scroll Direction Tracking (for prefetching)
@@ -97,7 +97,6 @@ const [anchorDate, setAnchorDate] = createSignal(getInitialAnchor());
 export const [centerDate, setCenterDate] = createSignal(
   new Date(getInitialAnchor()),
 );
-export const [displayedMonth, setDisplayedMonth] = createSignal("");
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
@@ -206,7 +205,14 @@ export function CalendarGrid() {
 
   // All-day section expand/collapse state
   const [allDayExpanded, setAllDayExpanded] = createSignal(false);
-  const toggleAllDayExpanded = () => setAllDayExpanded((prev) => !prev);
+  const [isAllDayTransitioning, setIsAllDayTransitioning] = createSignal(false);
+  let allDayTransitionTimer: ReturnType<typeof setTimeout> | undefined;
+  const toggleAllDayExpanded = () => {
+    setIsAllDayTransitioning(true);
+    setAllDayExpanded((prev) => !prev);
+    if (allDayTransitionTimer) clearTimeout(allDayTransitionTimer);
+    allDayTransitionTimer = setTimeout(() => setIsAllDayTransitioning(false), 250);
+  };
 
   // Track scroll direction for prefetching
   let lastScrollLeft = CENTER_OFFSET;
@@ -330,11 +336,6 @@ export function CalendarGrid() {
         }
         snapReEnableTimer = setTimeout(() => {
           setSnapEnabled(true);
-          if (scrollContainerRef) {
-            scrollContainerRef.style.scrollSnapType = snapEnabled()
-              ? "x mandatory"
-              : "none";
-          }
           snapReEnableTimer = undefined;
         }, 50);
       });
@@ -382,11 +383,14 @@ export function CalendarGrid() {
   // Calculate visible day range based on scroll position
   const visibleDays = createMemo(() => layout().days);
 
-  // Snap track: day indices for scroll snapping (Notion approach)
-  // Returns indices only - position computed inline to avoid recreating objects on resize
+  // Snap track: floating window of snap points centered around the current scroll position.
+  // Only re-centers when approaching the edge, keeping the total div count at ~181.
+  const [snapCenter, setSnapCenter] = createSignal(0);
+
   const snapTrackIndices = createMemo(() => {
+    const center = snapCenter();
     const indices: number[] = [];
-    for (let i = -SNAP_TRACK_RANGE; i <= SNAP_TRACK_RANGE; i++) {
+    for (let i = center - SNAP_TRACK_RANGE; i <= center + SNAP_TRACK_RANGE; i++) {
       indices.push(i);
     }
     return indices;
@@ -458,9 +462,10 @@ export function CalendarGrid() {
     // Convert to pixel positions
     const result: AllDayEventLayout[] = [];
     const firstDayLeft = days[0].left;
+    const eventById = new Map(visibleEvents.map((e) => [e.id, e]));
 
     for (const [eventId, layoutInfo] of layouts) {
-      const event = visibleEvents.find((e) => e.id === eventId);
+      const event = eventById.get(eventId);
       if (!event) continue;
 
       // Calculate pixel position from column info
@@ -509,47 +514,59 @@ export function CalendarGrid() {
     return counts;
   });
 
-  // Check if toggle should show based on ALL layouts (including buffer)
-  // Using all layouts instead of just visible prevents toggle flickering during scroll
+  // Filter all-day layouts to those overlapping the visible viewport
+  // Visible pixel range for day columns (accounts for sticky time column)
+  const visibleDayRange = createMemo(() => {
+    const timeColWidth = getTimeColWidth();
+    const start = scrollLeft() + timeColWidth;
+    const end = scrollLeft() + (containerWidth() || window.innerWidth);
+    return { start, end };
+  });
+
+  const visibleAllDayLayouts = createMemo(() => {
+    const layouts = allDayEventLayouts();
+    if (layouts.length === 0) return [];
+
+    const { start, end } = visibleDayRange();
+
+    return layouts.filter((l) => {
+      const eventEndPx = l.left + l.width;
+      return l.left < end && eventEndPx > start;
+    });
+  });
+
+  // Check if toggle should show based on visible layouts only
   const shouldShowToggle = createMemo(() => {
     if (allDayExpanded()) return true;
 
-    const layouts = allDayEventLayouts();
+    const layouts = visibleAllDayLayouts();
     if (layouts.length === 0) return false;
 
-    // Show toggle if any event is in row 1+ (means stacking exists)
+    // Show toggle if any visible event is in row 1+ (means stacking exists)
     if (layouts.some((l) => l.row >= 1)) return true;
 
-    // Also check if any day has multiple events
+    // Also check if any visible day has multiple events
     const counts = eventCountsPerDay();
-    for (const count of counts.values()) {
+    const days = layout().days;
+    const width = layout().width;
+    const { start, end } = visibleDayRange();
+
+    for (const day of days) {
+      if (day.left + width < start || day.left > end) continue;
+      const count = counts.get(getDateKey(day.date)) ?? 0;
       if (count > 1) return true;
     }
 
     return false;
   });
 
-  // Calculate all-day section height based on max row of VISIBLE layouts only
-  // This makes the height responsive to what's actually on screen
+  // Calculate all-day section height based on max row of VISIBLE layouts
   const allDayHeight = createMemo(() => {
-    const layouts = allDayEventLayouts();
+    const layouts = visibleAllDayLayouts();
     if (layouts.length === 0)
       return calculateAllDaySectionHeight(-1, allDayExpanded());
 
-    // Filter to layouts that overlap with visible area
-    const visibleStartPx = scrollLeft();
-    const visibleEndPx = visibleStartPx + (containerWidth() || window.innerWidth);
-
-    const visibleLayouts = layouts.filter((l) => {
-      const eventEndPx = l.left + l.width;
-      // Event overlaps with visible range
-      return l.left < visibleEndPx && eventEndPx > visibleStartPx;
-    });
-
-    if (visibleLayouts.length === 0)
-      return calculateAllDaySectionHeight(-1, allDayExpanded());
-
-    const maxRow = Math.max(...visibleLayouts.map((l) => l.row));
+    const maxRow = Math.max(...layouts.map((l) => l.row));
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
@@ -586,19 +603,10 @@ export function CalendarGrid() {
       }
     }
 
-    let newMonth: string | null = null;
     let newVisibleStart: Date | null = null;
     let newWeeks: string[] | null = null;
 
     if (currentDate && !isRestoringScrollPosition()) {
-      // Calculate displayed month
-      const month = currentDate.toLocaleDateString("en-US", { month: "long" });
-      const year = currentDate.getFullYear();
-      const monthStr = `${month} ${year}`;
-      if (monthStr !== displayedMonth()) {
-        newMonth = monthStr;
-      }
-
       // Calculate visible start date
       if (!isSameDay(currentDate, visibleStartDate())) {
         newVisibleStart = currentDate;
@@ -625,9 +633,6 @@ export function CalendarGrid() {
       if (newDirection !== null) {
         setScrollDirection(newDirection);
       }
-      if (newMonth !== null) {
-        setDisplayedMonth(newMonth);
-      }
       if (newVisibleStart !== null) {
         setVisibleStartDate(newVisibleStart);
       }
@@ -635,6 +640,11 @@ export function CalendarGrid() {
         setVisibleWeeks(newWeeks);
       }
     });
+
+    // Re-center floating snap window when approaching the edge
+    if (Math.abs(dayIndex - snapCenter()) > SNAP_TRACK_RANGE - 30) {
+      setSnapCenter(dayIndex);
+    }
 
     // Handle direction reset timer outside batch (not a signal update)
     if (snapEnabled()) {
@@ -831,6 +841,13 @@ export function CalendarGrid() {
     onCleanup(() => {
       if (snapReEnableTimer) {
         clearTimeout(snapReEnableTimer);
+      }
+    });
+
+    // Cleanup all-day transition timer
+    onCleanup(() => {
+      if (allDayTransitionTimer) {
+        clearTimeout(allDayTransitionTimer);
       }
     });
   });
@@ -1031,7 +1048,6 @@ export function CalendarGrid() {
                   height: `${contentHeight()}px`,
                   "background-color": "#e8e8e8",
                   "z-index": "22",
-                  transform: "translateZ(0)",
                 }}
               />
               {/* Sticky Month/Year Label Row - sticky in both directions */}
@@ -1043,15 +1059,13 @@ export function CalendarGrid() {
                   left: "0",
                   "z-index": "11",
                   height: `${MONTH_LABEL_HEIGHT}px`,
-                  width: `${containerWidth() || window.innerWidth}px`,
+                  width: "100vw",
                   transform: "translateZ(0)",
+                  contain: "layout",
                 }}
               >
                 <div
                   class="bg-white flex items-end pb-1 pl-3"
-                  style={{
-                    transform: "translateZ(0)",
-                  }}
                 >
                   <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
                     {monthYearLabel()}
@@ -1066,7 +1080,6 @@ export function CalendarGrid() {
                     "padding-left": "16px",
                     background:
                       "linear-gradient(to right, transparent, white 8px)",
-                    transform: "translateZ(0)",
                   }}
                 >
                   <DaysStepperButton />
@@ -1083,6 +1096,7 @@ export function CalendarGrid() {
                   height: `${HEADER_HEIGHT}px`,
                   width: "100%",
                   transform: "translateZ(0)",
+                  contain: "layout",
                 }}
               >
                 {/* Sticky Time Column Header */}
@@ -1098,7 +1112,6 @@ export function CalendarGrid() {
                     left: "0",
                     "z-index": "20",
                     overflow: "hidden",
-                    transform: "translateZ(0)",
                   }}
                 />
 
@@ -1109,7 +1122,7 @@ export function CalendarGrid() {
                       class="absolute bg-white"
                       style={{
                         left: "0",
-                        transform: `translateX(${item().left}px) translateZ(0)`,
+                        transform: `translateX(${item().left}px)`,
                         width: `${layout().width}px`,
                         height: `${HEADER_HEIGHT}px`,
                         top: 0,
@@ -1137,6 +1150,7 @@ export function CalendarGrid() {
                   height: `${allDayHeight()}px`,
                   width: "100%",
                   transform: "translateZ(0)",
+                  contain: "layout",
                 }}
               >
                 {/* Sticky Time column corner */}
@@ -1152,7 +1166,6 @@ export function CalendarGrid() {
                     left: "0",
                     "z-index": "20",
                     overflow: "hidden",
-                    transform: "translateZ(0)",
                   }}
                 >
                   {/* Show toggle button if multiple events, or "All day" label if single events */}
@@ -1195,7 +1208,7 @@ export function CalendarGrid() {
                       class="absolute border-r border-b border-[#e8e8e8] bg-white"
                       style={{
                         left: "0",
-                        transform: `translateX(${item().left}px) translateZ(0)`,
+                        transform: `translateX(${item().left}px)`,
                         width: `${layout().width}px`,
                         height: `${allDayHeight()}px`,
                         top: 0,
@@ -1267,7 +1280,7 @@ export function CalendarGrid() {
                                 class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
                                 style={{
                                   left: "0",
-                                  transform: `translateX(${day().left}px) translateZ(0)`,
+                                  transform: `translateX(${day().left}px)`,
                                   width: `${layout().width}px`,
                                   top: "4px",
                                   height: "var(--grid-all-day-chip-height)",
@@ -1316,13 +1329,13 @@ export function CalendarGrid() {
                   "z-index": "6",
                   overflow: "hidden",
                   transform: "translateZ(0)",
+                  contain: "layout",
                 }}
               >
                 <div
                   class="relative"
                   style={{
                     height: `${TOTAL_HEIGHT}px`,
-                    transform: "translateZ(0)",
                   }}
                 >
                   <TimeColumn />
@@ -1336,11 +1349,11 @@ export function CalendarGrid() {
                   <div
                     class="absolute border-r border-[#e8e8e8]"
                     classList={{
-                      "transition-[top] duration-200 ease-out": true,
+                      "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
                     }}
                     style={{
                       left: "0",
-                      transform: `translateX(${item().left}px) translateZ(0)`,
+                      transform: `translateX(${item().left}px)`,
                       width: `${layout().width}px`,
                       height: `${TOTAL_HEIGHT}px`,
                       top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight()}px`,
@@ -1356,7 +1369,7 @@ export function CalendarGrid() {
               <div
                 class=""
                 classList={{
-                  "transition-[top] duration-200 ease-out": true,
+                  "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
                 }}
                 style={{
                   position: "absolute",
@@ -1366,7 +1379,6 @@ export function CalendarGrid() {
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
                   "z-index": "5",
-                  transform: "translateZ(0)", // Force GPU layer to prevent scroll flickering
                 }}
               >
                 <CurrentTimeLine totalDays={1} visibleDaysCount={1} />
