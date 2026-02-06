@@ -1234,7 +1234,7 @@ export function CalendarGrid() {
                 <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                   {(item) => (
                     <div
-                      class="absolute border-r border-b border-[#e8e8e8] bg-white"
+                      class="absolute border-l border-b border-[#e8e8e8] bg-white"
                       style={{
                         left: "0",
                         transform: `translateX(${item().left}px)`,
@@ -1376,7 +1376,7 @@ export function CalendarGrid() {
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
-                    class="absolute border-r border-[#e8e8e8]"
+                    class="absolute border-l border-[#e8e8e8]"
                     classList={{
                       "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
                     }}
