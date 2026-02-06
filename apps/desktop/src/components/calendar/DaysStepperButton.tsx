@@ -42,16 +42,19 @@ export function DaysStepperButton() {
       ref={containerRef}
       class="relative flex items-center gap-1"
     >
-      {/* Count badge - shown when not a preset (1 or 7) */}
-      <Show when={showCountBadge()}>
-        <button
-          onClick={() => setIsOpen(!isOpen())}
-          class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-[#37352f] bg-[#efefef] hover:bg-[#e8e8e8] transition-colors text-xs font-medium"
-          aria-label={`${visibleDaysCount()} days visible`}
-        >
-          {visibleDaysCount()}
-        </button>
-      </Show>
+      {/* Count badge - shown when not a preset (1 = Day, 7 = Week).
+           Uses CSS display toggle instead of <Show> to keep the visibleDaysCount
+           subscription alive. Toggling <Show> at the 1↔2 boundary disposes/creates
+           subscriptions in the same reactive cycle as the popover text node update,
+           which prevents the popover counter from re-rendering. */}
+      <button
+        onClick={() => setIsOpen(!isOpen())}
+        class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-[#37352f] bg-[#efefef] hover:bg-[#e8e8e8] transition-colors text-xs font-medium"
+        style={{ display: showCountBadge() ? "flex" : "none" }}
+        aria-label={`${visibleDaysCount()} days visible`}
+      >
+        {visibleDaysCount()}
+      </button>
 
       {/* Trigger button */}
       <button
