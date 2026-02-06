@@ -739,25 +739,18 @@ export function CalendarGrid() {
     if (!scrollContainerRef) return;
 
     resizeObserver = new ResizeObserver((entries) => {
-      if (entries[0]?.contentRect.width > 0 && isInitialized) {
-        // Capture current position as a day index BEFORE updating column width
-        const previousColWidth = colWidth();
-        const currentScrollLeft = scrollContainerRef!.scrollLeft;
-        const timeColWidth = getTimeColWidth();
-        // Use float for precision - represents exact position within day columns
-        const dayIndex =
-          (currentScrollLeft + timeColWidth - CENTER_OFFSET) / previousColWidth;
-
+      const w = entries[0]?.contentRect.width;
+      if (w > 0 && isInitialized) {
         // Update column width based on new container size
         getColumnWidth();
 
-        // Immediately reposition to keep the same day visible
-        // No RAF delays - synchronous update prevents visual glitch
+        // Reposition to keep the same date visible using visibleStartDate.
+        // Using the date signal is more robust than pixel-based dayIndex calculation
+        // which can amplify drift when colWidth is very small during initial layout.
         const newColWidth = colWidth();
-        const newScrollLeft =
-          CENTER_OFFSET + dayIndex * newColWidth - timeColWidth;
+        const newScrollLeft = getScrollLeftForDate(visibleStartDate(), newColWidth);
         scrollContainerRef!.scrollLeft = newScrollLeft;
-      } else if (entries[0]?.contentRect.width > 0) {
+      } else if (w > 0) {
         // Not initialized yet, just update column width
         getColumnWidth();
       }
@@ -769,6 +762,36 @@ export function CalendarGrid() {
   onMount(() => {
     // Initialize visible days count from localStorage
     initVisibleDaysCount();
+
+    // Re-anchor to the current week on every mount.
+    // Module-level signals (anchorDate, centerDate) are initialized once at import time
+    // and can become stale if the dev server / HMR keeps the module cached across days.
+    const freshAnchor = getInitialAnchor();
+    setAnchorDate(freshAnchor);
+    setSnapCenter(0);
+
+    // Ensure the view starts with today visible:
+    // - 7+ days: start at Sunday of current week (full week visible, today included)
+    // - <7 days: start at today directly (same logic as the "Today" button)
+    // IMPORTANT: skipNextCenterDateScroll prevents the deferred centerDate effect from
+    // firing scrollToDate() with stale colWidth (still default 120). The onMount RAF
+    // below handles the initial scroll with the correctly calculated colWidth.
+    skipNextCenterDateScroll = true;
+    if (visibleDaysCount() < 7) {
+      const todayDate = new Date();
+      todayDate.setHours(0, 0, 0, 0);
+      setCenterDate(todayDate);
+      setVisibleStartDate(todayDate);
+    } else {
+      setCenterDate(new Date(freshAnchor));
+      setVisibleStartDate(new Date(freshAnchor));
+    }
+
+    // Disable scroll snap during initialization to prevent the browser from
+    // hijacking the scroll position while the container is resizing (sidebar animation).
+    // Without this, mandatory snap fires between ResizeObserver callbacks and jumps
+    // to the edge of the snap track (day ±90) instead of staying at day 0.
+    setSnapEnabled(false);
 
     // Initial setup
     getColumnWidth();
@@ -803,6 +826,12 @@ export function CalendarGrid() {
         handleScroll();
 
         isInitialized = true;
+
+        // Re-enable scroll snap after container layout has settled.
+        // Sidebar animation is ~200ms; wait 300ms to be safe.
+        setTimeout(() => {
+          setSnapEnabled(true);
+        }, 300);
       }
     });
 
@@ -1059,7 +1088,7 @@ export function CalendarGrid() {
                   left: "0",
                   "z-index": "11",
                   height: `${MONTH_LABEL_HEIGHT}px`,
-                  width: "100vw",
+                  width: `${containerWidth() || window.innerWidth}px`,
                   transform: "translateZ(0)",
                   contain: "layout",
                 }}
