@@ -87,7 +87,7 @@ export function DaysStepperButton() {
 
           {/* Current count */}
           <span
-            class="text-white text-xs font-medium min-w-[1.25rem] text-center"
+            class="text-white text-xs font-medium min-w-[1.25rem] text-center select-none cursor-default"
             aria-live="polite"
           >
             {visibleDaysCount()}
