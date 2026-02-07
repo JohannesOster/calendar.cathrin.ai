@@ -10,6 +10,10 @@ const CHIP_HEIGHT = 22; // px - height of each event chip
 const CHIP_GAP = 2; // px - gap between chips
 const CELL_PADDING = 4; // px - p-1 = 4px
 
+// Spanning chip dimensions (must match MonthWeekRow)
+export const SPANNING_CHIP_HEIGHT = 22;
+export const SPANNING_CHIP_GAP = 2;
+
 export interface DayInfo {
   day: number;
   date: Date;
@@ -20,6 +24,8 @@ interface MonthDayCellProps {
   dayInfo: DayInfo;
   isFlashing?: boolean;
   cellHeight?: number; // Pass from parent for dynamic slot calculation
+  spanningRowCount?: number; // Number of spanning event rows above timed chips
+  overflowSpanningCount?: number; // Hidden spanning events to add to "+X more"
 }
 
 export function MonthDayCell(props: MonthDayCellProps) {
@@ -50,19 +56,23 @@ export function MonthDayCell(props: MonthDayCellProps) {
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   });
 
-  // Calculate max visible slots based on cell height
+  // Calculate max visible slots based on cell height, accounting for spanning rows
   // Default to 120px (WEEK_ROW_HEIGHT from MonthView)
   const maxVisibleSlots = () => {
     const cellHeight = props.cellHeight ?? 120;
-    const availableHeight = cellHeight - DAY_NUMBER_HEIGHT - CELL_PADDING * 2;
+    const spanningSpace = (props.spanningRowCount ?? 0) * (SPANNING_CHIP_HEIGHT + SPANNING_CHIP_GAP);
+    const availableHeight = cellHeight - DAY_NUMBER_HEIGHT - CELL_PADDING * 2 - spanningSpace;
     // Reserve 1 slot for "+X more" indicator
     const slots = Math.floor(availableHeight / (CHIP_HEIGHT + CHIP_GAP)) - 1;
     return Math.max(1, slots); // At least 1 slot
   };
 
-  // Events to display and overflow count
+  // Events to display and overflow count (includes hidden spanning events)
   const visibleEvents = () => dayEvents().slice(0, maxVisibleSlots());
-  const overflowCount = () => Math.max(0, dayEvents().length - maxVisibleSlots());
+  const overflowCount = () => {
+    const timedOverflow = Math.max(0, dayEvents().length - maxVisibleSlots());
+    return timedOverflow + (props.overflowSpanningCount ?? 0);
+  };
 
   return (
     <div
@@ -85,8 +95,15 @@ export function MonthDayCell(props: MonthDayCellProps) {
         </span>
       </div>
 
-      {/* Event chips */}
-      <div class="flex flex-col gap-0.5 min-h-0">
+      {/* Event chips - pushed below spanning rows */}
+      <div
+        class="flex flex-col gap-0.5 min-h-0"
+        style={{
+          "margin-top": (props.spanningRowCount ?? 0) > 0
+            ? `${(props.spanningRowCount ?? 0) * (SPANNING_CHIP_HEIGHT + SPANNING_CHIP_GAP)}px`
+            : undefined,
+        }}
+      >
         <For each={visibleEvents()}>
           {(event) => <MonthEventChip event={event} />}
         </For>

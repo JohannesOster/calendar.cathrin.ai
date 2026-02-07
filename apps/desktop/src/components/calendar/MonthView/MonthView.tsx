@@ -1,6 +1,7 @@
 import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
-import { MonthDayCell, type DayInfo } from "./MonthDayCell";
+import { type DayInfo } from "./MonthDayCell";
+import { MonthWeekRow } from "./MonthWeekRow";
 import { visibleStartDate, setVisibleStartDate, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
 import { addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
 
@@ -335,32 +336,14 @@ export function MonthView() {
           {/* Render visible weeks */}
           <Key each={visibleWeeks()} by={(w) => getWeekKey(w.weekIndex)}>
             {(week) => (
-              <div
-                class="absolute left-0 right-0 grid grid-cols-7"
-                style={{
-                  top: `${week().top}px`,
-                  height: `${WEEK_ROW_HEIGHT}px`,
-                }}
-              >
-                {/* Month label overlay - positioned in the first column */}
-                <Show when={week().monthLabel}>
-                  <div
-                    class="absolute left-2 top-1 text-sm font-medium text-[#37352f] z-10 pointer-events-none"
-                  >
-                    {week().monthLabel}
-                  </div>
-                </Show>
-
-                {/* Day cells */}
-                <For each={week().days}>
-                  {(dayInfo) => (
-                    <MonthDayCell
-                      dayInfo={dayInfo}
-                      isFlashing={flashDate() !== null && isSameDay(dayInfo.date, flashDate()!)}
-                    />
-                  )}
-                </For>
-              </div>
+              <MonthWeekRow
+                weekIndex={week().weekIndex}
+                top={week().top}
+                height={WEEK_ROW_HEIGHT}
+                days={week().days}
+                monthLabel={week().monthLabel}
+                flashDate={flashDate()}
+              />
             )}
           </Key>
 
