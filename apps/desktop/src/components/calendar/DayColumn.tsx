@@ -1,14 +1,21 @@
 import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
+import { EventPlaceholder } from "./EventPlaceholder";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
-import { TOTAL_GRID_HEIGHT_PX } from "../../constants/calendar";
+import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import { startCreation, isDragging, isCreating, snapMinutes } from "../../stores/event-creation";
+import { setLeftSidebarOpen } from "../layout/AppShell";
 
 interface DayColumnProps {
   date: Date;
 }
+
+/** Exported so CalendarGrid can read the drag origin for document-level mousemove */
+export let dragColumnDate: Date | null = null;
+export let dragOriginMinutes: number | null = null;
 
 export function DayColumn(props: DayColumnProps) {
   // Use a counter to force re-mount of flash element, restarting CSS animation
@@ -88,6 +95,33 @@ export function DayColumn(props: DayColumnProps) {
   // Calculate layout info for overlapping events
   const eventLayouts = createMemo(() => calculateEventLayouts(dayEvents()));
 
+  const handleMouseDown = (e: MouseEvent) => {
+    // Only left button
+    if (e.button !== 0) return;
+
+    // Don't start drag on existing event elements
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-event-id]")) return;
+
+    // Don't start a new drag if already creating
+    if (isCreating()) return;
+
+    // Calculate snapped time from mouse position
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
+    const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+
+    // Store drag origin for CalendarGrid's document-level handlers
+    dragColumnDate = new Date(props.date);
+    dragOriginMinutes = snapped;
+
+    startCreation(props.date, snapped);
+    setLeftSidebarOpen(true);
+
+    e.preventDefault();
+  };
+
   return (
     <div
       class="relative [contain:strict]"
@@ -95,6 +129,7 @@ export function DayColumn(props: DayColumnProps) {
       classList={{
         "bg-[#fafafa]": isWeekend(),
       }}
+      onMouseDown={handleMouseDown}
     >
       {/* Hour grid lines rendered via CSS background for performance */}
       {/* Start at 48px (1 hour) to avoid line at y=0, lines appear at 48, 96, 144... (1AM, 2AM, 3AM...) */}
@@ -113,6 +148,9 @@ export function DayColumn(props: DayColumnProps) {
           <CalendarEvent event={event} layout={eventLayouts().get(event.id)} />
         )}
       </For>
+
+      {/* Event creation placeholder */}
+      <EventPlaceholder date={props.date} />
 
       {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
       <For each={showFlash() ? [flashKey()] : []}>

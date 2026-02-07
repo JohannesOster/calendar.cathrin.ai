@@ -448,5 +448,25 @@ export function clearEvents(): void {
   clearPersistedFetchTimes();
 }
 
+// =============================================================================
+// Optimistic Local Events
+// =============================================================================
+
+/**
+ * Add an event locally (optimistic UI).
+ * Used for newly created events before server confirmation.
+ */
+export function addLocalEvent(event: CalendarEvent): void {
+  setEvents((prev) => processEvents([event], prev));
+}
+
+/**
+ * Remove an event locally by ID.
+ * Used when creation is cancelled or deletion succeeds.
+ */
+export function removeLocalEvent(eventId: string): void {
+  setEvents((prev) => prev.filter((e) => e.id !== eventId));
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };

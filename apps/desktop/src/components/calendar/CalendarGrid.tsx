@@ -14,7 +14,7 @@ import { Key } from "@solid-primitives/keyed";
 import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
-import { DayColumn } from "./DayColumn";
+import { DayColumn, dragColumnDate, dragOriginMinutes } from "./DayColumn";
 import { DaysStepperButton } from "./DaysStepperButton";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
@@ -38,6 +38,16 @@ import {
   initVisibleDaysCount,
   createVisibleDaysPersistence,
 } from "../../stores/view";
+import {
+  isDragging,
+  isCreating,
+  draftTitle,
+  updateDrag,
+  finishDrag,
+  cancelCreation,
+  snapMinutes,
+} from "../../stores/event-creation";
+import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -847,7 +857,19 @@ export function CalendarGrid() {
 
     // Keyboard handlers
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (e.key === "Escape") {
+        // Cancel event creation on Escape
+        if (isDragging() || isCreating()) {
+          // During drag: always cancel
+          // After drag (form open): cancel if no title entered
+          if (isDragging() || !draftTitle().trim()) {
+            cancelCreation();
+            e.preventDefault();
+            return;
+          }
+        }
+        (document.activeElement as HTMLElement | null)?.blur();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
         const activeEl = document.activeElement as HTMLElement | null;
         const eventWrapper = activeEl?.closest(
           "[data-event-id]",
@@ -856,12 +878,48 @@ export function CalendarGrid() {
           e.preventDefault();
           (eventWrapper as any).triggerBurn();
         }
-      } else if (e.key === "Escape") {
-        (document.activeElement as HTMLElement | null)?.blur();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+    // Document-level drag handlers for event creation
+    const handleDragMouseMove = (e: MouseEvent) => {
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+
+      // Find the DayColumn element under the cursor to calculate Y relative to grid
+      // We use the column that started the drag (can't change column mid-drag)
+      const gridArea = scrollContainerRef;
+      if (!gridArea) return;
+
+      // Calculate mouse Y relative to the drag column's top
+      // The DayColumn top = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight (sticky offset)
+      // But since we're in a scroll container, we need the absolute position
+      const gridRect = gridArea.getBoundingClientRect();
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+
+      // Mouse Y relative to the time grid area (accounting for scroll and sticky headers)
+      const mouseY = e.clientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
+
+      const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
+      const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+
+      updateDrag(dragOriginMinutes, snapped, dragColumnDate);
+      e.preventDefault();
+    };
+
+    const handleDragMouseUp = () => {
+      if (isDragging()) {
+        finishDrag();
+      }
+    };
+
+    document.addEventListener("mousemove", handleDragMouseMove);
+    document.addEventListener("mouseup", handleDragMouseUp);
+    onCleanup(() => {
+      document.removeEventListener("mousemove", handleDragMouseMove);
+      document.removeEventListener("mouseup", handleDragMouseUp);
+    });
 
     // Cleanup direction reset timer
     onCleanup(() => {

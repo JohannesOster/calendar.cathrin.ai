@@ -17,6 +17,12 @@ export const TOTAL_GRID_HEIGHT_PX = 24 * HOUR_HEIGHT_PX;
 export const MS_PER_MINUTE = 60 * 1000;
 export const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 
+/** Snap increment for drag-to-create (minutes) */
+export const SNAP_MINUTES = 15;
+
+/** Height in pixels for one snap increment */
+export const SNAP_HEIGHT_PX = HOUR_HEIGHT_PX / (60 / SNAP_MINUTES);
+
 // =============================================================================
 // EVENT CHIP DIMENSIONS
 // =============================================================================
