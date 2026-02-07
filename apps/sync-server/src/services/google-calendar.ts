@@ -233,6 +233,54 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Create an event in a Google Calendar
+   */
+  async insertEvent(
+    calendarId: string,
+    event: {
+      summary: string;
+      start: { dateTime?: string; date?: string };
+      end: { dateTime?: string; date?: string };
+    }
+  ): Promise<GoogleEvent> {
+    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event),
+    });
+
+    this.handleErrorResponse(response);
+
+    return (await response.json()) as GoogleEvent;
+  }
+
+  /**
+   * Delete an event from a Google Calendar
+   */
+  async deleteEvent(calendarId: string, eventId: string): Promise<void> {
+    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+      },
+    });
+
+    // 204 No Content and 410 Gone are both success (already deleted)
+    if (response.status === 204 || response.status === 410) {
+      return;
+    }
+
+    this.handleErrorResponse(response);
+  }
+
+  /**
    * Handle non-2xx responses
    */
   private handleErrorResponse(response: Response): void {
