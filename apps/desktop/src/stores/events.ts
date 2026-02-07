@@ -468,5 +468,53 @@ export function removeLocalEvent(eventId: string): void {
   setEvents((prev) => prev.filter((e) => e.id !== eventId));
 }
 
+// =============================================================================
+// Event Deletion
+// =============================================================================
+
+export interface DeletedEventInfo {
+  event: CalendarEvent;
+  abortController: AbortController;
+}
+
+const [lastDeletedEvent, setLastDeletedEvent] = createSignal<DeletedEventInfo | null>(null);
+export { lastDeletedEvent, setLastDeletedEvent };
+
+/**
+ * Delete an event: remove from local store, call API in background.
+ * Preserves event data + AbortController for undo support.
+ */
+export function deleteEvent(eventId: string): void {
+  // Find and preserve the event before removing
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
+
+  const abortController = new AbortController();
+
+  // Store for undo
+  setLastDeletedEvent({ event, abortController });
+
+  // Optimistic removal
+  removeLocalEvent(eventId);
+
+  // Background API call
+  apiFetch<{ success: boolean }>(`/api/events/${encodeURIComponent(eventId)}`, {
+    method: "DELETE",
+    signal: abortController.signal,
+  })
+    .then(() => {
+      console.log(`[events] Deleted event ${eventId} from server`);
+    })
+    .catch((error) => {
+      if (error instanceof Error && error.name === "AbortError") {
+        // Undo was triggered — event is already restored
+        return;
+      }
+      console.error(`[events] Failed to delete event ${eventId}:`, error);
+      // Restore on failure
+      addLocalEvent(event);
+    });
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };

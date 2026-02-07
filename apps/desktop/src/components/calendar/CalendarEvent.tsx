@@ -2,7 +2,7 @@ import { createSignal, Show } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
-import type { CalendarEvent as CalendarEventData } from "../../stores/events";
+import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,
@@ -72,7 +72,7 @@ export function CalendarEvent(props: CalendarEventProps) {
     contentRef.blur();
 
     burnElement(contentRef, setFirePosition, () => {
-      // Event deletion not yet implemented - requires sync-server API
+      deleteEvent(props.event.id);
     });
   };
 
