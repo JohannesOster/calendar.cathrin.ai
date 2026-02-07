@@ -1,8 +1,10 @@
-import { onMount, onCleanup, createEffect, on } from "solid-js";
+import { onMount, onCleanup, createEffect, on, Show } from "solid-js";
 import "./App.css";
-import { AppShell } from "./components/layout/AppShell";
+import { AppShell, setRightSidebarOpen } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
+import { EventForm } from "./components/sidebar/EventForm";
+import { isCreating } from "./stores/event-creation";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
@@ -17,6 +19,7 @@ import {
   startPolling,
   stopPolling,
   handleVisibilityChange,
+  handleOnline,
 } from "./stores/events";
 import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
 
@@ -47,6 +50,9 @@ function App() {
     // Listen for visibility changes to pause/resume polling
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    // Revalidate when network comes back online
+    window.addEventListener("online", handleOnline);
+
     // Listen for Cmd+R to manually refresh
     document.addEventListener("keydown", handleKeyDown);
   });
@@ -58,7 +64,13 @@ function App() {
     }
     stopPolling();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("online", handleOnline);
     document.removeEventListener("keydown", handleKeyDown);
+  });
+
+  // Auto-manage right sidebar for event creation
+  createEffect(() => {
+    setRightSidebarOpen(isCreating());
   });
 
   // Watch visible weeks and trigger fetches for missing weeks
@@ -114,6 +126,11 @@ function App() {
     <AppShell
       header={<CalendarHeader />}
       leftSidebar={<LeftSidebar />}
+      rightSidebar={
+        <Show when={isCreating()}>
+          <EventForm />
+        </Show>
+      }
     >
       <CalendarGrid />
     </AppShell>

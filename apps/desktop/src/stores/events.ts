@@ -15,6 +15,7 @@ import {
   deleteEvictedWeeksFromDisk,
   loadEventsFromDisk,
   saveEventsToDisk,
+  replaceEventsOnDisk,
   clearAllWeekAccess,
   clearAllWeekFetchTimes,
   clearPersistedFetchTimes,
@@ -232,7 +233,7 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     }
 
     setLastRefreshed(now);
-    await saveEventsToDisk(apiEvents);
+    await replaceEventsOnDisk(timeMin, timeMax, apiEvents);
   } catch (error) {
     if (cachedEvents.length === 0) {
       if (error instanceof AuthError) {
@@ -405,6 +406,20 @@ async function pollVisibleWeeks(): Promise<void> {
   await Promise.all(staleWeeks.map(revalidateWeekBackground));
 }
 
+/**
+ * Force revalidation of all currently visible weeks, regardless of staleness.
+ * Used on window focus and network reconnect for immediate freshness.
+ */
+async function forceRevalidateVisibleWeeks(): Promise<void> {
+  if (currentVisibleWeeks.size === 0 || !isAuthenticated()) return;
+
+  const visibleFetched = [...currentVisibleWeeks].filter((w) => fetchedWeeks().has(w));
+  if (visibleFetched.length === 0) return;
+
+  console.log(`[events] Force-revalidating ${visibleFetched.length} visible weeks`);
+  await Promise.all(visibleFetched.map(revalidateWeekBackground));
+}
+
 export function startPolling(): void {
   if (pollIntervalId) return;
   console.log(`[events] Starting polling (interval: ${POLL_INTERVAL_MS / 1000}s)`);
@@ -430,8 +445,15 @@ export function handleVisibilityChange(): void {
     stopPolling();
   } else {
     startPolling();
-    pollVisibleWeeks().catch((error) => console.warn("[events] Resume poll failed:", error));
+    // Force-revalidate all visible weeks on focus, not just stale ones
+    forceRevalidateVisibleWeeks().catch((error) => console.warn("[events] Focus revalidation failed:", error));
   }
+}
+
+export function handleOnline(): void {
+  if (!isAuthenticated()) return;
+  console.log("[events] Network reconnected, revalidating...");
+  forceRevalidateVisibleWeeks().catch((error) => console.warn("[events] Online revalidation failed:", error));
 }
 
 export function clearEvents(): void {
@@ -446,6 +468,23 @@ export function clearEvents(): void {
   clearAllWeekFetchTimes();
   currentRequestId++;
   clearPersistedFetchTimes();
+}
+
+// =============================================================================
+// Post-Mutation Revalidation
+// =============================================================================
+
+/**
+ * Revalidate weeks affected by a mutation (create/delete).
+ * Called after API calls succeed to sync optimistic state with server truth.
+ */
+export function revalidateWeeksForDates(...dates: Date[]): void {
+  const weekIds = new Set(dates.map((d) => getWeekId(d)));
+  for (const weekId of weekIds) {
+    if (fetchedWeeks().has(weekId)) {
+      revalidateWeekBackground(weekId);
+    }
+  }
 }
 
 // =============================================================================
@@ -504,6 +543,7 @@ export function deleteEvent(eventId: string): void {
   })
     .then(() => {
       console.log(`[events] Deleted event ${eventId} from server`);
+      revalidateWeeksForDates(event.start);
     })
     .catch((error) => {
       if (error instanceof Error && error.name === "AbortError") {

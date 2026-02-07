@@ -6,8 +6,7 @@ import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { startCreation, isDragging, isCreating, draftTitle, commitCreation, snapMinutes } from "../../stores/event-creation";
-import { setLeftSidebarOpen } from "../layout/AppShell";
+import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, snapMinutes } from "../../stores/event-creation";
 
 interface DayColumnProps {
   date: Date;
@@ -103,12 +102,12 @@ export function DayColumn(props: DayColumnProps) {
     const target = e.target as HTMLElement;
     if (target.closest("[data-event-id]")) return;
 
-    // If already creating with a title, save and start new
+    // If already creating, commit or cancel before starting new
     if (isCreating()) {
       if (draftTitle().trim()) {
         commitCreation();
       } else {
-        return; // Don't start new drag while form is open with no title
+        cancelCreation();
       }
     }
 
@@ -123,7 +122,6 @@ export function DayColumn(props: DayColumnProps) {
     dragOriginMinutes = snapped;
 
     startCreation(props.date, snapped);
-    setLeftSidebarOpen(true);
 
     e.preventDefault();
   };

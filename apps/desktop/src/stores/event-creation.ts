@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
-import { defaultCalendarId, connectedAccounts } from "./accounts";
-import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
+import { defaultCalendarId, connectedAccounts, setDefaultCalendar } from "./accounts";
+import { addLocalEvent, removeLocalEvent, setEvents, revalidateWeeksForDates } from "./events";
 import { apiFetch } from "../lib/api";
 import { SNAP_MINUTES } from "../constants/calendar";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
@@ -30,7 +30,7 @@ export function snapMinutes(totalMinutes: number): number {
  * Get the calendar color for the current draft event
  */
 export function getDraftColor(): string {
-  const calId = draftCalendarId() ?? defaultCalendarId();
+  const calId = draftCalendarId() ?? resolveCalendarId();
   if (!calId) return "#4285f4";
 
   for (const account of connectedAccounts()) {
@@ -44,6 +44,26 @@ export function getDraftColor(): string {
 // =============================================================================
 // Actions
 // =============================================================================
+
+/**
+ * Resolve the calendar ID to use for new events.
+ * Falls back to the first visible calendar and persists it as default.
+ */
+function resolveCalendarId(): string | null {
+  const saved = defaultCalendarId();
+  if (saved) return saved;
+
+  // Fall back to first visible calendar
+  for (const account of connectedAccounts()) {
+    for (const cal of account.calendars) {
+      if (cal.visible) {
+        setDefaultCalendar(cal.id);
+        return cal.id;
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Begin a new event creation from a drag interaction.
@@ -60,7 +80,7 @@ export function startCreation(date: Date, snappedMinutes: number): void {
   setDraftStart(start);
   setDraftEnd(end);
   setDraftTitle("");
-  setDraftCalendarId(defaultCalendarId());
+  setDraftCalendarId(resolveCalendarId());
   setIsDragging(true);
   setIsCreating(true);
 }
@@ -115,7 +135,7 @@ export function commitCreation(): boolean {
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
-  const calId = draftCalendarId() ?? defaultCalendarId();
+  const calId = draftCalendarId() ?? resolveCalendarId();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -162,6 +182,8 @@ export function commitCreation(): boolean {
             : e
         )
       );
+      // Revalidate the affected week to sync with server state
+      revalidateWeeksForDates(new Date(serverEvent.start));
     })
     .catch((error) => {
       console.error("[event-creation] Failed to save event:", error);

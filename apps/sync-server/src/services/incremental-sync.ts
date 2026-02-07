@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
@@ -193,6 +193,32 @@ export async function syncCalendarFull(
           updatedAt: new Date(),
         },
       });
+  }
+
+  // Remove events in the fetched range that Google no longer returns
+  const fetchedEventIds = new Set(events.map((e) => e.id));
+  const existingInRange = await db.query.serverEvents.findMany({
+    where: and(
+      eq(serverEvents.accountId, accountId),
+      eq(serverEvents.calendarId, calendarId),
+      lte(serverEvents.start, timeMax),
+      gte(serverEvents.end, timeMin)
+    ),
+    columns: { id: true, googleEventId: true },
+  });
+
+  let removed = 0;
+  for (const existing of existingInRange) {
+    if (!fetchedEventIds.has(existing.googleEventId)) {
+      await db.delete(serverEvents).where(eq(serverEvents.id, existing.id));
+      removed++;
+    }
+  }
+
+  if (removed > 0) {
+    console.log(
+      `[incremental-sync] Removed ${removed} stale events for calendar ${calendarId}`
+    );
   }
 
   // Now do a sync request to get the syncToken for future incremental syncs

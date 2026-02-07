@@ -271,3 +271,22 @@ export async function saveEventsToDisk(events: ApiEventForCache[]): Promise<void
     console.warn("[event-cache] Failed to save to cache:", error);
   }
 }
+
+/**
+ * Replace events in a time range on disk: delete stale, then save fresh.
+ * Prevents deleted events from persisting in the SQLite cache across reloads.
+ */
+export async function replaceEventsOnDisk(
+  timeMin: string,
+  timeMax: string,
+  events: ApiEventForCache[]
+): Promise<void> {
+  try {
+    await invoke("delete_cached_weeks", {
+      weekBounds: [{ start: timeMin, end: timeMax }],
+    });
+  } catch (error) {
+    console.warn("[event-cache] Failed to clear range from cache:", error);
+  }
+  await saveEventsToDisk(events);
+}

@@ -13,6 +13,11 @@ import {
   EVENT_MARGIN_BOTTOM_PX,
   MIN_EVENT_HEIGHT_PX,
   MS_PER_HOUR,
+  SINGLE_LINE_THRESHOLD_PX,
+  SHORT_TIME_THRESHOLD_PX,
+  TITLE_LINE_HEIGHT_PX,
+  TIME_ROW_HEIGHT_PX,
+  EVENT_PADDING_Y_PX,
 } from "../../constants/calendar";
 
 interface EventPlaceholderProps {
@@ -72,15 +77,33 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
         <div class="flex h-full">
           <div class="w-1 shrink-0" style={{ "background-color": getDraftColor() }} />
           <div class="flex-1 min-w-0 px-1 py-1">
-            <Show when={draftTitle().trim()}>
-              <div class="text-xs font-medium leading-tight truncate" style={{ opacity: "1" }}>
-                {draftTitle()}
-              </div>
-            </Show>
-            <Show when={draftStart() && draftEnd()}>
-              <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
-                {formatTime(draftStart()!)} – {formatTime(draftEnd()!)}
-              </div>
+            <Show
+              when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
+              fallback={
+                <Show when={draftTitle().trim()}>
+                  <div class="truncate text-xs leading-tight font-medium">
+                    {draftTitle()}
+                  </div>
+                </Show>
+              }
+            >
+              <Show when={draftTitle().trim()}>
+                <div
+                  class="text-xs font-medium leading-tight overflow-hidden"
+                  style={{
+                    display: "-webkit-box",
+                    "-webkit-box-orient": "vertical",
+                    "-webkit-line-clamp": Math.max(1, Math.floor((getHeight() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX) / TITLE_LINE_HEIGHT_PX)),
+                  }}
+                >
+                  {draftTitle()}
+                </div>
+              </Show>
+              <Show when={draftStart() && draftEnd()}>
+                <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
+                  {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(draftStart()!) : `${formatTime(draftStart()!)} – ${formatTime(draftEnd()!)}`}
+                </div>
+              </Show>
             </Show>
           </div>
         </div>
