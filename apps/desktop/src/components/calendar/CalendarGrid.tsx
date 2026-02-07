@@ -312,13 +312,17 @@ export function CalendarGrid() {
 
     const finalScrollLeft = snapToDevicePixel(newScrollLeft);
 
-    // Freeze layout on the current scroll position during the transition.
+    // Pre-position scroll and freeze layout at the TARGET position.
+    // Using scrollContainerRef.scrollLeft is unsafe during view switches because
+    // a freshly mounted container starts at scrollLeft=0, which maps to dates
+    // decades in the past (e.g., 1986) when fed into computeLayout.
+    scrollContainerRef.scrollLeft = finalScrollLeft;
     setFrozenLayout(
-      computeLayout(snapToDevicePixel(colWidth()), scrollContainerRef.scrollLeft),
+      computeLayout(snapToDevicePixel(newColWidth), finalScrollLeft),
     );
 
-    // Update column width first, then set scroll position after layout settles.
-    // This avoids the browser reverting scrollLeft during the width change.
+    // Update column width, then re-set scroll position after layout settles.
+    // The browser may adjust scrollLeft during the width change.
     setColWidth(newColWidth);
 
     requestAnimationFrame(() => {
@@ -1018,9 +1022,11 @@ export function CalendarGrid() {
           // Prevent handleScroll from overwriting visibleStartDate with stale scroll position
           // (browser scroll restoration can restore old positions to the new element)
           setIsRestoringScrollPosition(true);
-          // Capture the target date NOW, before RAF - something might modify
-          // visibleStartDate during the frame (e.g., scroll events on new container)
-          const targetDate = new Date(visibleStartDate());
+          // Use centerDate as the scroll target — it's always set to the correct week
+          // before a view switch (by CalendarHeader or MonthDayCell). Using visibleStartDate
+          // would scroll to whichever week was at the top of the MonthView viewport, which
+          // can be 1-2 weeks off from the clicked day's week.
+          const targetDate = new Date(centerDate());
           // Give the DOM time to render the week view container
           requestAnimationFrame(() => {
             // Re-attach ResizeObserver to the new scroll container element

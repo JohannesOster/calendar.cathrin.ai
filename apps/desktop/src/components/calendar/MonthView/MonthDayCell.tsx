@@ -1,8 +1,11 @@
-import { For, Show, createMemo } from "solid-js";
-import { isToday, isSameDay } from "../../../lib/date-utils";
+import { For, Show, createMemo, batch } from "solid-js";
+import { isToday, isSameDay, getSundayOfWeek } from "../../../lib/date-utils";
+import { setCenterDate, setFlashDate, setNavigationTarget } from "../CalendarGrid";
+import { setCurrentView, setVisibleDaysCount } from "../../../stores/view";
 import { events } from "../../../stores/events";
 import { connectedAccounts } from "../../../stores/accounts";
 import { MonthEventChip } from "./MonthEventChip";
+import { SIDEBAR } from "../../../constants/sidebar";
 
 // Layout constants
 const DAY_NUMBER_HEIGHT = 28; // px - height reserved for day number
@@ -31,6 +34,26 @@ interface MonthDayCellProps {
 export function MonthDayCell(props: MonthDayCellProps) {
   const isTodayDate = () => isToday(props.dayInfo.date);
   const isFirstOfMonth = () => props.dayInfo.day === 1;
+
+  // Navigate to week view showing the week containing the given date, with flash highlight.
+  // Uses batch() because SolidJS does NOT auto-batch in event handlers — without it,
+  // each setter fires effects immediately, so setCurrentView("Week") would swap the
+  // <Show> and trigger scroll effects before setCenterDate/setVisibleDaysCount run.
+  // Flash is delayed because the Month→Week transition takes ~3 RAFs to restore scroll
+  // position and render the correct DayColumn components.
+  const navigateToWeekView = (date: Date) => {
+    const weekStart = getSundayOfWeek(date);
+    batch(() => {
+      setNavigationTarget(weekStart);
+      setCenterDate(weekStart);
+      setCurrentView("Week");
+      setVisibleDaysCount(7);
+    });
+    setTimeout(() => {
+      setFlashDate(date);
+      setTimeout(() => setFlashDate(null), SIDEBAR.FLASH_CLEAR_DELAY);
+    }, 100);
+  };
 
   // Get visible calendar IDs (same pattern as DayColumn)
   const visibleCalendarIds = () => {
@@ -81,18 +104,20 @@ export function MonthDayCell(props: MonthDayCellProps) {
         "bg-[#e8f4fd]": props.isFlashing,
       }}
     >
-      {/* Day number - top right */}
+      {/* Day number - top right, clickable to navigate to week view */}
       <div class="flex justify-end shrink-0">
-        <span
-          class="w-7 h-7 flex items-center justify-center text-sm rounded-full"
+        <button
+          onClick={() => navigateToWeekView(props.dayInfo.date)}
+          class="w-7 h-7 flex items-center justify-center text-sm rounded-full cursor-pointer transition-colors"
           classList={{
-            "bg-[#2383e2] text-white": isTodayDate(),
-            "text-[#37352f] font-medium": isFirstOfMonth() && !isTodayDate(),
-            "text-[#37352f]": !isFirstOfMonth() && !isTodayDate(),
+            "bg-[#2383e2] text-white hover:bg-[#1a6fc4]": isTodayDate(),
+            "text-[#37352f] font-medium hover:bg-[#efefef]": isFirstOfMonth() && !isTodayDate(),
+            "text-[#37352f] hover:bg-[#efefef]": !isFirstOfMonth() && !isTodayDate(),
           }}
+          tabIndex={0}
         >
           {props.dayInfo.day}
-        </span>
+        </button>
       </div>
 
       {/* Event chips - pushed below spanning rows */}
@@ -108,10 +133,11 @@ export function MonthDayCell(props: MonthDayCellProps) {
           {(event) => <MonthEventChip event={event} />}
         </For>
 
-        {/* Overflow indicator */}
+        {/* Overflow indicator - click navigates to week view */}
         <Show when={overflowCount() > 0}>
           <button
-            class="text-xs text-[#91918e] hover:text-[#37352f] text-left px-1 py-0.5 hover:bg-[#efefef] rounded transition-colors"
+            onClick={() => navigateToWeekView(props.dayInfo.date)}
+            class="text-xs text-[#91918e] hover:text-[#37352f] hover:underline text-left px-1 py-0.5 cursor-pointer transition-colors"
             tabIndex={0}
           >
             +{overflowCount()} more
