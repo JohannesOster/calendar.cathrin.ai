@@ -516,5 +516,27 @@ export function deleteEvent(eventId: string): void {
     });
 }
 
+/**
+ * Undo the last deletion: abort the API call and restore the event.
+ */
+export function undoDelete(): void {
+  const deleted = lastDeletedEvent();
+  if (!deleted) return;
+
+  // Abort in-flight DELETE request
+  deleted.abortController.abort();
+
+  // Restore event
+  addLocalEvent(deleted.event);
+  setLastDeletedEvent(null);
+}
+
+/**
+ * Clear the last deleted event reference (after toast dismissal).
+ */
+export function clearLastDeleted(): void {
+  setLastDeletedEvent(null);
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };
