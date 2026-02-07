@@ -57,6 +57,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
   return (
     <Show when={isVisible()}>
       <div
+        data-event-placeholder
         class="absolute rounded-lg overflow-hidden"
         style={{
           top: `${getTop()}px`,

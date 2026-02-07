@@ -6,7 +6,7 @@ import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { startCreation, isDragging, isCreating, snapMinutes } from "../../stores/event-creation";
+import { startCreation, isDragging, isCreating, draftTitle, commitCreation, snapMinutes } from "../../stores/event-creation";
 import { setLeftSidebarOpen } from "../layout/AppShell";
 
 interface DayColumnProps {
@@ -103,8 +103,14 @@ export function DayColumn(props: DayColumnProps) {
     const target = e.target as HTMLElement;
     if (target.closest("[data-event-id]")) return;
 
-    // Don't start a new drag if already creating
-    if (isCreating()) return;
+    // If already creating with a title, save and start new
+    if (isCreating()) {
+      if (draftTitle().trim()) {
+        commitCreation();
+      } else {
+        return; // Don't start new drag while form is open with no title
+      }
+    }
 
     // Calculate snapped time from mouse position
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -124,6 +130,7 @@ export function DayColumn(props: DayColumnProps) {
 
   return (
     <div
+      data-day-column
       class="relative [contain:strict]"
       style={{ height: `${TOTAL_GRID_HEIGHT_PX}px` }}
       classList={{

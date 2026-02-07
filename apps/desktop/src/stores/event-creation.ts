@@ -1,6 +1,9 @@
 import { createSignal } from "solid-js";
 import { defaultCalendarId, connectedAccounts } from "./accounts";
+import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
+import { apiFetch } from "../lib/api";
 import { SNAP_MINUTES } from "../constants/calendar";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
 // =============================================================================
 // Signals
@@ -105,24 +108,65 @@ export function cancelCreation(): void {
 }
 
 /**
- * Commit the event creation — returns the draft data for the caller to persist.
- * Resets creation state.
+ * Commit the event creation — optimistic insert + background API call.
+ * Returns true if the event was saved, false if nothing to save.
  */
-export function commitCreation(): {
-  title: string;
-  start: Date;
-  end: Date;
-  calendarId: string;
-} | null {
+export function commitCreation(): boolean {
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
   const calId = draftCalendarId() ?? defaultCalendarId();
 
-  if (!title || !start || !end || !calId) return null;
+  if (!title || !start || !end || !calId) return false;
 
-  const result = { title, start: new Date(start), end: new Date(end), calendarId: calId };
+  const color = getDraftColor();
+  const tempId = `temp-${crypto.randomUUID()}`;
 
+  // Optimistic insert
+  addLocalEvent({
+    id: tempId,
+    calendarId: calId,
+    title,
+    start: new Date(start),
+    end: new Date(end),
+    isAllDay: false,
+    color,
+  });
+
+  // Reset creation state
   cancelCreation();
-  return result;
+
+  // Background API call
+  apiFetch<ApiCalendarEvent>("/api/events", {
+    method: "POST",
+    body: JSON.stringify({
+      calendarId: calId,
+      title,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      isAllDay: false,
+    }),
+  })
+    .then((serverEvent) => {
+      // Swap temp ID with server-assigned ID
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === tempId
+            ? {
+                ...e,
+                id: serverEvent.id,
+                title: serverEvent.title,
+                start: new Date(serverEvent.start),
+                end: new Date(serverEvent.end),
+              }
+            : e
+        )
+      );
+    })
+    .catch((error) => {
+      console.error("[event-creation] Failed to save event:", error);
+      removeLocalEvent(tempId);
+    });
+
+  return true;
 }
