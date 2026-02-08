@@ -132,14 +132,17 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 30%, white);
 }
 
-/* Focus/selected state - solid background color */
-.calendar-event:focus {
+/* Focus/selected state - solid background color
+   :focus applies to the clicked segment, --focused applies to all segments via signal */
+.calendar-event:focus,
+.calendar-event--focused {
   outline: none;
   background-color: var(--event-color);
   color: white;
 }
 
-.calendar-event:focus .calendar-event__ribbon {
+.calendar-event:focus .calendar-event__ribbon,
+.calendar-event--focused .calendar-event__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
 }
 

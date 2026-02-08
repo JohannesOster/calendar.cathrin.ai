@@ -4,7 +4,7 @@ import { AppShell, setRightSidebarOpen } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
-import { isCreating } from "./stores/event-creation";
+import { isCreating, isDragging } from "./stores/event-creation";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
@@ -68,9 +68,10 @@ function App() {
     document.removeEventListener("keydown", handleKeyDown);
   });
 
-  // Open right sidebar when event creation starts (don't close it on cancel)
+  // Open right sidebar when event creation starts, but wait until drag finishes
+  // so the sidebar doesn't resize columns mid-drag causing unintended multi-day selection
   createEffect(() => {
-    if (isCreating()) {
+    if (isCreating() && !isDragging()) {
       setRightSidebarOpen(true);
     }
   });
