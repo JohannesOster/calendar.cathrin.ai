@@ -28,6 +28,16 @@ calendar.cathrin.ai/
 └── package.json          # Root workspace scripts
 ```
 
+## Worktree Setup
+
+When working in a git worktree, run these steps after creation:
+
+```bash
+rm -rf apps/desktop/src-tauri/target
+```
+
+The `target` directory contains Rust build artifacts with hardcoded absolute paths from the original worktree. Removing it forces a clean Cargo build with correct paths.
+
 ## Development Commands
 
 ### From Repository Root
