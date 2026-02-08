@@ -35,10 +35,10 @@ export function LeftSidebar() {
       </div>
 
       {/* Add calendar button */}
-      <div class="p-3 border-t border-[#e8e8e8]">
+      <div class="p-3 border-t border-border">
         <button
           onClick={() => addAccount()}
-          class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded transition-colors"
+          class="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-fg-muted hover:text-fg hover:bg-surface-hover rounded transition-colors"
         >
           <Plus size={SIDEBAR.ICON_LG} />
           <span>Add calendar account</span>

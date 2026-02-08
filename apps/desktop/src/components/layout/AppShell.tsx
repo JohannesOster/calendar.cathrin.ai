@@ -95,19 +95,19 @@ export function AppShell(props: AppShellProps) {
   });
 
   return (
-    <div class="h-screen flex flex-col bg-white overflow-hidden">
+    <div class="h-screen flex flex-col bg-surface overflow-hidden">
       {/* Header row - draggable, with integrated toggle button */}
       <div
         data-tauri-drag-region
-        class="h-13 w-full shrink-0 flex items-center bg-[#fbfbfa] border-b border-[#e8e8e8] select-none relative"
+        class="h-13 w-full shrink-0 flex items-center bg-surface-alt border-b border-border select-none relative"
       >
         {/* Traffic light outlines - shown during fullscreen transition or when window unfocused */}
         {(showTrafficLightOutlines() ||
           (!isWindowFocused() && !isFullscreen())) && (
           <div class="absolute left-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
-            <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
-            <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
-            <div class="w-3 h-3 rounded-full border border-[#d4d4d4]" />
+            <div class="w-3 h-3 rounded-full border border-border-light" />
+            <div class="w-3 h-3 rounded-full border border-border-light" />
+            <div class="w-3 h-3 rounded-full border border-border-light" />
           </div>
         )}
 
@@ -121,7 +121,7 @@ export function AppShell(props: AppShellProps) {
         >
           <button
             onClick={toggleLeftSidebar}
-            class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
+            class="p-1.5 rounded hover:bg-surface-hover text-fg-muted hover:text-fg transition-colors"
             title={leftSidebarOpen() ? "Hide sidebar" : "Show sidebar"}
           >
             {leftSidebarOpen() ? (
@@ -140,7 +140,7 @@ export function AppShell(props: AppShellProps) {
       <div class="flex-1 flex min-h-0 min-w-0 relative overflow-hidden">
         {/* Left Sidebar - collapsible */}
         <aside
-          class="shrink-0 border-r border-[#e8e8e8] bg-[#fbfbfa] relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
+          class="shrink-0 border-r border-border bg-surface-alt relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
           classList={{
             "w-64": leftSidebarOpen(),
             "w-0 border-r-0": !leftSidebarOpen(),
@@ -152,13 +152,13 @@ export function AppShell(props: AppShellProps) {
         </aside>
 
         {/* Center content area - min-w-0 allows shrinking, overflow-hidden prevents layout issues during sidebar animation */}
-        <main class="flex-1 flex flex-col max-h-full bg-white min-w-0 overflow-hidden pt-2">
+        <main class="flex-1 flex flex-col max-h-full bg-surface min-w-0 overflow-hidden pt-2">
           {props.children}
         </main>
 
         {/* Right Sidebar - collapsible */}
         <aside
-          class="shrink-0 border-l border-[#e8e8e8] bg-[#fbfbfa] relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
+          class="shrink-0 border-l border-border bg-surface-alt relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
           classList={{
             "w-64": rightSidebarOpen(),
             "w-0 border-l-0": !rightSidebarOpen(),

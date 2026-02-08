@@ -51,13 +51,13 @@ export function DateHeader(props: DateHeaderProps) {
   const dayNumber = () => props.date.getDate();
 
   return (
-    <div class="relative h-full flex items-center justify-center border-b border-[#e8e8e8]">
-      <span class="text-xs text-[#91918e]">{dayName()}</span>
+    <div class="relative h-full flex items-center justify-center border-b border-border">
+      <span class="text-xs text-fg-muted">{dayName()}</span>
       <span
         class="text-xs ml-0.5 w-5 h-5 flex items-center justify-center rounded"
         classList={{
-          "bg-[#2383e2] text-white": props.isToday,
-          "text-[#91918e]": !props.isToday,
+          "bg-accent text-white": props.isToday,
+          "text-fg-muted": !props.isToday,
         }}
       >
         {dayNumber()}
@@ -66,7 +66,7 @@ export function DateHeader(props: DateHeaderProps) {
       {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
       <For each={showFlash() ? [flashKey()] : []}>
         {() => (
-          <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+          <div class="absolute inset-0 bg-accent pointer-events-none animate-flash-highlight" />
         )}
       </For>
     </div>

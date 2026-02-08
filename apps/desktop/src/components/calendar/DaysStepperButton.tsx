@@ -49,7 +49,7 @@ export function DaysStepperButton() {
            which prevents the popover counter from re-rendering. */}
       <button
         onClick={() => setIsOpen(!isOpen())}
-        class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-[#37352f] bg-[#efefef] hover:bg-[#e8e8e8] transition-colors text-xs font-medium"
+        class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-fg bg-surface-hover hover:bg-border transition-colors text-xs font-medium"
         style={{ display: showCountBadge() ? "flex" : "none" }}
         aria-label={`${visibleDaysCount()} days visible`}
       >
@@ -59,7 +59,7 @@ export function DaysStepperButton() {
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen())}
-        class="w-5 h-5 flex items-center justify-center rounded text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] transition-colors text-xs font-medium"
+        class="w-5 h-5 flex items-center justify-center rounded text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors text-xs font-medium"
         aria-label="Adjust visible days"
       >
         ±
@@ -68,7 +68,7 @@ export function DaysStepperButton() {
       {/* Popover */}
       <Show when={isOpen()}>
         <div
-          class="absolute top-full right-0 mt-1 flex items-center gap-1 bg-[#37352f] rounded-full px-1.5 py-0.5 shadow-lg transition-opacity z-30"
+          class="absolute top-full right-0 mt-1 flex items-center gap-1 bg-fg rounded-full px-1.5 py-0.5 shadow-lg transition-opacity z-30"
           style={{ opacity: isOpen() ? 1 : 0 }}
         >
           {/* Decrement button */}

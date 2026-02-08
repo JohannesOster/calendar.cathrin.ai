@@ -41,7 +41,7 @@ export function MonthSpanningChip(props: MonthSpanningChipProps) {
           "border-radius": `${props.startsBeforeView ? "0" : "4px"} 0 0 ${props.startsBeforeView ? "0" : "4px"}`,
         }}
       />
-      <span class="truncate text-[#37352f] ml-0.5">{props.event.title}</span>
+      <span class="truncate text-fg ml-0.5">{props.event.title}</span>
     </div>
   );
 }

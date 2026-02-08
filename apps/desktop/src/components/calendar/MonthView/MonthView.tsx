@@ -299,22 +299,22 @@ export function MonthView() {
     <div class="flex-1 flex flex-col min-h-0">
       {/* Month/year label row */}
       <div
-        class="flex items-end pb-1 pl-3 bg-white shrink-0"
+        class="flex items-end pb-1 pl-3 bg-surface shrink-0"
         style={{ height: "36px" }}
       >
-        <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
+        <span class="text-fg text-lg font-semibold whitespace-nowrap">
           {monthYearLabel()}
         </span>
       </div>
 
       {/* Weekday headers row */}
       <div
-        class="grid grid-cols-7 border-b border-[#e8e8e8] bg-white shrink-0"
+        class="grid grid-cols-7 border-b border-border bg-surface shrink-0"
         style={{ height: `${WEEKDAY_HEADER_HEIGHT}px` }}
       >
         <For each={WEEKDAY_HEADERS}>
           {(day) => (
-            <div class="px-2 py-2 text-xs font-medium text-[#91918e] text-center border-r border-[#e8e8e8] last:border-r-0">
+            <div class="px-2 py-2 text-xs font-medium text-fg-muted text-center border-r border-border last:border-r-0">
               {day}
             </div>
           )}

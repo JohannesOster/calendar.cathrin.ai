@@ -78,7 +78,7 @@ export function AllDaySection(props: AllDaySectionProps) {
       <Key each={props.visibleDays} by={(d) => getDateKey(d.date)}>
         {(item) => (
           <div
-            class="absolute border-r border-[#e8e8e8] bg-white"
+            class="absolute border-r border-border bg-surface"
             style={{
               left: `${item().left}px`,
               width: `${props.colWidth}px`,

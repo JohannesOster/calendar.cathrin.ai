@@ -96,7 +96,7 @@ export function MonthWeekRow(props: MonthWeekRowProps) {
     >
       {/* Month label overlay */}
       <Show when={props.monthLabel}>
-        <div class="absolute left-2 top-1 text-sm font-medium text-[#37352f] z-10 pointer-events-none">
+        <div class="absolute left-2 top-1 text-sm font-medium text-fg z-10 pointer-events-none">
           {props.monthLabel}
         </div>
       </Show>

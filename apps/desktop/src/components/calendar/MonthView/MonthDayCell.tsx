@@ -99,9 +99,9 @@ export function MonthDayCell(props: MonthDayCellProps) {
 
   return (
     <div
-      class="border-r border-b border-[#e8e8e8] p-1 min-h-0 flex flex-col transition-colors duration-200 overflow-hidden"
+      class="border-r border-b border-border p-1 min-h-0 flex flex-col transition-colors duration-200 overflow-hidden"
       classList={{
-        "bg-[#e8f4fd]": props.isFlashing,
+        "bg-accent-light": props.isFlashing,
       }}
     >
       {/* Day number - top right, clickable to navigate to week view */}
@@ -110,9 +110,9 @@ export function MonthDayCell(props: MonthDayCellProps) {
           onClick={() => navigateToWeekView(props.dayInfo.date)}
           class="w-7 h-7 flex items-center justify-center text-sm rounded-full cursor-pointer transition-colors"
           classList={{
-            "bg-[#2383e2] text-white hover:bg-[#1a6fc4]": isTodayDate(),
-            "text-[#37352f] font-medium hover:bg-[#efefef]": isFirstOfMonth() && !isTodayDate(),
-            "text-[#37352f] hover:bg-[#efefef]": !isFirstOfMonth() && !isTodayDate(),
+            "bg-accent text-white hover:bg-accent-hover": isTodayDate(),
+            "text-fg font-medium hover:bg-surface-hover": isFirstOfMonth() && !isTodayDate(),
+            "text-fg hover:bg-surface-hover": !isFirstOfMonth() && !isTodayDate(),
           }}
           tabIndex={0}
         >
@@ -137,7 +137,7 @@ export function MonthDayCell(props: MonthDayCellProps) {
         <Show when={overflowCount() > 0}>
           <button
             onClick={() => navigateToWeekView(props.dayInfo.date)}
-            class="text-xs text-[#91918e] hover:text-[#37352f] hover:underline text-left px-1 py-0.5 cursor-pointer transition-colors"
+            class="text-xs text-fg-muted hover:text-fg hover:underline text-left px-1 py-0.5 cursor-pointer transition-colors"
             tabIndex={0}
           >
             +{overflowCount()} more

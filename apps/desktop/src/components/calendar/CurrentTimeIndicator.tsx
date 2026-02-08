@@ -45,7 +45,7 @@ export function CurrentTimeBadge() {
       }}
     >
       {/* Time badge */}
-      <div class="absolute right-0 -translate-y-1/2 bg-[#ea4335] text-white text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
+      <div class="absolute right-0 -translate-y-1/2 bg-today text-white text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
         {formatCurrentTime(now())}
       </div>
     </div>
@@ -75,7 +75,7 @@ export function CurrentTimeLine(props: CurrentTimeIndicatorProps) {
       }}
     >
       {/* Thin line spanning all columns */}
-      <div class="absolute left-0 right-0 h-px bg-[#ea4335]" />
+      <div class="absolute left-0 right-0 h-px bg-today" />
     </div>
   );
 }

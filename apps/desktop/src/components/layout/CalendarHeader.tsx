@@ -85,7 +85,7 @@ export function CalendarHeader() {
         <Show when={isLoadingWeeks() || isAnySyncing()}>
           <LoaderCircle
             size={14}
-            class="text-[#91918e] animate-spin"
+            class="text-fg-muted animate-spin"
             aria-label="Loading events"
           />
         </Show>
@@ -95,20 +95,20 @@ export function CalendarHeader() {
       <div class="absolute left-1/2 -translate-x-1/2 flex items-center">
         <button
           onClick={navigatePrev}
-          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
+          class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg transition-colors"
           title="Previous"
         >
           <ChevronLeft size={18} />
         </button>
         <button
           onClick={goToToday}
-          class="px-2.5 py-1 rounded hover:bg-[#efefef] text-[#37352f] text-sm font-medium transition-colors"
+          class="px-2.5 py-1 rounded hover:bg-surface-hover text-fg text-sm font-medium transition-colors"
         >
           Today
         </button>
         <button
           onClick={navigateNext}
-          class="p-1 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
+          class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg transition-colors"
           title="Next"
         >
           <ChevronRight size={18} />
@@ -118,7 +118,7 @@ export function CalendarHeader() {
       {/* Right section - View switch and sidebar toggle */}
       <div class="flex items-center gap-3 min-w-[200px] justify-end">
         {/* View switch */}
-        <div class="flex items-center rounded-md border border-[#e8e8e8] overflow-hidden">
+        <div class="flex items-center rounded-md border border-border overflow-hidden">
           {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
             <button
               onClick={() => {
@@ -164,12 +164,12 @@ export function CalendarHeader() {
                 // Day: highlighted when not Month view AND exactly 1 day
                 // Week: highlighted when not Month view AND exactly 7 days
                 // Month: highlighted when in Month view
-                "bg-[#efefef] text-[#37352f]":
+                "bg-surface-hover text-fg":
                   view === "Month"
                     ? currentView() === "Month"
                     : currentView() !== "Month" &&
                       visibleDaysCount() === (view === "Day" ? 1 : 7),
-                "text-[#91918e] hover:text-[#37352f] hover:bg-[#f5f5f5]": !(
+                "text-fg-muted hover:text-fg hover:bg-surface-hover": !(
                   view === "Month"
                     ? currentView() === "Month"
                     : currentView() !== "Month" &&
@@ -185,7 +185,7 @@ export function CalendarHeader() {
         {/* Right sidebar toggle */}
         <button
           onClick={toggleRightSidebar}
-          class="p-1.5 rounded hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f] transition-colors"
+          class="p-1.5 rounded hover:bg-surface-hover text-fg-muted hover:text-fg transition-colors"
           title={rightSidebarOpen() ? "Hide right sidebar" : "Show right sidebar"}
         >
           {rightSidebarOpen() ? (

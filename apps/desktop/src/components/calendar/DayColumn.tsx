@@ -197,7 +197,7 @@ export function DayColumn(props: DayColumnProps) {
       class="relative [contain:strict]"
       style={{ height: `${TOTAL_GRID_HEIGHT_PX}px` }}
       classList={{
-        "bg-[#fafafa]": isWeekend(),
+        "bg-surface-weekend": isWeekend(),
       }}
       onMouseDown={handleMouseDown}
       onDblClick={handleDblClick}
@@ -208,7 +208,7 @@ export function DayColumn(props: DayColumnProps) {
         class="absolute left-0 right-0 bottom-0 pointer-events-none"
         style={{
           top: "var(--grid-hour-height)",
-          "background-image": "linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)",
+          "background-image": "linear-gradient(to bottom, var(--color-border) 1px, transparent 1px)",
           "background-size": "100% var(--grid-hour-height)",
         }}
       />
@@ -226,7 +226,7 @@ export function DayColumn(props: DayColumnProps) {
       {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
       <For each={showFlash() ? [flashKey()] : []}>
         {() => (
-          <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+          <div class="absolute inset-0 bg-accent pointer-events-none animate-flash-highlight" />
         )}
       </For>
     </div>

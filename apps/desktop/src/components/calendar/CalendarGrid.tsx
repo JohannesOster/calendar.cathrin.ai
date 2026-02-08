@@ -172,7 +172,7 @@ function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
   return (
     <For each={showFlash() ? [flashKey()] : []}>
       {() => (
-        <div class="absolute inset-0 bg-[#2383e2] pointer-events-none animate-flash-highlight" />
+        <div class="absolute inset-0 bg-accent pointer-events-none animate-flash-highlight" />
       )}
     </For>
   );
@@ -1239,13 +1239,13 @@ export function CalendarGrid() {
                   top: "0",
                   width: "1px",
                   height: `${contentHeight()}px`,
-                  "background-color": "#e8e8e8",
+                  "background-color": "var(--color-border)",
                   "z-index": "22",
                 }}
               />
               {/* Sticky Month/Year Label Row - sticky in both directions */}
               <div
-                class="flex bg-white"
+                class="flex bg-surface"
                 style={{
                   position: "sticky",
                   top: "0",
@@ -1258,9 +1258,9 @@ export function CalendarGrid() {
                 }}
               >
                 <div
-                  class="bg-white flex items-end pb-1 pl-3"
+                  class="bg-surface flex items-end pb-1 pl-3"
                 >
-                  <span class="text-[#37352f] text-lg font-semibold whitespace-nowrap">
+                  <span class="text-fg text-lg font-semibold whitespace-nowrap">
                     {monthYearLabel()}
                   </span>
                 </div>
@@ -1272,7 +1272,7 @@ export function CalendarGrid() {
                     "margin-left": "auto",
                     "padding-left": "16px",
                     background:
-                      "linear-gradient(to right, transparent, white 8px)",
+                      "linear-gradient(to right, transparent, var(--color-surface) 8px)",
                   }}
                 >
                   <DaysStepperButton />
@@ -1281,7 +1281,7 @@ export function CalendarGrid() {
 
               {/* Sticky Date Header Row */}
               <div
-                class="flex bg-white border-b border-[#e8e8e8]"
+                class="flex bg-surface border-b border-border"
                 style={{
                   position: "sticky",
                   top: `${MONTH_LABEL_HEIGHT}px`,
@@ -1294,7 +1294,7 @@ export function CalendarGrid() {
               >
                 {/* Sticky Time Column Header */}
                 <div
-                  class="bg-white border-b border-[#e8e8e8]"
+                  class="bg-surface border-b border-border"
                   style={{
                     width: "var(--grid-time-col-width)",
                     "min-width": "var(--grid-time-col-width)",
@@ -1312,7 +1312,7 @@ export function CalendarGrid() {
                 <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                   {(item) => (
                     <div
-                      class="absolute bg-white"
+                      class="absolute bg-surface"
                       style={{
                         left: "0",
                         transform: `translateX(${item().left}px)`,
@@ -1332,7 +1332,7 @@ export function CalendarGrid() {
 
               {/* Sticky All-Day Section Row - matches header row structure */}
               <div
-                class="flex bg-white border-b border-[#e8e8e8]"
+                class="flex bg-surface border-b border-border"
                 classList={{
                   "transition-[height] duration-200 ease-out": true,
                 }}
@@ -1348,7 +1348,7 @@ export function CalendarGrid() {
               >
                 {/* Sticky Time column corner */}
                 <div
-                  class="bg-white border-r border-b border-[#e8e8e8] flex items-start justify-end pt-1 pr-2"
+                  class="bg-surface border-r border-b border-border flex items-start justify-end pt-1 pr-2"
                   style={{
                     width: "var(--grid-time-col-width)",
                     "min-width": "var(--grid-time-col-width)",
@@ -1368,14 +1368,14 @@ export function CalendarGrid() {
                       when={shouldShowToggle()}
                       fallback={
                         <Show when={allDayEventLayouts().length > 0}>
-                          <span class="text-[10px] text-[#91918e] font-light">
+                          <span class="text-[10px] text-fg-muted font-light">
                             All day
                           </span>
                         </Show>
                       }
                     >
                       <button
-                        class="text-[#91918e] hover:text-[#37352f] hover:bg-[#efefef] rounded py-0.5 pl-0.5 transition-colors"
+                        class="text-fg-muted hover:text-fg hover:bg-surface-hover rounded py-0.5 pl-0.5 transition-colors"
                         onClick={toggleAllDayExpanded}
                         tabIndex={0}
                         aria-label={
@@ -1398,7 +1398,7 @@ export function CalendarGrid() {
                 <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                   {(item) => (
                     <div
-                      class="absolute border-l border-b border-[#e8e8e8] bg-white"
+                      class="absolute border-l border-b border-border bg-surface"
                       style={{
                         left: "0",
                         transform: `translateX(${item().left}px)`,
@@ -1470,7 +1470,7 @@ export function CalendarGrid() {
                           return (
                             <Show when={count() > 1}>
                               <div
-                                class="absolute flex items-center px-1.5 text-xs text-[#91918e] font-light cursor-pointer hover:text-[#37352f] transition-colors"
+                                class="absolute flex items-center px-1.5 text-xs text-fg-muted font-light cursor-pointer hover:text-fg transition-colors"
                                 style={{
                                   left: "0",
                                   transform: `translateX(${day().left}px)`,
@@ -1511,7 +1511,7 @@ export function CalendarGrid() {
 
               {/* Sticky Time Column Body - Sticky Left, below all-day section */}
               <div
-                class="bg-white border-r border-[#e8e8e8]"
+                class="bg-surface border-r border-border"
                 style={{
                   width: "var(--grid-time-col-width)",
                   "min-width": "var(--grid-time-col-width)",
@@ -1540,7 +1540,7 @@ export function CalendarGrid() {
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
-                    class="absolute border-l border-[#e8e8e8]"
+                    class="absolute border-l border-border"
                     classList={{
                       "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
                     }}

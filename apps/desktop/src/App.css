@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  --color-surface:          #ffffff;
+  --color-surface-alt:      #fbfbfa;
+  --color-surface-hover:    #efefef;
+  --color-surface-active:   #d8d8d8;
+  --color-surface-input:    #f1f1ef;
+  --color-surface-weekend:  #fafafa;
+
+  --color-fg:               #37352f;
+  --color-fg-muted:         #91918e;
+  --color-fg-faint:         #b8b8b5;
+  --color-fg-disabled:      #c4c4c4;
+
+  --color-border:           #e8e8e8;
+  --color-border-light:     #d4d4d4;
+
+  --color-accent:           #2383e2;
+  --color-accent-hover:     #1a6fc4;
+  --color-accent-light:     #e8f4fd;
+
+  --color-today:            #ea4335;
+
+  --color-scrollbar:        #d1d1d1;
+  --color-scrollbar-hover:  #b1b1b1;
+}
+
 html,
 body {
   max-height: 100vh;
@@ -22,18 +48,6 @@ body {
   --grid-time-col-width: 48px;
   --grid-all-day-chip-height: 20px;
   --grid-all-day-row-height: 28px;
-
-  /* Colors - Notion-like palette */
-  --color-text-primary: #37352f;
-  --color-text-secondary: #91918e;
-  --color-text-muted: #b8b8b5;
-  --color-border: #e8e8e8;
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #fbfbfa;
-  --color-bg-hover: #efefef;
-  --color-bg-button-hover: #d8d8d8;
-  --color-accent: #2383e2;
-  --color-today-indicator: #ea4335;
 }
 
 /* Custom scrollbar styling */
@@ -47,12 +61,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d1d1;
+  background: var(--color-scrollbar);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b1b1b1;
+  background: var(--color-scrollbar-hover);
 }
 
 /* Reserve space for scrollbar to prevent layout shift */

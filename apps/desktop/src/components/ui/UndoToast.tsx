@@ -60,18 +60,18 @@ export function UndoToast() {
           role="alert"
           onKeyDown={handleKeyDown}
         >
-          <div class="bg-[#37352f] text-white rounded-xl shadow-lg px-4 py-3 min-w-[280px] max-w-[400px]">
+          <div class="bg-fg text-white rounded-xl shadow-lg px-4 py-3 min-w-[280px] max-w-[400px]">
             <div class="flex items-start gap-2">
-              <Info size={16} class="text-[#ffffff99] shrink-0 mt-0.5" />
+              <Info size={16} class="text-white/60 shrink-0 mt-0.5" />
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium">Event deleted</div>
-                <div class="text-xs text-[#ffffff99] mt-0.5 truncate">
+                <div class="text-xs text-white/60 mt-0.5 truncate">
                   "{deleted().event.title}"
                 </div>
               </div>
               <button
                 onClick={dismiss}
-                class="text-[#ffffff66] hover:text-white transition-colors shrink-0 -mt-0.5"
+                class="text-white/40 hover:text-white transition-colors shrink-0 -mt-0.5"
                 aria-label="Dismiss"
               >
                 <X size={14} />
@@ -80,7 +80,7 @@ export function UndoToast() {
             <div class="flex justify-end mt-2">
               <button
                 onClick={handleUndo}
-                class="px-3 py-1 text-xs font-medium text-white bg-[#ffffff1a] hover:bg-[#ffffff33] rounded transition-colors"
+                class="px-3 py-1 text-xs font-medium text-white bg-white/10 hover:bg-white/20 rounded transition-colors"
               >
                 Undo
               </button>

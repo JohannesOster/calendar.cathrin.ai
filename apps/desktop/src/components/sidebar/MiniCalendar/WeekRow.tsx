@@ -48,7 +48,7 @@ export function WeekRow(props: WeekRowProps) {
       <Show when={backgroundStyle()}>
         {(style) => (
           <div
-            class="absolute top-0 bottom-0 bg-[#f1f1ef] rounded-md"
+            class="absolute top-0 bottom-0 bg-surface-input rounded-md"
             style={style()}
           />
         )}
@@ -72,12 +72,11 @@ export function WeekRow(props: WeekRowProps) {
               <button
                 class="w-7 h-6 flex items-center justify-center text-xs transition-colors rounded"
                 classList={{
-                  "text-[#37352f]": dayInfo.isCurrentMonth && !isTodayDate,
-                  "text-[#c4c4c4]": !dayInfo.isCurrentMonth && !isVisible(),
-                  "text-[#91918e]": !dayInfo.isCurrentMonth && isVisible() && !isTodayDate,
-                  "bg-[#2383e2] text-white hover:bg-[#2383e2]": isTodayDate,
-                  "hover:bg-[#e3e3e3]": !isTodayDate && !isVisible(),
-                  "hover:bg-[#e5e5e3]": !isTodayDate && isVisible(),
+                  "text-fg": dayInfo.isCurrentMonth && !isTodayDate,
+                  "text-fg-disabled": !dayInfo.isCurrentMonth && !isVisible(),
+                  "text-fg-muted": !dayInfo.isCurrentMonth && isVisible() && !isTodayDate,
+                  "bg-accent text-white hover:bg-accent": isTodayDate,
+                  "hover:bg-surface-hover": !isTodayDate,
                 }}
                 onClick={() => props.onDayClick(dayInfo)}
               >

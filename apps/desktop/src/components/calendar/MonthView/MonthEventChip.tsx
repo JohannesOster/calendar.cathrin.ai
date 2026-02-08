@@ -30,8 +30,8 @@ export function MonthEventChip(props: MonthEventChipProps) {
       role="button"
       aria-label={`${props.event.title} at ${time()}`}
     >
-      <span class="text-[#91918e] shrink-0">{time()}</span>
-      <span class="truncate text-[#37352f]">{props.event.title}</span>
+      <span class="text-fg-muted shrink-0">{time()}</span>
+      <span class="truncate text-fg">{props.event.title}</span>
     </div>
   );
 }

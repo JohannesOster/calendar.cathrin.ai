@@ -129,27 +129,27 @@ export function EventForm() {
             value={draftTitle()}
             onInput={(e) => setDraftTitle(e.currentTarget.value)}
             onKeyDown={handleTitleKeyDown}
-            class="w-full text-lg font-medium text-[#37352f] placeholder-[#c4c4c4] bg-transparent outline-none border-none"
+            class="w-full text-lg font-medium text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
           />
         </div>
 
         {/* Time section */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8] space-y-1.5">
+        <div class="px-3 py-2 border-t border-border space-y-1.5">
           {/* Start time + End time on one row */}
           <Show when={draftStart() && draftEnd()}>
-            <div class="flex items-center gap-2 text-sm text-[#37352f]">
-              <Clock size={14} class="text-[#91918e] shrink-0" />
+            <div class="flex items-center gap-2 text-sm text-fg">
+              <Clock size={14} class="text-fg-muted shrink-0" />
               <span class="whitespace-nowrap">{formatTime(draftStart()!)}</span>
-              <ArrowRight size={14} class="text-[#91918e] shrink-0" />
+              <ArrowRight size={14} class="text-fg-muted shrink-0" />
               <span class="whitespace-nowrap">{formatTime(draftEnd()!)}</span>
               <Show when={formatDate(draftStart()!) === formatDate(draftEnd()!)}>
-                <span class="text-xs text-[#91918e] whitespace-nowrap">{formatDuration(draftStart()!, draftEnd()!)}</span>
+                <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(draftStart()!, draftEnd()!)}</span>
               </Show>
             </div>
           </Show>
           {/* Date row */}
           <Show when={draftStart() && draftEnd()}>
-            <div class="flex gap-4 ml-[22px] text-sm text-[#37352f]">
+            <div class="flex gap-4 ml-[22px] text-sm text-fg">
               <span>{formatDate(draftStart()!)}</span>
               <Show when={formatDate(draftStart()!) !== formatDate(draftEnd()!)}>
                 <span>{formatDate(draftEnd()!)}</span>
@@ -157,7 +157,7 @@ export function EventForm() {
             </div>
           </Show>
           {/* All-day / Timezone / Repeat */}
-          <div class="ml-[22px] flex gap-3 text-xs text-[#c4c4c4]">
+          <div class="ml-[22px] flex gap-3 text-xs text-fg-disabled">
             <span>All-day</span>
             <span>Time zone</span>
             <span>Repeat</span>
@@ -165,34 +165,34 @@ export function EventForm() {
         </div>
 
         {/* Participants, Conferencing, Location, Docs */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8] space-y-2">
-          <div class="flex items-center gap-2 text-sm text-[#c4c4c4]">
+        <div class="px-3 py-2 border-t border-border space-y-2">
+          <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <Users size={14} class="shrink-0" />
             <span>Participants</span>
           </div>
-          <div class="flex items-center gap-2 text-sm text-[#c4c4c4]">
+          <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <Video size={14} class="shrink-0" />
             <span>Conferencing</span>
           </div>
-          <div class="flex items-center gap-2 text-sm text-[#c4c4c4]">
+          <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <MapPin size={14} class="shrink-0" />
             <span>Location</span>
           </div>
-          <div class="flex items-center gap-2 text-sm text-[#c4c4c4]">
+          <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <FileText size={14} class="shrink-0" />
             <span>Docs and links</span>
           </div>
         </div>
 
         {/* Description */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8]">
-          <div class="text-sm text-[#c4c4c4] px-0">
+        <div class="px-3 py-2 border-t border-border">
+          <div class="text-sm text-fg-disabled px-0">
             Description
           </div>
         </div>
 
         {/* Calendar selector + status */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8] space-y-2">
+        <div class="px-3 py-2 border-t border-border space-y-2">
           <div class="flex items-center gap-2">
             <div
               class="w-3 h-3 rounded-full shrink-0"
@@ -201,7 +201,7 @@ export function EventForm() {
             <select
               value={draftCalendarId() ?? ""}
               onChange={(e) => setDraftCalendarId(e.currentTarget.value || null)}
-              class="flex-1 text-sm text-[#37352f] bg-transparent outline-none border-none cursor-pointer appearance-none"
+              class="flex-1 text-sm text-fg bg-transparent outline-none border-none cursor-pointer appearance-none"
             >
               <For each={allCalendars()}>
                 {(cal) => (
@@ -212,17 +212,17 @@ export function EventForm() {
               </For>
             </select>
           </div>
-          <div class="ml-[20px] text-xs text-[#c4c4c4]">Busy</div>
-          <div class="ml-[20px] text-xs text-[#c4c4c4]">Default visibility</div>
+          <div class="ml-[20px] text-xs text-fg-disabled">Busy</div>
+          <div class="ml-[20px] text-xs text-fg-disabled">Default visibility</div>
         </div>
 
         {/* Reminders */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8] space-y-1">
-          <div class="flex items-center gap-2 text-sm text-[#c4c4c4]">
+        <div class="px-3 py-2 border-t border-border space-y-1">
+          <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <Bell size={14} class="shrink-0" />
             <span>Reminders</span>
           </div>
-          <div class="ml-[22px] text-xs text-[#c4c4c4]">30min before</div>
+          <div class="ml-[22px] text-xs text-fg-disabled">30min before</div>
         </div>
       </div>
     </div>

@@ -100,17 +100,17 @@ export function MiniCalendar() {
   });
 
   return (
-    <div class="p-2 border-b border-[#e8e8e8] select-none">
+    <div class="p-2 border-b border-border select-none">
       {/* Month navigation */}
       <div class="flex items-center justify-between mb-2 px-1.5 cursor-default">
-        <span class="text-sm font-medium text-[#37352f]">
+        <span class="text-sm font-medium text-fg">
           {formatMonthYearLocale(currentMonth())}
         </span>
         <div class="flex items-center gap-1">
           <Show when={!isCurrentMonthView()}>
             <button
               onClick={goToToday}
-              class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+              class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
               title="Go to today"
             >
               <RotateCcw size={SIDEBAR.ICON_MD} />
@@ -118,13 +118,13 @@ export function MiniCalendar() {
           </Show>
           <button
             onClick={prevMonth}
-            class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+            class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
           >
             <ChevronLeft size={SIDEBAR.ICON_MD} />
           </button>
           <button
             onClick={nextMonth}
-            class="p-1 rounded-md hover:bg-[#efefef] text-[#91918e] hover:text-[#37352f]"
+            class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
           >
             <ChevronRight size={SIDEBAR.ICON_MD} />
           </button>
@@ -135,7 +135,7 @@ export function MiniCalendar() {
       <div class="grid grid-cols-7 mb-1 cursor-default">
         <For each={WEEKDAY_LABELS}>
           {(day) => (
-            <div class="w-7 text-center text-xs text-[#91918e]">{day}</div>
+            <div class="w-7 text-center text-xs text-fg-muted">{day}</div>
           )}
         </For>
       </div>
