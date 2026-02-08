@@ -1,8 +1,11 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, createMemo } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
+
+// Shared signal: all segments of the focused event highlight together
+const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,
@@ -45,7 +48,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   let contentRef: HTMLDivElement | undefined;
   const [isBurning, setIsBurning] = createSignal(false);
   const [firePosition, setFirePosition] = createSignal(0);
-  const [isFocused, setIsFocused] = createSignal(false);
+  const isFocused = createMemo(() => focusedEventId() === props.event.id);
 
   const isSameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() &&
@@ -144,8 +147,8 @@ export function CalendarEvent(props: CalendarEventProps) {
         tabIndex={0}
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
+        onFocus={() => setFocusedEventId(props.event.id)}
+        onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
       >
         {/* Inner layout - ribbon + content side by side */}
         <div class="flex h-full">

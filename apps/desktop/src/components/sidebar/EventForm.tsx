@@ -1,12 +1,12 @@
 import { onMount, onCleanup, createMemo, Show, For } from "solid-js";
 import {
   Clock,
+  ArrowRight,
   Users,
   Video,
   MapPin,
   FileText,
   Bell,
-  CalendarDays,
 } from "lucide-solid";
 import {
   isCreating,
@@ -134,29 +134,32 @@ export function EventForm() {
         </div>
 
         {/* Time section */}
-        <div class="px-3 py-2 border-t border-[#e8e8e8]">
-          <div class="flex items-center gap-2 text-sm text-[#37352f]">
-            <Clock size={14} class="text-[#91918e] shrink-0" />
-            <Show when={draftStart() && draftEnd()}>
-              <span>
-                {formatTime(draftStart()!)} → {formatTime(draftEnd()!)}
-              </span>
-            </Show>
-          </div>
+        <div class="px-3 py-2 border-t border-[#e8e8e8] space-y-1.5">
+          {/* Start time + End time on one row */}
           <Show when={draftStart() && draftEnd()}>
-            <div class="ml-[22px] text-xs text-[#91918e] mt-0.5">
-              {formatDuration(draftStart()!, draftEnd()!)}
+            <div class="flex items-center gap-2 text-sm text-[#37352f]">
+              <Clock size={14} class="text-[#91918e] shrink-0" />
+              <span class="whitespace-nowrap">{formatTime(draftStart()!)}</span>
+              <ArrowRight size={14} class="text-[#91918e] shrink-0" />
+              <span class="whitespace-nowrap">{formatTime(draftEnd()!)}</span>
+              <Show when={formatDate(draftStart()!) === formatDate(draftEnd()!)}>
+                <span class="text-xs text-[#91918e] whitespace-nowrap">{formatDuration(draftStart()!, draftEnd()!)}</span>
+              </Show>
             </div>
-            <div class="ml-[22px] flex gap-4 text-xs text-[#91918e] mt-0.5">
+          </Show>
+          {/* Date row */}
+          <Show when={draftStart() && draftEnd()}>
+            <div class="flex gap-4 ml-[22px] text-sm text-[#37352f]">
               <span>{formatDate(draftStart()!)}</span>
               <Show when={formatDate(draftStart()!) !== formatDate(draftEnd()!)}>
                 <span>{formatDate(draftEnd()!)}</span>
               </Show>
             </div>
           </Show>
-          <div class="ml-[22px] flex gap-3 mt-1.5 text-xs text-[#c4c4c4]">
+          {/* All-day / Timezone / Repeat */}
+          <div class="ml-[22px] flex gap-3 text-xs text-[#c4c4c4]">
             <span>All-day</span>
-            <span>Timezone</span>
+            <span>Time zone</span>
             <span>Repeat</span>
           </div>
         </div>
