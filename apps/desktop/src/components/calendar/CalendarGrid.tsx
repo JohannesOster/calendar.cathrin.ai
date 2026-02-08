@@ -14,7 +14,8 @@ import { Key } from "@solid-primitives/keyed";
 import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
-import { DayColumn } from "./DayColumn";
+import { DayColumn, dragColumnDate, dragOriginMinutes } from "./DayColumn";
+import { setFocusedEventId } from "./CalendarEvent";
 import { DaysStepperButton } from "./DaysStepperButton";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
@@ -38,6 +39,22 @@ import {
   initVisibleDaysCount,
   createVisibleDaysPersistence,
 } from "../../stores/view";
+import {
+  isDragging,
+  isCreating,
+  draftTitle,
+  updateDrag,
+  finishDrag,
+  cancelCreation,
+  snapMinutes,
+} from "../../stores/event-creation";
+import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import {
+  startAutoScroll,
+  updateAutoScrollCursor,
+  stopAutoScroll,
+} from "../../lib/auto-scroll";
+import { UndoToast } from "../ui/UndoToast";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -168,6 +185,10 @@ export function CalendarGrid() {
   // (browser scroll restoration can cause stale scroll positions to be read)
   // This is a signal so changes trigger the layout memo to recompute
   const [isRestoringScrollPosition, setIsRestoringScrollPosition] = createSignal(false);
+
+  // Generation counter for scrollToDate - incremented on each call so stale
+  // RAF callbacks from previous scrolls can detect they're outdated and bail out.
+  let scrollGeneration = 0;
 
   // Track scroll position for virtualization
   const [scrollLeft, setScrollLeft] = createSignal(CENTER_OFFSET);
@@ -473,8 +494,9 @@ export function CalendarGrid() {
       if (!event) continue;
 
       // Calculate pixel position from column info
-    const left = snapToDevicePixel(firstDayLeft + layoutInfo.startCol * width);
-      const chipWidth = layoutInfo.span * width - 4; // 4px gap
+      const chipLeft = snapToDevicePixel(firstDayLeft + layoutInfo.startCol * width);
+      const left = layoutInfo.startsBeforeView ? chipLeft : chipLeft + 1; // 1px left margin
+      const chipWidth = layoutInfo.span * width - 4 - (layoutInfo.startsBeforeView ? 0 : 1); // 4px right gap, 1px left margin
 
       result.push({
         event,
@@ -663,7 +685,7 @@ export function CalendarGrid() {
   };
 
   // Virtual Scroll to a specific date
-  const scrollToDate = (date: Date, immediate = false) => {
+  const scrollToDate = (date: Date) => {
     if (!scrollContainerRef) return;
 
     const currentColWidth = colWidth();
@@ -677,7 +699,6 @@ export function CalendarGrid() {
       // - Re-enable snap (it may have been disabled by the caller)
       setIsRestoringScrollPosition(false);
       if (!snapEnabled()) {
-        // Use a small delay to let any DOM updates settle before re-enabling snap
         if (snapReEnableTimer) {
           clearTimeout(snapReEnableTimer);
         }
@@ -690,44 +711,46 @@ export function CalendarGrid() {
     }
 
     // Cancel any pending snap re-enable from previous scroll operations
-    // This prevents race conditions when multiple scrollToDate calls happen in sequence
     if (snapReEnableTimer) {
       clearTimeout(snapReEnableTimer);
       snapReEnableTimer = undefined;
     }
 
-    // Disable snap, wait for DOM update, then scroll
+    // Invalidate any pending RAF callbacks from previous scrollToDate calls.
+    // Without this, a stale callback could fire and re-enable snap at the
+    // wrong time, causing the browser to snap back to the old position.
+    const gen = ++scrollGeneration;
+
+    // Disable snap directly at the DOM level (bypasses reactive update latency).
+    // This is critical: setSnapEnabled(false) goes through SolidJS reactivity,
+    // which is synchronous but the browser may not process the CSS change until
+    // the next layout. Direct style manipulation ensures snap is truly off
+    // before we set scrollLeft.
+    scrollContainerRef.style.scrollSnapType = "none";
     setSnapEnabled(false);
 
-    const performScroll = () => {
-      if (scrollContainerRef) {
-        scrollContainerRef.scrollLeft = targetScrollLeft;
+    // Scroll immediately — snap is already disabled at the DOM level
+    scrollContainerRef.scrollLeft = targetScrollLeft;
 
-        // Now that scroll position is correct, allow handleScroll to update visibleStartDate
-        setIsRestoringScrollPosition(false);
+    // Allow handleScroll to update visibleStartDate
+    setIsRestoringScrollPosition(false);
 
-        // Explicitly update state after programmatic scroll
-        // (browser scroll events may not fire reliably for programmatic changes)
-        handleScroll();
+    // Explicitly update state after programmatic scroll
+    // (browser scroll events may not fire reliably for programmatic changes)
+    handleScroll();
 
-        // Re-enable snap after scroll completes (give it time to settle)
-        snapReEnableTimer = setTimeout(() => {
-          setSnapEnabled(true);
-          snapReEnableTimer = undefined;
-        }, 50);
-      }
-    };
-
-    if (immediate) {
-      performScroll();
-    } else {
-      // Use double-RAF to ensure CSS change is applied before scroll
+    // Re-enable snap after the browser has painted the new position.
+    // Using double-RAF ensures at least one full paint cycle has committed
+    // the scroll position, so re-enabling mandatory snap won't snap-back.
+    requestAnimationFrame(() => {
+      if (gen !== scrollGeneration || !scrollContainerRef) return;
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          performScroll();
-        });
+        if (gen !== scrollGeneration || !scrollContainerRef) return;
+        // Remove the direct style override so the reactive style takes over
+        scrollContainerRef.style.scrollSnapType = "";
+        setSnapEnabled(true);
       });
-    }
+    });
   };
 
   // ResizeObserver instance - stored so we can re-attach after view switches
@@ -831,6 +854,13 @@ export function CalendarGrid() {
 
         isInitialized = true;
 
+        // Clear skip flag — the initial scroll is handled by this RAF,
+        // so future centerDate changes (e.g. Today button) should scroll normally.
+        // This is needed because SolidJS batches effects during the initial render
+        // cycle, so the deferred centerDate effect may not fire from onMount's
+        // setCenterDate call, leaving skipNextCenterDateScroll stuck at true.
+        skipNextCenterDateScroll = false;
+
         // Re-enable scroll snap after container layout has settled.
         // Sidebar animation is ~200ms; wait 300ms to be safe.
         setTimeout(() => {
@@ -847,7 +877,20 @@ export function CalendarGrid() {
 
     // Keyboard handlers
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (e.key === "Escape") {
+        // Cancel event creation on Escape
+        if (isDragging() || isCreating()) {
+          // During drag: always cancel
+          // After drag (form open): cancel if no title entered
+          if (isDragging() || !draftTitle().trim()) {
+            stopAutoScroll();
+            cancelCreation();
+            e.preventDefault();
+            return;
+          }
+        }
+        (document.activeElement as HTMLElement | null)?.blur();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
         const activeEl = document.activeElement as HTMLElement | null;
         const eventWrapper = activeEl?.closest(
           "[data-event-id]",
@@ -856,12 +899,121 @@ export function CalendarGrid() {
           e.preventDefault();
           (eventWrapper as any).triggerBurn();
         }
-      } else if (e.key === "Escape") {
-        (document.activeElement as HTMLElement | null)?.blur();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+    // Clear event focus when clicking outside any event chip.
+    // Must also blur the DOM element — CSS :focus styles persist otherwise
+    // because DayColumn's mousedown calls e.preventDefault() which suppresses
+    // the browser's default blur behavior.
+    const handleFocusClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-event-id]")) {
+        setFocusedEventId(null);
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest("[data-event-id]")) {
+          active.blur();
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleFocusClick);
+    onCleanup(() => document.removeEventListener("mousedown", handleFocusClick));
+
+    // Document-level drag handlers for event creation
+    let lastDragClientY = 0;
+    let lastDragClientX = 0;
+
+    /** Map a viewport X coordinate to a calendar date using grid layout math. */
+    const getDateFromClientX = (clientX: number): Date | null => {
+      const gridArea = scrollContainerRef;
+      if (!gridArea) return null;
+
+      const gridRect = gridArea.getBoundingClientRect();
+      const virtualX = clientX - gridRect.left + gridArea.scrollLeft;
+      const currentColWidth = colWidth();
+      if (currentColWidth <= 0) return null;
+
+      const dayIndex = Math.floor((virtualX - CENTER_OFFSET) / currentColWidth);
+      return addDays(anchorDate(), dayIndex);
+    };
+
+    /** Recalculate draft position from the last-known cursor X/Y. Called from
+     *  mousemove AND from auto-scroll tick (so the event extends while the
+     *  cursor is stationary at an edge). */
+    const recalcDragPosition = () => {
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+      const gridArea = scrollContainerRef;
+      if (!gridArea) return;
+
+      const gridRect = gridArea.getBoundingClientRect();
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+
+      const mouseY = lastDragClientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
+      const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
+      const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+
+      const currentDate = getDateFromClientX(lastDragClientX) ?? dragColumnDate;
+      updateDrag(dragOriginMinutes, snapped, dragColumnDate, currentDate);
+    };
+
+    const handleDragMouseMove = (e: MouseEvent) => {
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+      if (!scrollContainerRef) return;
+
+      lastDragClientY = e.clientY;
+      lastDragClientX = e.clientX;
+
+      // Disable scroll snap during drag so horizontal auto-scroll doesn't fight it
+      if (snapEnabled()) {
+        scrollContainerRef.style.scrollSnapType = "none";
+        setSnapEnabled(false);
+      }
+
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+      const timeColWidth = getTimeColWidth();
+      startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition, timeColWidth, colWidth());
+      updateAutoScrollCursor(e.clientY, e.clientX);
+
+      recalcDragPosition();
+      e.preventDefault();
+    };
+
+    const handleDragMouseUp = () => {
+      if (isDragging()) {
+        stopAutoScroll();
+        finishDrag();
+        // Settle at the nearest valid snap point before re-enabling mandatory snap.
+        // Without this, re-enabling snap causes the browser to jump back to the
+        // pre-drag position (the nearest snap point it remembers).
+        if (scrollContainerRef) {
+          const currentScrollLeft = scrollContainerRef.scrollLeft;
+          const timeColWidth = getTimeColWidth();
+          const currentColWidth = colWidth();
+          const visualLeftEdge = currentScrollLeft + timeColWidth;
+          const dayIndex = Math.round((visualLeftEdge - CENTER_OFFSET) / currentColWidth);
+          const snappedScrollLeft = CENTER_OFFSET + dayIndex * currentColWidth - timeColWidth;
+          scrollContainerRef.scrollLeft = snappedScrollLeft;
+          handleScroll();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (scrollContainerRef) {
+                scrollContainerRef.style.scrollSnapType = "";
+              }
+              setSnapEnabled(true);
+            });
+          });
+        }
+      }
+    };
+
+    document.addEventListener("mousemove", handleDragMouseMove);
+    document.addEventListener("mouseup", handleDragMouseUp);
+    onCleanup(() => {
+      stopAutoScroll();
+      document.removeEventListener("mousemove", handleDragMouseMove);
+      document.removeEventListener("mouseup", handleDragMouseUp);
+    });
 
     // Cleanup direction reset timer
     onCleanup(() => {
@@ -987,12 +1139,17 @@ export function CalendarGrid() {
     on(
       centerDate,
       (target) => {
+        if (skipNextCenterDateScroll) {
+          skipNextCenterDateScroll = false;
+          return;
+        }
         // Skip if visibleDaysCount effect will handle this scroll.
         // This happens when Day button sets both centerDate and visibleDaysCount together.
-        // We check navigationTarget because it's set SYNCHRONOUSLY before the signals change,
-        // so it's reliable even though this effect may run before visibleDaysCount effect.
-        if (skipNextCenterDateScroll || navigationTarget() !== null) {
-          skipNextCenterDateScroll = false;
+        // Clear navigationTarget defensively — if visibleDaysCount didn't change,
+        // the visibleDaysCount effect won't fire to clear it, and a stale value
+        // would block all future centerDate-driven scrolls (including Today).
+        if (navigationTarget() !== null) {
+          setNavigationTarget(null);
           return;
         }
         if (currentView() !== "Month") {
@@ -1047,7 +1204,8 @@ export function CalendarGrid() {
   );
 
   return (
-    <div class="flex-1 flex flex-col max-h-full overflow-hidden">
+    <div class="flex-1 flex flex-col max-h-full overflow-hidden relative">
+      <UndoToast />
       <Show
         when={currentView() === "Month"}
         fallback={
@@ -1435,8 +1593,13 @@ export function CalendarGrid() {
                         width: `${layout().width}px`,
                         height: `${contentHeight()}px`,
                         "z-index": "-1",
-                        "scroll-snap-align": "start",
-                        // Only snap to week starts when viewing 7+ days
+                        // In 7-day view, only Sundays are snap points so the view
+                        // always shows a full Sun–Sat week. Other day counts snap
+                        // to every day for flexible scrolling.
+                        "scroll-snap-align":
+                          visibleDaysCount() === 7 && !isWeekStart(date)
+                            ? "none"
+                            : "start",
                         "scroll-snap-stop":
                           isWeekStart(date) && visibleDaysCount() >= 7
                             ? "always"

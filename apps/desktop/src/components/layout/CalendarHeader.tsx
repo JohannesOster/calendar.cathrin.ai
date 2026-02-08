@@ -138,7 +138,12 @@ export function CalendarHeader() {
                     ? today
                     : getSundayOfWeek(start);
 
-                  setNavigationTarget(targetDate);
+                  // Only coordinate with visibleDaysCount effect when count changes.
+                  // Setting navigationTarget without a count change leaves it stuck,
+                  // blocking all future centerDate-driven scrolls (including Today).
+                  if (visibleDaysCount() !== 1) {
+                    setNavigationTarget(targetDate);
+                  }
                   setCenterDate(targetDate);
 
                   setVisibleDaysCount(1);
@@ -146,7 +151,9 @@ export function CalendarHeader() {
                   // Anchor to the week containing the current visible day
                   const start = visibleStartDate();
                   const targetDate = getSundayOfWeek(start);
-                  setNavigationTarget(targetDate);
+                  if (visibleDaysCount() !== 7) {
+                    setNavigationTarget(targetDate);
+                  }
                   setCenterDate(targetDate);
                   setVisibleDaysCount(7);
                 }

@@ -132,14 +132,17 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 30%, white);
 }
 
-/* Focus/selected state - solid background color */
-.calendar-event:focus {
+/* Focus/selected state - solid background color
+   :focus applies to the clicked segment, --focused applies to all segments via signal */
+.calendar-event:focus,
+.calendar-event--focused {
   outline: none;
   background-color: var(--event-color);
   color: white;
 }
 
-.calendar-event:focus .calendar-event__ribbon {
+.calendar-event:focus .calendar-event__ribbon,
+.calendar-event--focused .calendar-event__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
 }
 
@@ -163,6 +166,44 @@ body.dragging * {
 
 .all-day-chip:focus .all-day-chip__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
+}
+
+/* Undo toast animations */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.animate-toast-enter {
+  animation: toast-enter 200ms ease-out forwards;
+}
+
+.animate-toast-exit {
+  animation: toast-exit 150ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-enter,
+  .animate-toast-exit {
+    animation: none;
+  }
 }
 
 /* Paper burning animation - video-based fire effect */

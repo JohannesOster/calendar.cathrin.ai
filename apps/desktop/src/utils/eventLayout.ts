@@ -2,7 +2,7 @@ import type { CalendarEvent } from "../stores/events";
 import {
   SAME_START_THRESHOLD_MS,
   CASCADE_INDENT_PERCENT,
-  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_LEFT_PX,
   EVENT_MARGIN_TOTAL_PX,
 } from "../constants/calendar";
 
@@ -79,7 +79,7 @@ function layoutCluster(sortedCluster: CalendarEvent[]): Map<string, EventLayoutI
 
   if (sortedCluster.length === 1) {
     layouts.set(sortedCluster[0].id, {
-      left: `${EVENT_MARGIN_X_PX}px`,
+      left: `${EVENT_MARGIN_LEFT_PX}px`,
       width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: 1,
       overlaps: false,
@@ -185,7 +185,7 @@ function layoutCluster(sortedCluster: CalendarEvent[]): Map<string, EventLayoutI
     const hasEventBeneath = sortedCluster.slice(0, i).some(other => eventsOverlap(event, other));
 
     layouts.set(event.id, {
-      left: `calc(${left}% + ${EVENT_MARGIN_X_PX}px)`,
+      left: `calc(${left}% + ${EVENT_MARGIN_LEFT_PX}px)`,
       width: `calc(${width}% - ${EVENT_MARGIN_TOTAL_PX}px)`,
       zIndex: i + 1,
       overlaps: hasEventBeneath,

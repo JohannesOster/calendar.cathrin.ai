@@ -1,13 +1,16 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { serverEvents, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { getDateBoundsForWeeks } from "../lib/week-utils.js";
 
+// Weeks fetched more than this ago are re-fetched from Google on client request
+const SERVER_STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+
 /**
  * Ensure all weeks in the given range are fetched for a specific calendar.
- * Fetches missing weeks from Google on-demand.
+ * Fetches missing OR stale weeks from Google on-demand.
  */
 export async function ensureWeeksFetched(
   accountId: string,
@@ -26,17 +29,23 @@ export async function ensureWeeksFetched(
     ),
   });
 
-  const existingSet = new Set(existing.map((w) => w.weekId));
-  const missingWeeks = weeksNeeded.filter((w) => !existingSet.has(w));
+  // Only consider weeks fresh if fetched within the staleness threshold
+  const now = Date.now();
+  const freshSet = new Set(
+    existing
+      .filter((w) => now - w.fetchedAt.getTime() < SERVER_STALE_THRESHOLD_MS)
+      .map((w) => w.weekId)
+  );
+  const weeksToFetch = weeksNeeded.filter((w) => !freshSet.has(w));
 
-  if (missingWeeks.length === 0) return;
+  if (weeksToFetch.length === 0) return;
 
   console.log(
-    `[calendar-sync] On-demand fetch for ${missingWeeks.length} weeks: ${missingWeeks.join(", ")}`
+    `[calendar-sync] On-demand fetch for ${weeksToFetch.length} weeks: ${weeksToFetch.join(", ")}`
   );
 
   try {
-    const { start, end } = getDateBoundsForWeeks(missingWeeks);
+    const { start, end } = getDateBoundsForWeeks(weeksToFetch);
 
     const accessToken = await getAccessToken(accountId);
     const service = new GoogleCalendarService(accessToken);
@@ -79,8 +88,26 @@ export async function ensureWeeksFetched(
         });
     }
 
+    // Remove events in the fetched range that Google no longer returns
+    const fetchedEventIds = new Set(events.map((e) => e.id));
+    const existingInRange = await db.query.serverEvents.findMany({
+      where: and(
+        eq(serverEvents.accountId, accountId),
+        eq(serverEvents.calendarId, calendarId),
+        lte(serverEvents.start, end),
+        gte(serverEvents.end, start)
+      ),
+      columns: { id: true, googleEventId: true },
+    });
+
+    for (const existing of existingInRange) {
+      if (!fetchedEventIds.has(existing.googleEventId)) {
+        await db.delete(serverEvents).where(eq(serverEvents.id, existing.id));
+      }
+    }
+
     // Mark weeks as fetched
-    for (const weekId of missingWeeks) {
+    for (const weekId of weeksToFetch) {
       await db
         .insert(fetchedWeeks)
         .values({
@@ -99,7 +126,7 @@ export async function ensureWeeksFetched(
     }
 
     console.log(
-      `[calendar-sync] On-demand fetch complete for ${missingWeeks.length} weeks`
+      `[calendar-sync] On-demand fetch complete for ${weeksToFetch.length} weeks`
     );
   } catch (error) {
     // Log but don't throw - we still want to return cached data

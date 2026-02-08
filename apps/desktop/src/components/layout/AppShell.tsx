@@ -142,11 +142,11 @@ export function AppShell(props: AppShellProps) {
         <aside
           class="shrink-0 border-r border-[#e8e8e8] bg-[#fbfbfa] relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
           classList={{
-            "w-60": leftSidebarOpen(),
+            "w-64": leftSidebarOpen(),
             "w-0 border-r-0": !leftSidebarOpen(),
           }}
         >
-          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-60">
+          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-64">
             {props.leftSidebar}
           </div>
         </aside>
@@ -160,11 +160,11 @@ export function AppShell(props: AppShellProps) {
         <aside
           class="shrink-0 border-l border-[#e8e8e8] bg-[#fbfbfa] relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
           classList={{
-            "w-60": rightSidebarOpen(),
+            "w-64": rightSidebarOpen(),
             "w-0 border-l-0": !rightSidebarOpen(),
           }}
         >
-          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-60">
+          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-64">
             {props.rightSidebar}
           </div>
         </aside>

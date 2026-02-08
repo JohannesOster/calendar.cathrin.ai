@@ -9,7 +9,7 @@ import { authMiddleware } from "../middlewares/auth.js";
 import { performInitialSync } from "../services/initial-sync.js";
 
 const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
 ];

@@ -1,12 +1,15 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, createMemo } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
-import type { CalendarEvent as CalendarEventData } from "../../stores/events";
+import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
+
+// Shared signal: all segments of the focused event highlight together
+export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,
-  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_LEFT_PX,
   EVENT_MARGIN_TOTAL_PX,
   MIN_EVENT_HEIGHT_PX,
   SINGLE_LINE_THRESHOLD_PX,
@@ -16,11 +19,13 @@ import {
   EVENT_PADDING_Y_PX,
   FOCUSED_Z_INDEX,
   MS_PER_HOUR,
+  TOTAL_GRID_HEIGHT_PX,
 } from "../../constants/calendar";
 
 interface CalendarEventProps {
   event: CalendarEventData;
   layout?: EventLayoutInfo;
+  columnDate?: Date;
 }
 
 function formatTime(date: Date): string {
@@ -43,20 +48,50 @@ export function CalendarEvent(props: CalendarEventProps) {
   let contentRef: HTMLDivElement | undefined;
   const [isBurning, setIsBurning] = createSignal(false);
   const [firePosition, setFirePosition] = createSignal(0);
-  const [isFocused, setIsFocused] = createSignal(false);
+  const isFocused = createMemo(() => focusedEventId() === props.event.id);
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear();
+
+  /** Determine which segment of a multi-day event this column represents */
+  const segment = (): "only" | "first" | "middle" | "last" => {
+    const col = props.columnDate;
+    if (!col || isSameDay(props.event.start, props.event.end)) return "only";
+    if (isSameDay(col, props.event.start)) return "first";
+    if (isSameDay(col, props.event.end)) return "last";
+    return "middle";
+  };
 
   const getPosition = () => {
+    const seg = segment();
+    if (seg === "middle" || seg === "last") return 0;
     const startHours = props.event.start.getHours();
     const startMinutes = props.event.start.getMinutes();
     return (startHours + startMinutes / 60) * HOUR_HEIGHT_PX;
   };
 
   const getHeight = () => {
-    const startMs = props.event.start.getTime();
-    const endMs = props.event.end.getTime();
-    const durationMs = endMs - startMs;
-    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
-    return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    const seg = segment();
+
+    if (seg === "only") {
+      const durationMs = props.event.end.getTime() - props.event.start.getTime();
+      const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "first") {
+      const startMinutes = props.event.start.getHours() * 60 + props.event.start.getMinutes();
+      const rawHeight = ((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "last") {
+      const endMinutes = props.event.end.getHours() * 60 + props.event.end.getMinutes();
+      const rawHeight = (endMinutes / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    // middle: full 24h grid
+    return TOTAL_GRID_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
   };
 
   const getTitleMaxLines = () => {
@@ -72,7 +107,7 @@ export function CalendarEvent(props: CalendarEventProps) {
     contentRef.blur();
 
     burnElement(contentRef, setFirePosition, () => {
-      // Event deletion not yet implemented - requires sync-server API
+      deleteEvent(props.event.id);
     });
   };
 
@@ -83,7 +118,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   };
 
   // Get layout-aware positioning
-  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_X_PX}px`;
+  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`;
   const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
   const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
   const hasOverlap = () => props.layout?.overlaps ?? false;
@@ -105,15 +140,15 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""}`}
+        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""}`}
         style={{
           "--event-color": props.event.color,
         }}
         tabIndex={0}
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
+        onFocus={() => setFocusedEventId(props.event.id)}
+        onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
       >
         {/* Inner layout - ribbon + content side by side */}
         <div class="flex h-full">
