@@ -8,7 +8,7 @@ import {
 } from "../../stores/event-creation";
 import {
   HOUR_HEIGHT_PX,
-  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_LEFT_PX,
   EVENT_MARGIN_TOTAL_PX,
   EVENT_MARGIN_BOTTOM_PX,
   MIN_EVENT_HEIGHT_PX,
@@ -35,6 +35,8 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     return isCreating() && start !== null && isSameDay(start, props.date);
   });
 
+  const hasTitle = () => draftTitle().trim().length > 0;
+
   const getTop = () => {
     const start = draftStart();
     if (!start) return 0;
@@ -46,7 +48,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     const end = draftEnd();
     if (!start || !end) return MIN_EVENT_HEIGHT_PX;
     const durationMs = end.getTime() - start.getTime();
-    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - (hasTitle() ? EVENT_MARGIN_BOTTOM_PX : 0);
     return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
   };
 
@@ -64,30 +66,44 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
       <div
         data-event-placeholder
         class="absolute rounded-lg overflow-hidden"
+        classList={{ "calendar-event": hasTitle() }}
         style={{
           top: `${getTop()}px`,
           height: `${getHeight()}px`,
-          left: `${EVENT_MARGIN_X_PX}px`,
+          left: `${EVENT_MARGIN_LEFT_PX}px`,
           width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
-          "background-color": getDraftColor(),
-          opacity: "0.3",
-          "z-index": "50",
+          ...(hasTitle()
+            ? {
+                "--event-color": getDraftColor(),
+                "background-color": getDraftColor(),
+                color: "white",
+                "z-index": "50",
+              }
+            : {
+                "background-color": getDraftColor(),
+                opacity: "0.3",
+                "z-index": "50",
+              }),
         }}
       >
         <div class="flex h-full">
-          <div class="w-1 shrink-0" style={{ "background-color": getDraftColor() }} />
+          <div
+            class="w-1 shrink-0"
+            classList={{ "calendar-event__ribbon": hasTitle() }}
+            style={hasTitle() ? {} : { "background-color": getDraftColor() }}
+          />
           <div class="flex-1 min-w-0 px-1 py-1">
             <Show
               when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
               fallback={
-                <Show when={draftTitle().trim()}>
+                <Show when={hasTitle()}>
                   <div class="truncate text-xs leading-tight font-medium">
                     {draftTitle()}
                   </div>
                 </Show>
               }
             >
-              <Show when={draftTitle().trim()}>
+              <Show when={hasTitle()}>
                 <div
                   class="text-xs font-medium leading-tight overflow-hidden"
                   style={{
@@ -99,7 +115,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
                   {draftTitle()}
                 </div>
               </Show>
-              <Show when={draftStart() && draftEnd()}>
+              <Show when={hasTitle() && draftStart() && draftEnd()}>
                 <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
                   {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(draftStart()!) : `${formatTime(draftStart()!)} – ${formatTime(draftEnd()!)}`}
                 </div>

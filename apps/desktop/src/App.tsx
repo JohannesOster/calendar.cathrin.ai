@@ -68,9 +68,11 @@ function App() {
     document.removeEventListener("keydown", handleKeyDown);
   });
 
-  // Auto-manage right sidebar for event creation
+  // Open right sidebar when event creation starts (don't close it on cancel)
   createEffect(() => {
-    setRightSidebarOpen(isCreating());
+    if (isCreating()) {
+      setRightSidebarOpen(true);
+    }
   });
 
   // Watch visible weeks and trigger fetches for missing weeks

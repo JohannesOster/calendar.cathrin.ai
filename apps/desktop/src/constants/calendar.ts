@@ -27,11 +27,14 @@ export const SNAP_HEIGHT_PX = HOUR_HEIGHT_PX / (60 / SNAP_MINUTES);
 // EVENT CHIP DIMENSIONS
 // =============================================================================
 
-/** Horizontal margin on each side of event chips (px) */
-export const EVENT_MARGIN_X_PX = 4;
+/** Left margin of event chips (px) */
+export const EVENT_MARGIN_LEFT_PX = 1;
+
+/** Right margin of event chips (px) */
+export const EVENT_MARGIN_RIGHT_PX = 4;
 
 /** Total horizontal margin (left + right) */
-export const EVENT_MARGIN_TOTAL_PX = EVENT_MARGIN_X_PX * 2;
+export const EVENT_MARGIN_TOTAL_PX = EVENT_MARGIN_LEFT_PX + EVENT_MARGIN_RIGHT_PX;
 
 /** Gap at bottom of events to prevent touching (px) */
 export const EVENT_MARGIN_BOTTOM_PX = 4;
@@ -81,3 +84,13 @@ export const EVENT_PADDING_Y_PX = 8;
 
 /** Z-index boost when an event is focused/selected */
 export const FOCUSED_Z_INDEX = 100;
+
+// =============================================================================
+// AUTO-SCROLL (drag-to-create)
+// =============================================================================
+
+/** Edge detection zone in px — entering this zone triggers auto-scroll */
+export const AUTO_SCROLL_EDGE_PX = 40;
+
+/** Max scroll speed in px/frame (~720 px/s at 60 fps) */
+export const AUTO_SCROLL_MAX_SPEED = 12;

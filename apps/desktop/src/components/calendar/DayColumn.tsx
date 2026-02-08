@@ -6,7 +6,7 @@ import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, snapMinutes } from "../../stores/event-creation";
+import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
 
 interface DayColumnProps {
   date: Date;
@@ -94,15 +94,20 @@ export function DayColumn(props: DayColumnProps) {
   // Calculate layout info for overlapping events
   const eventLayouts = createMemo(() => calculateEventLayouts(dayEvents()));
 
+  /** Pixels the mouse must move before we treat it as a drag */
+  const DRAG_THRESHOLD = 4;
+
+  /** Cleanup function to tear down pending drag listeners */
+  let cleanupPendingDrag: (() => void) | null = null;
+
   const handleMouseDown = (e: MouseEvent) => {
     // Only left button
     if (e.button !== 0) return;
 
-    // Don't start drag on existing event elements
     const target = e.target as HTMLElement;
     if (target.closest("[data-event-id]")) return;
 
-    // If already creating, commit or cancel before starting new
+    // Commit/cancel any active creation first
     if (isCreating()) {
       if (draftTitle().trim()) {
         commitCreation();
@@ -110,6 +115,49 @@ export function DayColumn(props: DayColumnProps) {
         cancelCreation();
       }
     }
+
+    // Snapshot date now — props.date is a reactive getter that may change after cancelCreation
+    const date = new Date(props.date);
+
+    // Record press position; don't start creation until drag threshold is exceeded
+    const startY = e.clientY;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
+    const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+    let started = false;
+
+    const onMove = (me: MouseEvent) => {
+      if (!started && Math.abs(me.clientY - startY) >= DRAG_THRESHOLD) {
+        started = true;
+        dragColumnDate = date;
+        dragOriginMinutes = snapped;
+        startCreation(date, snapped);
+      }
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", cleanup);
+      cleanupPendingDrag = null;
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", cleanup);
+    cleanupPendingDrag = cleanup;
+    e.preventDefault();
+  };
+
+  const handleDblClick = (e: MouseEvent) => {
+    // Cancel any pending drag detection from the second mousedown
+    if (cleanupPendingDrag) {
+      cleanupPendingDrag();
+    }
+    // Only left button
+    if (e.button !== 0) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-event-id]")) return;
 
     // Calculate snapped time from mouse position
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -122,6 +170,7 @@ export function DayColumn(props: DayColumnProps) {
     dragOriginMinutes = snapped;
 
     startCreation(props.date, snapped);
+    finishDrag(); // Don't let CalendarGrid's global mousemove treat this as a drag
 
     e.preventDefault();
   };
@@ -135,6 +184,7 @@ export function DayColumn(props: DayColumnProps) {
         "bg-[#fafafa]": isWeekend(),
       }}
       onMouseDown={handleMouseDown}
+      onDblClick={handleDblClick}
     >
       {/* Hour grid lines rendered via CSS background for performance */}
       {/* Start at 48px (1 hour) to avoid line at y=0, lines appear at 48, 96, 144... (1AM, 2AM, 3AM...) */}

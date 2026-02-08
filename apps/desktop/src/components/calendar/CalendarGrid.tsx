@@ -48,6 +48,11 @@ import {
   snapMinutes,
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import {
+  startAutoScroll,
+  updateAutoScrollCursor,
+  stopAutoScroll,
+} from "../../lib/auto-scroll";
 import { UndoToast } from "../ui/UndoToast";
 
 // Helper to create stable date key for <Key> component
@@ -484,8 +489,9 @@ export function CalendarGrid() {
       if (!event) continue;
 
       // Calculate pixel position from column info
-    const left = snapToDevicePixel(firstDayLeft + layoutInfo.startCol * width);
-      const chipWidth = layoutInfo.span * width - 4; // 4px gap
+      const chipLeft = snapToDevicePixel(firstDayLeft + layoutInfo.startCol * width);
+      const left = layoutInfo.startsBeforeView ? chipLeft : chipLeft + 1; // 1px left margin
+      const chipWidth = layoutInfo.span * width - 4 - (layoutInfo.startsBeforeView ? 0 : 1); // 4px right gap, 1px left margin
 
       result.push({
         event,
@@ -864,6 +870,7 @@ export function CalendarGrid() {
           // During drag: always cancel
           // After drag (form open): cancel if no title entered
           if (isDragging() || !draftTitle().trim()) {
+            stopAutoScroll();
             cancelCreation();
             e.preventDefault();
             return;
@@ -885,32 +892,43 @@ export function CalendarGrid() {
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
 
     // Document-level drag handlers for event creation
-    const handleDragMouseMove = (e: MouseEvent) => {
-      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+    let lastDragClientY = 0;
 
-      // Find the DayColumn element under the cursor to calculate Y relative to grid
-      // We use the column that started the drag (can't change column mid-drag)
+    /** Recalculate draft position from the last-known cursor Y. Called from
+     *  mousemove AND from auto-scroll tick (so the event extends while the
+     *  cursor is stationary at an edge). */
+    const recalcDragPosition = () => {
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
       const gridArea = scrollContainerRef;
       if (!gridArea) return;
 
-      // Calculate mouse Y relative to the drag column's top
-      // The DayColumn top = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight (sticky offset)
-      // But since we're in a scroll container, we need the absolute position
       const gridRect = gridArea.getBoundingClientRect();
       const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
 
-      // Mouse Y relative to the time grid area (accounting for scroll and sticky headers)
-      const mouseY = e.clientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
-
+      const mouseY = lastDragClientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
       const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
       const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
 
       updateDrag(dragOriginMinutes, snapped, dragColumnDate);
+    };
+
+    const handleDragMouseMove = (e: MouseEvent) => {
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+      if (!scrollContainerRef) return;
+
+      lastDragClientY = e.clientY;
+
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+      startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition);
+      updateAutoScrollCursor(e.clientY);
+
+      recalcDragPosition();
       e.preventDefault();
     };
 
     const handleDragMouseUp = () => {
       if (isDragging()) {
+        stopAutoScroll();
         finishDrag();
       }
     };
@@ -918,6 +936,7 @@ export function CalendarGrid() {
     document.addEventListener("mousemove", handleDragMouseMove);
     document.addEventListener("mouseup", handleDragMouseUp);
     onCleanup(() => {
+      stopAutoScroll();
       document.removeEventListener("mousemove", handleDragMouseMove);
       document.removeEventListener("mouseup", handleDragMouseUp);
     });

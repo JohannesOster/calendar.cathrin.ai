@@ -6,7 +6,7 @@ import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stor
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,
-  EVENT_MARGIN_X_PX,
+  EVENT_MARGIN_LEFT_PX,
   EVENT_MARGIN_TOTAL_PX,
   MIN_EVENT_HEIGHT_PX,
   SINGLE_LINE_THRESHOLD_PX,
@@ -83,7 +83,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   };
 
   // Get layout-aware positioning
-  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_X_PX}px`;
+  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`;
   const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
   const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
   const hasOverlap = () => props.layout?.overlaps ?? false;
