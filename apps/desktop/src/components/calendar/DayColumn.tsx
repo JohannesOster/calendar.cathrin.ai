@@ -77,15 +77,21 @@ export function DayColumn(props: DayColumnProps) {
     );
   };
 
-  // Filter events for this day: must be on this day, from a visible calendar, and not all-day
-  // Using createMemo to ensure proper reactive tracking when events() signal updates
+  // Filter events for this day: must overlap this day, from a visible calendar, and not all-day
+  // Multi-day timed events appear on every day they span
   const dayEvents = createMemo(() => {
     const visible = visibleCalendarIds();
     const allEvents = events();
 
+    const colStart = new Date(props.date);
+    colStart.setHours(0, 0, 0, 0);
+    const colEnd = new Date(colStart);
+    colEnd.setDate(colEnd.getDate() + 1);
+
     return allEvents.filter(
       (event) =>
-        isSameDay(event.start, props.date) &&
+        event.start < colEnd &&
+        event.end > colStart &&
         visible.has(event.calendarId) &&
         !event.isAllDay
     );
@@ -200,7 +206,7 @@ export function DayColumn(props: DayColumnProps) {
       {/* Calendar events */}
       <For each={dayEvents()}>
         {(event) => (
-          <CalendarEvent event={event} layout={eventLayouts().get(event.id)} />
+          <CalendarEvent event={event} layout={eventLayouts().get(event.id)} columnDate={props.date} />
         )}
       </For>
 

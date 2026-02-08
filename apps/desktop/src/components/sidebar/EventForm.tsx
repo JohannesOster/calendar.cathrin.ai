@@ -147,8 +147,11 @@ export function EventForm() {
             <div class="ml-[22px] text-xs text-[#91918e] mt-0.5">
               {formatDuration(draftStart()!, draftEnd()!)}
             </div>
-            <div class="ml-[22px] text-xs text-[#91918e] mt-0.5">
-              {formatDate(draftStart()!)}
+            <div class="ml-[22px] flex gap-4 text-xs text-[#91918e] mt-0.5">
+              <span>{formatDate(draftStart()!)}</span>
+              <Show when={formatDate(draftStart()!) !== formatDate(draftEnd()!)}>
+                <span>{formatDate(draftEnd()!)}</span>
+              </Show>
             </div>
           </Show>
           <div class="ml-[22px] flex gap-3 mt-1.5 text-xs text-[#c4c4c4]">

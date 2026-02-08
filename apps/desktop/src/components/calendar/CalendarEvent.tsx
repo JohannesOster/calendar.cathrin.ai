@@ -16,11 +16,13 @@ import {
   EVENT_PADDING_Y_PX,
   FOCUSED_Z_INDEX,
   MS_PER_HOUR,
+  TOTAL_GRID_HEIGHT_PX,
 } from "../../constants/calendar";
 
 interface CalendarEventProps {
   event: CalendarEventData;
   layout?: EventLayoutInfo;
+  columnDate?: Date;
 }
 
 function formatTime(date: Date): string {
@@ -45,18 +47,48 @@ export function CalendarEvent(props: CalendarEventProps) {
   const [firePosition, setFirePosition] = createSignal(0);
   const [isFocused, setIsFocused] = createSignal(false);
 
+  const isSameDay = (a: Date, b: Date) =>
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear();
+
+  /** Determine which segment of a multi-day event this column represents */
+  const segment = (): "only" | "first" | "middle" | "last" => {
+    const col = props.columnDate;
+    if (!col || isSameDay(props.event.start, props.event.end)) return "only";
+    if (isSameDay(col, props.event.start)) return "first";
+    if (isSameDay(col, props.event.end)) return "last";
+    return "middle";
+  };
+
   const getPosition = () => {
+    const seg = segment();
+    if (seg === "middle" || seg === "last") return 0;
     const startHours = props.event.start.getHours();
     const startMinutes = props.event.start.getMinutes();
     return (startHours + startMinutes / 60) * HOUR_HEIGHT_PX;
   };
 
   const getHeight = () => {
-    const startMs = props.event.start.getTime();
-    const endMs = props.event.end.getTime();
-    const durationMs = endMs - startMs;
-    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
-    return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    const seg = segment();
+
+    if (seg === "only") {
+      const durationMs = props.event.end.getTime() - props.event.start.getTime();
+      const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "first") {
+      const startMinutes = props.event.start.getHours() * 60 + props.event.start.getMinutes();
+      const rawHeight = ((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "last") {
+      const endMinutes = props.event.end.getHours() * 60 + props.event.end.getMinutes();
+      const rawHeight = (endMinutes / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    // middle: full 24h grid
+    return TOTAL_GRID_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
   };
 
   const getTitleMaxLines = () => {
