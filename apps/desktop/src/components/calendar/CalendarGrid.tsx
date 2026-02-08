@@ -685,22 +685,10 @@ export function CalendarGrid() {
 
   // Virtual Scroll to a specific date
   const scrollToDate = (date: Date) => {
-    console.log('[scrollToDate] called', {
-      date: date.toISOString(),
-      hasRef: !!scrollContainerRef,
-    });
     if (!scrollContainerRef) return;
 
     const currentColWidth = colWidth();
     const targetScrollLeft = getScrollLeftForDate(date, currentColWidth);
-
-    console.log('[scrollToDate] positions', {
-      currentScrollLeft: scrollContainerRef.scrollLeft,
-      targetScrollLeft,
-      diff: Math.abs(scrollContainerRef.scrollLeft - targetScrollLeft),
-      colWidth: currentColWidth,
-      anchorDate: anchorDate().toISOString(),
-    });
 
     // Skip scroll if we're already at the target position (within 1px tolerance)
     // This prevents micro-jumps when clicking Today while already viewing today
@@ -865,6 +853,13 @@ export function CalendarGrid() {
 
         isInitialized = true;
 
+        // Clear skip flag — the initial scroll is handled by this RAF,
+        // so future centerDate changes (e.g. Today button) should scroll normally.
+        // This is needed because SolidJS batches effects during the initial render
+        // cycle, so the deferred centerDate effect may not fire from onMount's
+        // setCenterDate call, leaving skipNextCenterDateScroll stuck at true.
+        skipNextCenterDateScroll = false;
+
         // Re-enable scroll snap after container layout has settled.
         // Sidebar animation is ~200ms; wait 300ms to be safe.
         setTimeout(() => {
@@ -952,9 +947,16 @@ export function CalendarGrid() {
       lastDragClientY = e.clientY;
       lastDragClientX = e.clientX;
 
+      // Disable scroll snap during drag so horizontal auto-scroll doesn't fight it
+      if (snapEnabled()) {
+        scrollContainerRef.style.scrollSnapType = "none";
+        setSnapEnabled(false);
+      }
+
       const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
-      startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition);
-      updateAutoScrollCursor(e.clientY);
+      const timeColWidth = getTimeColWidth();
+      startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition, timeColWidth, colWidth());
+      updateAutoScrollCursor(e.clientY, e.clientX);
 
       recalcDragPosition();
       e.preventDefault();
@@ -964,6 +966,27 @@ export function CalendarGrid() {
       if (isDragging()) {
         stopAutoScroll();
         finishDrag();
+        // Settle at the nearest valid snap point before re-enabling mandatory snap.
+        // Without this, re-enabling snap causes the browser to jump back to the
+        // pre-drag position (the nearest snap point it remembers).
+        if (scrollContainerRef) {
+          const currentScrollLeft = scrollContainerRef.scrollLeft;
+          const timeColWidth = getTimeColWidth();
+          const currentColWidth = colWidth();
+          const visualLeftEdge = currentScrollLeft + timeColWidth;
+          const dayIndex = Math.round((visualLeftEdge - CENTER_OFFSET) / currentColWidth);
+          const snappedScrollLeft = CENTER_OFFSET + dayIndex * currentColWidth - timeColWidth;
+          scrollContainerRef.scrollLeft = snappedScrollLeft;
+          handleScroll();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (scrollContainerRef) {
+                scrollContainerRef.style.scrollSnapType = "";
+              }
+              setSnapEnabled(true);
+            });
+          });
+        }
       }
     };
 
