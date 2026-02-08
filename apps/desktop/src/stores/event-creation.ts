@@ -87,22 +87,38 @@ export function startCreation(date: Date, snappedMinutes: number): void {
 
 /**
  * Update the draft time range during drag.
- * Handles bidirectional drag: origin stays fixed, current time extends in either direction.
+ * Supports multi-day drag: builds full Date objects from two date+time pairs,
+ * then uses min/max so backward drag works naturally.
  */
-export function updateDrag(originMinutes: number, currentMinutes: number, date: Date): void {
-  const minMin = Math.min(originMinutes, currentMinutes);
-  const maxMin = Math.max(originMinutes, currentMinutes);
+export function updateDrag(
+  originMinutes: number,
+  currentMinutes: number,
+  originDate: Date,
+  currentDate: Date,
+): void {
+  const originDateTime = new Date(originDate);
+  originDateTime.setHours(0, 0, 0, 0);
+  originDateTime.setMinutes(originMinutes);
+
+  const currentDateTime = new Date(currentDate);
+  currentDateTime.setHours(0, 0, 0, 0);
+  currentDateTime.setMinutes(currentMinutes);
+
+  let start: Date;
+  let end: Date;
+
+  if (originDateTime.getTime() <= currentDateTime.getTime()) {
+    start = originDateTime;
+    end = currentDateTime;
+  } else {
+    start = currentDateTime;
+    end = originDateTime;
+  }
 
   // Ensure minimum duration of one snap increment
-  const endMin = maxMin === minMin ? maxMin + SNAP_MINUTES : maxMin;
-
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  start.setMinutes(minMin);
-
-  const end = new Date(date);
-  end.setHours(0, 0, 0, 0);
-  end.setMinutes(endMin);
+  if (end.getTime() - start.getTime() < SNAP_MINUTES * 60 * 1000) {
+    end = new Date(start.getTime() + SNAP_MINUTES * 60 * 1000);
+  }
 
   setDraftStart(start);
   setDraftEnd(end);

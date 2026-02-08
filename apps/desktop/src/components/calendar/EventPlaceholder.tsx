@@ -18,6 +18,7 @@ import {
   TITLE_LINE_HEIGHT_PX,
   TIME_ROW_HEIGHT_PX,
   EVENT_PADDING_Y_PX,
+  TOTAL_GRID_HEIGHT_PX,
 } from "../../constants/calendar";
 
 interface EventPlaceholderProps {
@@ -30,26 +31,82 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     a.getMonth() === b.getMonth() &&
     a.getFullYear() === b.getFullYear();
 
-  const isVisible = createMemo(() => {
+  const toMidnight = (d: Date) => {
+    const m = new Date(d);
+    m.setHours(0, 0, 0, 0);
+    return m;
+  };
+
+  /** Where this column's date falls relative to the draft range */
+  const segment = createMemo<"none" | "only" | "first" | "middle" | "last">(() => {
     const start = draftStart();
-    return isCreating() && start !== null && isSameDay(start, props.date);
+    const end = draftEnd();
+    if (!isCreating() || !start || !end) return "none";
+
+    const colDay = toMidnight(props.date).getTime();
+    const startDay = toMidnight(start).getTime();
+
+    // For the end day: if end is exactly midnight, the event doesn't occupy
+    // that day (0 duration on that day), so pull back by 1ms for the check.
+    const endTime = end.getTime();
+    const endForRange = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0
+      ? endTime - 1
+      : endTime;
+    const endDay = toMidnight(new Date(endForRange)).getTime();
+
+    if (colDay < startDay || colDay > endDay) return "none";
+    if (startDay === endDay) return "only";
+    if (colDay === startDay) return "first";
+    if (colDay === endDay) return "last";
+    return "middle";
   });
+
+  const isVisible = createMemo(() => segment() !== "none");
 
   const hasTitle = () => draftTitle().trim().length > 0;
 
   const getTop = () => {
+    const seg = segment();
+    if (seg === "middle" || seg === "last") return 0;
     const start = draftStart();
     if (!start) return 0;
     return (start.getHours() + start.getMinutes() / 60) * HOUR_HEIGHT_PX;
   };
 
   const getHeight = () => {
+    const seg = segment();
     const start = draftStart();
     const end = draftEnd();
     if (!start || !end) return MIN_EVENT_HEIGHT_PX;
-    const durationMs = end.getTime() - start.getTime();
-    const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - (hasTitle() ? EVENT_MARGIN_BOTTOM_PX : 0);
-    return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+
+    const bottomMargin = hasTitle() ? EVENT_MARGIN_BOTTOM_PX : 0;
+
+    if (seg === "only") {
+      // Single-day: same as before
+      const durationMs = end.getTime() - start.getTime();
+      const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - bottomMargin;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "first") {
+      // From start time to bottom of grid (midnight)
+      const startMinutes = start.getHours() * 60 + start.getMinutes();
+      const rawHeight = ((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX - bottomMargin;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "last") {
+      // From top of grid (midnight) to end time
+      const endMinutes = end.getHours() * 60 + end.getMinutes();
+      const rawHeight = (endMinutes / 60) * HOUR_HEIGHT_PX - bottomMargin;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    // middle: full 24h grid
+    return TOTAL_GRID_HEIGHT_PX - bottomMargin;
+  };
+
+  /** Only show title/time labels on the first segment */
+  const isFirstSegment = () => {
+    const seg = segment();
+    return seg === "only" || seg === "first";
   };
 
   const formatTime = (date: Date): string => {
@@ -66,7 +123,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
       <div
         data-event-placeholder
         class="absolute rounded-lg overflow-hidden"
-        classList={{ "calendar-event": hasTitle() }}
+        classList={{ "calendar-event": hasTitle() && isFirstSegment() }}
         style={{
           top: `${getTop()}px`,
           height: `${getHeight()}px`,
@@ -89,36 +146,38 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
         <div class="flex h-full">
           <div
             class="w-1 shrink-0"
-            classList={{ "calendar-event__ribbon": hasTitle() }}
-            style={hasTitle() ? {} : { "background-color": getDraftColor() }}
+            classList={{ "calendar-event__ribbon": hasTitle() && isFirstSegment() }}
+            style={hasTitle() && isFirstSegment() ? {} : { "background-color": getDraftColor() }}
           />
           <div class="flex-1 min-w-0 px-1 py-1">
-            <Show
-              when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
-              fallback={
+            <Show when={isFirstSegment()}>
+              <Show
+                when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
+                fallback={
+                  <Show when={hasTitle()}>
+                    <div class="truncate text-xs leading-tight font-medium">
+                      {draftTitle()}
+                    </div>
+                  </Show>
+                }
+              >
                 <Show when={hasTitle()}>
-                  <div class="truncate text-xs leading-tight font-medium">
+                  <div
+                    class="text-xs font-medium leading-tight overflow-hidden"
+                    style={{
+                      display: "-webkit-box",
+                      "-webkit-box-orient": "vertical",
+                      "-webkit-line-clamp": Math.max(1, Math.floor((getHeight() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX) / TITLE_LINE_HEIGHT_PX)),
+                    }}
+                  >
                     {draftTitle()}
                   </div>
                 </Show>
-              }
-            >
-              <Show when={hasTitle()}>
-                <div
-                  class="text-xs font-medium leading-tight overflow-hidden"
-                  style={{
-                    display: "-webkit-box",
-                    "-webkit-box-orient": "vertical",
-                    "-webkit-line-clamp": Math.max(1, Math.floor((getHeight() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX) / TITLE_LINE_HEIGHT_PX)),
-                  }}
-                >
-                  {draftTitle()}
-                </div>
-              </Show>
-              <Show when={hasTitle() && draftStart() && draftEnd()}>
-                <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
-                  {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(draftStart()!) : `${formatTime(draftStart()!)} – ${formatTime(draftEnd()!)}`}
-                </div>
+                <Show when={hasTitle() && draftStart() && draftEnd()}>
+                  <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
+                    {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(draftStart()!) : `${formatTime(draftStart()!)} – ${formatTime(draftEnd()!)}`}
+                  </div>
+                </Show>
               </Show>
             </Show>
           </div>
