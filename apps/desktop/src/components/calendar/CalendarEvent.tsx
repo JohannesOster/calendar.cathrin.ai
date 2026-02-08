@@ -5,7 +5,7 @@ import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
 
 // Shared signal: all segments of the focused event highlight together
-const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
+export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_BOTTOM_PX,

@@ -111,7 +111,17 @@ export function DayColumn(props: DayColumnProps) {
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement;
-    if (target.closest("[data-event-id]")) return;
+    if (target.closest("[data-event-id]")) {
+      // Clicking on an existing event — cancel any active creation
+      if (isCreating()) {
+        if (draftTitle().trim()) {
+          commitCreation();
+        } else {
+          cancelCreation();
+        }
+      }
+      return;
+    }
 
     // Commit/cancel any active creation first
     if (isCreating()) {

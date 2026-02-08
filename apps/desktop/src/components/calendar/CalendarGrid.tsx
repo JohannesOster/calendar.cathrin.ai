@@ -15,6 +15,7 @@ import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
 import { TimeColumn } from "./TimeColumn";
 import { DateHeader } from "./DateHeader";
 import { DayColumn, dragColumnDate, dragOriginMinutes } from "./DayColumn";
+import { setFocusedEventId } from "./CalendarEvent";
 import { DaysStepperButton } from "./DaysStepperButton";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
 import { MonthView } from "./MonthView";
@@ -902,6 +903,22 @@ export function CalendarGrid() {
     };
     document.addEventListener("keydown", handleKeyDown);
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+
+    // Clear event focus when clicking outside any event chip.
+    // Must also blur the DOM element — CSS :focus styles persist otherwise
+    // because DayColumn's mousedown calls e.preventDefault() which suppresses
+    // the browser's default blur behavior.
+    const handleFocusClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-event-id]")) {
+        setFocusedEventId(null);
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.closest("[data-event-id]")) {
+          active.blur();
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleFocusClick);
+    onCleanup(() => document.removeEventListener("mousedown", handleFocusClick));
 
     // Document-level drag handlers for event creation
     let lastDragClientY = 0;
