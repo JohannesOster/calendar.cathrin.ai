@@ -2,6 +2,7 @@ import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
 import { EventPlaceholder } from "./EventPlaceholder";
+import { DragGhost } from "./DragGhost";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
@@ -226,6 +227,9 @@ export function DayColumn(props: DayColumnProps) {
           <CalendarEvent event={event} layout={eventLayouts().get(event.id)} columnDate={props.date} />
         )}
       </For>
+
+      {/* Ghost outline at original position during drag-to-move/resize */}
+      <DragGhost date={props.date} />
 
       {/* Event creation placeholder */}
       <EventPlaceholder date={props.date} />
