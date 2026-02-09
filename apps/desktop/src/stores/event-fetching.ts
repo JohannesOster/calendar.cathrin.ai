@@ -32,6 +32,7 @@ import {
   getRevalidateWeeksForDates,
   getSetVisibleWeeksForPolling,
 } from "./events";
+import { dragActiveEventId } from "./event-drag";
 
 // =============================================================================
 // Configuration
@@ -83,6 +84,10 @@ export function processEvents(
  * Replace events that overlap with a time range instead of additive merge.
  * Events overlapping the range that are absent from the new response are removed,
  * ensuring deletions on the server propagate to the client cache.
+ *
+ * Events currently being dragged are protected: the local (drag-modified) version
+ * is always preserved, and the server version is excluded from the merge. This
+ * prevents async fetch responses from clobbering in-progress drag state.
  */
 export function replaceEventsInRange(
   rangeStart: Date,
@@ -93,13 +98,20 @@ export function replaceEventsInRange(
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
   const pendingMap = getPendingDeletionMap();
+  const dragId = dragActiveEventId();
 
   // Filter out events pending local deletion — server still has them
-  // but the user already deleted them (undo window hasn't closed yet)
-  const filtered = newEvents.filter((e) => !pendingMap.has(e.id));
+  // but the user already deleted them (undo window hasn't closed yet).
+  // Also exclude the dragged event from server data so it can't overwrite
+  // the local drag-modified version during processEvents merge.
+  const filtered = newEvents.filter(
+    (e) => !pendingMap.has(e.id) && e.id !== dragId,
+  );
   const newEventIds = new Set(filtered.map((e) => e.id));
 
   const kept = existingEvents.filter((event) => {
+    // Never touch the event being dragged — its local state is authoritative
+    if (dragId && event.id === dragId) return true;
     if (pendingMap.has(event.id)) return false;
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;

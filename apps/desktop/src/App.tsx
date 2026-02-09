@@ -5,6 +5,7 @@ import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
 import { isCreating, isDragging } from "./stores/event-creation";
+import { isDragActive } from "./stores/event-drag";
 import { selectedEventId } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
@@ -80,8 +81,14 @@ function App() {
     }
   });
 
-  // Watch visible weeks and trigger fetches for missing weeks
-  // Uses activeVisibleWeeks which switches between week view (1-2 weeks) and month view (~6 weeks)
+  // Weeks deferred during drag — deduplicated Set so repeated deferrals don't
+  // cause duplicate fetches when the drag ends.
+  const deferredWeeks = new Set<string>();
+
+  // Watch visible weeks and trigger fetches for missing weeks.
+  // Uses activeVisibleWeeks which switches between week view (1-2 weeks) and month view (~6 weeks).
+  // During an active drag, fetches are deferred to avoid async responses overwriting
+  // the drag-modified event data (see replaceEventsInRange guard for the safety net).
   createEffect(
     on(activeVisibleWeeks, (weeks) => {
       if (weeks.length === 0) return;
@@ -104,6 +111,15 @@ function App() {
 
         // Check which weeks are missing
         const { missingWeeks } = getEventsForRange(rangeStart, rangeEnd);
+
+        // During drag, defer fetches to prevent async responses from clobbering
+        // drag state. The deferred Set deduplicates automatically.
+        if (isDragActive()) {
+          for (const week of missingWeeks) {
+            deferredWeeks.add(week);
+          }
+          return;
+        }
 
         if (missingWeeks.length > 0) {
           // Fetch all missing weeks in parallel
@@ -128,6 +144,18 @@ function App() {
         }
       }, FETCH_DEBOUNCE_MS);
     })
+  );
+
+  // Flush deferred fetches when drag ends
+  createEffect(
+    on(() => isDragActive(), (active, wasActive) => {
+      if (wasActive && !active && deferredWeeks.size > 0) {
+        const weeks = [...deferredWeeks];
+        deferredWeeks.clear();
+        Promise.all(weeks.map(week => fetchEventsForWeek(week)))
+          .catch((error) => console.error("[App] Failed to fetch deferred weeks:", error));
+      }
+    }, { defer: true })
   );
 
   return (
