@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_SYNC_SERVER_URL: string;
+  readonly VITE_SYNC_PORT: string;
 }
 
 interface ImportMeta {

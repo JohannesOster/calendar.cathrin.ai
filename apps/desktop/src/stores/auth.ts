@@ -21,9 +21,13 @@ export function onAuthComplete(callback: () => void): void {
   onAuthCompleteCallback = callback;
 }
 
-// Server URL from environment
+// Server URL from environment — use VITE_SYNC_PORT for dev convenience,
+// VITE_SYNC_SERVER_URL for full override (e.g. production)
 const SYNC_SERVER_URL =
-  import.meta.env.VITE_SYNC_SERVER_URL || "http://localhost:5000";
+  import.meta.env.VITE_SYNC_SERVER_URL ||
+  (import.meta.env.VITE_SYNC_PORT
+    ? `http://localhost:${import.meta.env.VITE_SYNC_PORT}`
+    : "http://localhost:3000");
 
 /**
  * Initialize auth state on app startup
