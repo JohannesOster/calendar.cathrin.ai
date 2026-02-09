@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createSignal, createMemo, Show, For, batch } from "solid-js";
+import { onMount, onCleanup, createSignal, createMemo, createEffect, on, Show, For, batch } from "solid-js";
 import {
   Clock,
   ArrowRight,
@@ -33,6 +33,7 @@ import {
   shadowEnd,
   setShadowEnd,
 } from "../../stores/event-creation";
+import { selectedEvent } from "../../stores/event-selection";
 import { connectedAccounts } from "../../stores/accounts";
 
 function formatTime(date: Date): string {
@@ -97,6 +98,12 @@ function parseTimeInput(value: string): { hours: number; minutes: number } | nul
   return { hours, minutes };
 }
 
+// =============================================================================
+// Mode detection
+// =============================================================================
+
+type FormMode = "create" | "edit";
+
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
   let formRef: HTMLDivElement | undefined;
@@ -107,44 +114,93 @@ export function EventForm() {
   const [startTimeText, setStartTimeText] = createSignal("");
   const [endTimeText, setEndTimeText] = createSignal("");
 
+  // Edit mode: local signals for editing fields (not persisted until autosave in #111)
+  const [editTitle, setEditTitle] = createSignal("");
+  const [editStart, setEditStart] = createSignal<Date | null>(null);
+  const [editEnd, setEditEnd] = createSignal<Date | null>(null);
+  const [editLocation, setEditLocation] = createSignal("");
+  const [editDescription, setEditDescription] = createSignal("");
+  const [editIsAllDay, setEditIsAllDay] = createSignal(false);
+  const [editCalendarId, setEditCalendarId] = createSignal<string | null>(null);
+
+  const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
+
+  // Populate edit signals whenever the selected event changes
+  createEffect(on(selectedEvent, (event) => {
+    if (!event) return;
+    setEditTitle(event.title);
+    setEditStart(new Date(event.start));
+    setEditEnd(new Date(event.end));
+    setEditLocation(event.location ?? "");
+    setEditDescription(event.description ?? "");
+    setEditIsAllDay(event.isAllDay);
+    setEditCalendarId(event.calendarId);
+    savedTimedStart = null;
+    savedTimedEnd = null;
+  }));
+
+  // Unified accessors — read from the right signal based on mode
+  const title = () => mode() === "create" ? draftTitle() : editTitle();
+  const setTitle = (v: string) => mode() === "create" ? setDraftTitle(v) : setEditTitle(v);
+  const start = () => mode() === "create" ? draftStart() : editStart();
+  const setStart = (v: Date) => mode() === "create" ? setDraftStart(v) : setEditStart(v);
+  const end = () => mode() === "create" ? draftEnd() : editEnd();
+  const setEnd = (v: Date) => mode() === "create" ? setDraftEnd(v) : setEditEnd(v);
+  const location = () => mode() === "create" ? draftLocation() : editLocation();
+  const setLocation = (v: string) => mode() === "create" ? setDraftLocation(v) : setEditLocation(v);
+  const description = () => mode() === "create" ? draftDescription() : editDescription();
+  const setDescription = (v: string) => mode() === "create" ? setDraftDescription(v) : setEditDescription(v);
+  const isAllDay = () => mode() === "create" ? draftIsAllDay() : editIsAllDay();
+  const setIsAllDay = (v: boolean) => mode() === "create" ? setDraftIsAllDay(v) : setEditIsAllDay(v);
+  const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
+  const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
+
+  const eventColor = createMemo(() => {
+    if (mode() === "create") return getDraftColor();
+    const event = selectedEvent();
+    return event?.color ?? "#4285f4";
+  });
+
   function beginTimeEdit(which: "start" | "end"): void {
-    // Store shadow position (original time before editing)
-    setShadowStart(draftStart() ? new Date(draftStart()!) : null);
-    setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
+    if (mode() === "create") {
+      // Store shadow position (original time before editing)
+      setShadowStart(draftStart() ? new Date(draftStart()!) : null);
+      setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
+    }
 
     if (which === "start") {
-      setStartTimeText(toTimeText(draftStart()!));
+      setStartTimeText(toTimeText(start()!));
     } else {
-      setEndTimeText(toTimeText(draftEnd()!));
+      setEndTimeText(toTimeText(end()!));
     }
     setEditingTime(which);
   }
 
-  /** Apply parsed time to the draft, updating the event chip position live */
+  /** Apply parsed time to the draft/edit, updating the event chip position live */
   function applyTimeLive(which: "start" | "end", value: string): void {
     const parsed = parseTimeInput(value);
     if (!parsed) return;
 
-    const baseDate = which === "start" ? draftStart()! : draftEnd()!;
+    const baseDate = which === "start" ? start()! : end()!;
     const newDate = new Date(baseDate);
     newDate.setHours(parsed.hours, parsed.minutes, 0, 0);
 
     if (which === "start") {
-      setDraftStart(newDate);
+      setStart(newDate);
       // Auto-adjust end if it's now before or equal to start
-      if (draftEnd()! <= newDate) {
+      if (end()! <= newDate) {
         const adjusted = new Date(newDate);
         adjusted.setHours(adjusted.getHours() + 1);
-        setDraftEnd(adjusted);
+        setEnd(adjusted);
       }
     } else {
       // If end is before start, auto-adjust to start + 1 hour
-      if (newDate <= draftStart()!) {
-        const adjusted = new Date(draftStart()!);
+      if (newDate <= start()!) {
+        const adjusted = new Date(start()!);
         adjusted.setHours(adjusted.getHours() + 1);
-        setDraftEnd(adjusted);
+        setEnd(adjusted);
       } else {
-        setDraftEnd(newDate);
+        setEnd(newDate);
       }
     }
   }
@@ -161,22 +217,34 @@ export function EventForm() {
   function finishTimeEdit(): void {
     batch(() => {
       setEditingTime(null);
-      setShadowStart(null);
-      setShadowEnd(null);
+      if (mode() === "create") {
+        setShadowStart(null);
+        setShadowEnd(null);
+      }
     });
   }
 
   function revertTimeEdit(): void {
-    // Restore original position from shadow before clearing
-    const origStart = shadowStart();
-    const origEnd = shadowEnd();
-    batch(() => {
-      if (origStart) setDraftStart(origStart);
-      if (origEnd) setDraftEnd(origEnd);
+    if (mode() === "create") {
+      // Restore original position from shadow before clearing
+      const origStart = shadowStart();
+      const origEnd = shadowEnd();
+      batch(() => {
+        if (origStart) setDraftStart(origStart);
+        if (origEnd) setDraftEnd(origEnd);
+        setEditingTime(null);
+        setShadowStart(null);
+        setShadowEnd(null);
+      });
+    } else {
+      // In edit mode, revert to the selected event's times
+      const event = selectedEvent();
+      if (event) {
+        setEditStart(new Date(event.start));
+        setEditEnd(new Date(event.end));
+      }
       setEditingTime(null);
-      setShadowStart(null);
-      setShadowEnd(null);
-    });
+    }
   }
 
   function handleTimeKeyDown(which: "start" | "end", e: KeyboardEvent): void {
@@ -189,15 +257,17 @@ export function EventForm() {
     }
   }
 
-  // Auto-focus title input
+  // Auto-focus title input in create mode only
   onMount(() => {
-    // Small delay to ensure DOM is ready after sidebar content switch
-    requestAnimationFrame(() => {
-      titleInputRef?.focus();
-    });
+    if (mode() === "create") {
+      // Small delay to ensure DOM is ready after sidebar content switch
+      requestAnimationFrame(() => {
+        titleInputRef?.focus();
+      });
+    }
   });
 
-  // Click-outside detection
+  // Click-outside detection (create mode only)
   onMount(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (!isCreating()) return;
@@ -226,7 +296,7 @@ export function EventForm() {
   });
 
   const handleTitleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && mode() === "create") {
       e.preventDefault();
       if (draftTitle().trim()) {
         commitCreation();
@@ -245,13 +315,6 @@ export function EventForm() {
       );
   });
 
-  const selectedCalendarName = createMemo(() => {
-    const calId = draftCalendarId();
-    if (!calId) return "Calendar";
-    const cal = allCalendars().find((c) => c.id === calId);
-    return cal?.name ?? "Calendar";
-  });
-
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
       <div class="flex-1 overflow-y-auto scrollbar-hidden">
@@ -261,8 +324,8 @@ export function EventForm() {
             ref={titleInputRef}
             type="text"
             placeholder="Title"
-            value={draftTitle()}
-            onInput={(e) => setDraftTitle(e.currentTarget.value)}
+            value={title()}
+            onInput={(e) => setTitle(e.currentTarget.value)}
             onKeyDown={handleTitleKeyDown}
             class="w-full text-lg font-medium text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
           />
@@ -271,7 +334,7 @@ export function EventForm() {
         {/* Time section */}
         <div class="px-3 py-2 border-t border-border space-y-1.5">
           {/* Start time + End time on one row (hidden for all-day) */}
-          <Show when={draftStart() && draftEnd() && !draftIsAllDay()}>
+          <Show when={start() && end() && !isAllDay()}>
             <div class="flex items-center gap-2 text-sm text-fg">
               <Clock size={14} class="text-fg-muted shrink-0" />
               {/* Start time: click-to-edit with live updates */}
@@ -291,7 +354,7 @@ export function EventForm() {
                       }
                     }}
                   >
-                    {formatTime(draftStart()!)}
+                    {formatTime(start()!)}
                   </span>
                 }
               >
@@ -326,7 +389,7 @@ export function EventForm() {
                       }
                     }}
                   >
-                    {formatTime(draftEnd()!)}
+                    {formatTime(end()!)}
                   </span>
                 }
               >
@@ -343,20 +406,20 @@ export function EventForm() {
                   class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
                 />
               </Show>
-              <Show when={formatDate(draftStart()!) === formatDate(draftEnd()!)}>
-                <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(draftStart()!, draftEnd()!)}</span>
+              <Show when={formatDate(start()!) === formatDate(end()!)}>
+                <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(start()!, end()!)}</span>
               </Show>
             </div>
           </Show>
           {/* Date row */}
-          <Show when={draftStart() && draftEnd()}>
-            <div class={`flex gap-4 text-sm text-fg ${draftIsAllDay() ? "ml-0" : "ml-[22px]"}`}>
-              <Show when={draftIsAllDay()}>
+          <Show when={start() && end()}>
+            <div class={`flex gap-4 text-sm text-fg ${isAllDay() ? "ml-0" : "ml-[22px]"}`}>
+              <Show when={isAllDay()}>
                 <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
               </Show>
-              <span>{formatDate(draftStart()!)}</span>
-              <Show when={formatDate(draftStart()!) !== formatDate(draftEnd()!)}>
-                <span>{formatDate(draftEnd()!)}</span>
+              <span>{formatDate(start()!)}</span>
+              <Show when={formatDate(start()!) !== formatDate(end()!)}>
+                <span>{formatDate(end()!)}</span>
               </Show>
             </div>
           </Show>
@@ -364,33 +427,33 @@ export function EventForm() {
           <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
             <button
               role="switch"
-              aria-checked={draftIsAllDay()}
+              aria-checked={isAllDay()}
               aria-label="All day"
               class="inline-flex items-center gap-1.5 cursor-pointer"
               onClick={() => {
-                const wasAllDay = draftIsAllDay();
-                setDraftIsAllDay(!wasAllDay);
+                const wasAllDay = isAllDay();
+                setIsAllDay(!wasAllDay);
                 if (!wasAllDay) {
                   // Switching timed → all-day: save current times for later restore
-                  savedTimedStart = draftStart() ? new Date(draftStart()!) : null;
-                  savedTimedEnd = draftEnd() ? new Date(draftEnd()!) : null;
+                  savedTimedStart = start() ? new Date(start()!) : null;
+                  savedTimedEnd = end() ? new Date(end()!) : null;
                 } else {
                   // Switching all-day → timed: restore saved times (or fall back to 9–10 AM)
-                  const start = draftStart();
-                  if (start && savedTimedStart && savedTimedEnd) {
-                    const newStart = new Date(start);
+                  const s = start();
+                  if (s && savedTimedStart && savedTimedEnd) {
+                    const newStart = new Date(s);
                     newStart.setHours(savedTimedStart.getHours(), savedTimedStart.getMinutes(), 0, 0);
-                    const newEnd = new Date(start);
+                    const newEnd = new Date(s);
                     newEnd.setHours(savedTimedEnd.getHours(), savedTimedEnd.getMinutes(), 0, 0);
-                    setDraftStart(newStart);
-                    setDraftEnd(newEnd);
-                  } else if (start) {
-                    const newStart = new Date(start);
+                    setStart(newStart);
+                    setEnd(newEnd);
+                  } else if (s) {
+                    const newStart = new Date(s);
                     newStart.setHours(9, 0, 0, 0);
-                    const newEnd = new Date(start);
+                    const newEnd = new Date(s);
                     newEnd.setHours(10, 0, 0, 0);
-                    setDraftStart(newStart);
-                    setDraftEnd(newEnd);
+                    setStart(newStart);
+                    setEnd(newEnd);
                   }
                 }
               }}
@@ -404,12 +467,12 @@ export function EventForm() {
               <span>All-day</span>
               <div
                 class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
-                  draftIsAllDay() ? "bg-accent" : "bg-border-light"
+                  isAllDay() ? "bg-accent" : "bg-border-light"
                 }`}
               >
                 <div
                   class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
-                    draftIsAllDay() ? "translate-x-3" : "translate-x-0"
+                    isAllDay() ? "translate-x-3" : "translate-x-0"
                   }`}
                 />
               </div>
@@ -435,8 +498,8 @@ export function EventForm() {
               type="text"
               placeholder="Add location"
               aria-label="Location"
-              value={draftLocation()}
-              onInput={(e) => setDraftLocation(e.currentTarget.value)}
+              value={location()}
+              onInput={(e) => setLocation(e.currentTarget.value)}
               class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
             />
           </div>
@@ -454,8 +517,8 @@ export function EventForm() {
               <textarea
                 placeholder="Add description"
                 aria-label="Description"
-                value={draftDescription()}
-                onInput={(e) => setDraftDescription(e.currentTarget.value)}
+                value={description()}
+                onInput={(e) => setDescription(e.currentTarget.value)}
                 class="text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none resize-none overflow-hidden row-start-1 col-start-1"
                 rows={2}
                 style={{ "grid-area": "1 / 1 / 2 / 2" }}
@@ -465,7 +528,7 @@ export function EventForm() {
                 style={{ "grid-area": "1 / 1 / 2 / 2" }}
                 aria-hidden="true"
               >
-                {draftDescription() + " "}
+                {description() + " "}
               </div>
             </div>
           </div>
@@ -476,11 +539,11 @@ export function EventForm() {
           <div class="flex items-center gap-2">
             <div
               class="w-3 h-3 rounded-full shrink-0"
-              style={{ "background-color": getDraftColor() }}
+              style={{ "background-color": eventColor() }}
             />
             <select
-              value={draftCalendarId() ?? ""}
-              onChange={(e) => setDraftCalendarId(e.currentTarget.value || null)}
+              value={calendarId() ?? ""}
+              onChange={(e) => setCalId(e.currentTarget.value || null)}
               class="flex-1 text-sm text-fg bg-transparent outline-none border-none cursor-pointer appearance-none"
             >
               <For each={allCalendars()}>

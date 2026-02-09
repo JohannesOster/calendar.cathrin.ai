@@ -3,6 +3,7 @@ import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
+import { selectEvent, selectedEventId } from "../../stores/event-selection";
 
 // Shared signal: all segments of the focused event highlight together
 export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
@@ -49,6 +50,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const [isBurning, setIsBurning] = createSignal(false);
   const [firePosition, setFirePosition] = createSignal(0);
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
+  const isSelected = createMemo(() => selectedEventId() === props.event.id);
 
   const isSameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() &&
@@ -120,7 +122,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   // Get layout-aware positioning
   const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`;
   const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
-  const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
+  const getZIndex = () => (isFocused() || isSelected() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
   const hasOverlap = () => props.layout?.overlaps ?? false;
 
   return (
@@ -140,15 +142,26 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""}`}
+        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""}`}
         style={{
           "--event-color": props.event.color,
         }}
         tabIndex={0}
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
+        aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
+        onClick={(e) => {
+          e.stopPropagation();
+          selectEvent(props.event.id);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectEvent(props.event.id);
+          }
+        }}
       >
         {/* Inner layout - ribbon + content side by side */}
         <div class="flex h-full">

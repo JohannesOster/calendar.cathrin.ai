@@ -53,6 +53,7 @@ import {
   snapMinutes,
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import { selectedEventId, deselectEvent } from "../../stores/event-selection";
 import {
   startAutoScroll,
   updateAutoScrollCursor,
@@ -970,6 +971,12 @@ export function CalendarGrid() {
             e.preventDefault();
             return;
           }
+        }
+        // Deselect event on Escape
+        if (selectedEventId()) {
+          deselectEvent();
+          e.preventDefault();
+          return;
         }
         (document.activeElement as HTMLElement | null)?.blur();
       } else if (e.key === "Delete" || e.key === "Backspace") {

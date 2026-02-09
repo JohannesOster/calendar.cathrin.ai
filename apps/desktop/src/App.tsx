@@ -5,6 +5,7 @@ import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
 import { isCreating, isDragging } from "./stores/event-creation";
+import { selectedEventId, deselectEvent } from "./stores/event-selection";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
@@ -130,7 +131,7 @@ function App() {
       header={<CalendarHeader />}
       leftSidebar={<LeftSidebar />}
       rightSidebar={
-        <Show when={isCreating()}>
+        <Show when={isCreating() || selectedEventId()}>
           <EventForm />
         </Show>
       }

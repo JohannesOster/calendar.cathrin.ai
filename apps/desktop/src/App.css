@@ -160,6 +160,11 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
 }
 
+/* Selected state - subtle ring to indicate sidebar editing */
+.calendar-event--selected {
+  box-shadow: 0 0 0 2px var(--event-color), 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 /* All-day event chip states */
 .all-day-chip {
   background-color: color-mix(in srgb, var(--event-color) 15%, white);
