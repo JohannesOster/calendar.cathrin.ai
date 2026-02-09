@@ -992,7 +992,7 @@ export function CalendarGrid() {
             setEvents((prev) =>
               prev.map((ev) =>
                 ev.id === drag.event.id
-                  ? { ...ev, end: drag.originalEnd }
+                  ? { ...ev, start: drag.originalStart, end: drag.originalEnd }
                   : ev
               )
             );
@@ -1152,20 +1152,36 @@ export function CalendarGrid() {
       if (!drag) return;
 
       const cursorMinutes = getMinutesFromClientY(lastDragClientY);
-      const startMinutes = drag.originalStart.getHours() * 60 + drag.originalStart.getMinutes();
+      const anchorMinutes = drag.originalStart.getHours() * 60 + drag.originalStart.getMinutes();
 
-      // Enforce minimum duration of one snap increment
-      const minEndMinutes = startMinutes + SNAP_MINUTES;
-      const clampedEndMinutes = Math.max(minEndMinutes, Math.min(cursorMinutes, 24 * 60));
+      // Bidirectional: dragging below anchor extends end, above anchor flips start/end
+      let newStartMinutes: number;
+      let newEndMinutes: number;
 
-      const newEnd = new Date(drag.originalStart);
-      newEnd.setHours(0, 0, 0, 0);
-      newEnd.setMinutes(clampedEndMinutes);
+      if (cursorMinutes >= anchorMinutes) {
+        newStartMinutes = anchorMinutes;
+        newEndMinutes = Math.max(anchorMinutes + SNAP_MINUTES, Math.min(cursorMinutes, 24 * 60));
+      } else {
+        newStartMinutes = Math.max(0, cursorMinutes);
+        newEndMinutes = anchorMinutes;
+        if (newEndMinutes - newStartMinutes < SNAP_MINUTES) {
+          newStartMinutes = newEndMinutes - SNAP_MINUTES;
+        }
+      }
+
+      const baseDate = new Date(drag.originalStart);
+      baseDate.setHours(0, 0, 0, 0);
+
+      const newStart = new Date(baseDate);
+      newStart.setMinutes(newStartMinutes);
+
+      const newEnd = new Date(baseDate);
+      newEnd.setMinutes(newEndMinutes);
 
       setEvents((prev) =>
         prev.map((e) =>
           e.id === drag.event.id
-            ? { ...e, end: newEnd }
+            ? { ...e, start: newStart, end: newEnd }
             : e
         )
       );
