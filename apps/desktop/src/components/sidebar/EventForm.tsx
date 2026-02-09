@@ -33,7 +33,8 @@ import {
   shadowEnd,
   setShadowEnd,
 } from "../../stores/event-creation";
-import { selectedEvent } from "../../stores/event-selection";
+import { selectedEvent, selectedEventId } from "../../stores/event-selection";
+import { updateEvent, saveStatus, type EventPatch } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 
 function formatTime(date: Date): string {
@@ -125,9 +126,55 @@ export function EventForm() {
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
+  // =========================================================================
+  // Autosave infrastructure (edit mode only)
+  // =========================================================================
+  const DEBOUNCE_MS = 500;
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingPatch: EventPatch = {};
+
+  function scheduleSave(patch: EventPatch): void {
+    // Merge into pending patch
+    Object.assign(pendingPatch, patch);
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(flushSave, DEBOUNCE_MS);
+  }
+
+  function flushSave(): void {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = undefined;
+    }
+
+    const eventId = selectedEventId();
+    if (!eventId || Object.keys(pendingPatch).length === 0) return;
+
+    const patchToSend = { ...pendingPatch };
+    pendingPatch = {};
+    updateEvent(eventId, patchToSend);
+  }
+
+  // Flush pending save when deselecting (sidebar closes)
+  createEffect(on(selectedEventId, (id, prevId) => {
+    if (!id && prevId) {
+      flushSave();
+    }
+  }));
+
+  // Cleanup timer on unmount
+  onCleanup(() => {
+    flushSave();
+    if (debounceTimer) clearTimeout(debounceTimer);
+  });
+
   // Populate edit signals whenever the selected event changes
   createEffect(on(selectedEvent, (event) => {
     if (!event) return;
+    // Clear any pending saves for the previous event
+    if (debounceTimer) clearTimeout(debounceTimer);
+    pendingPatch = {};
+
     setEditTitle(event.title);
     setEditStart(new Date(event.start));
     setEditEnd(new Date(event.end));
@@ -140,16 +187,32 @@ export function EventForm() {
   }));
 
   // Unified accessors — read from the right signal based on mode
+  // In edit mode, setters also schedule an autosave
   const title = () => mode() === "create" ? draftTitle() : editTitle();
-  const setTitle = (v: string) => mode() === "create" ? setDraftTitle(v) : setEditTitle(v);
+  const setTitle = (v: string) => {
+    if (mode() === "create") { setDraftTitle(v); }
+    else { setEditTitle(v); scheduleSave({ title: v }); }
+  };
   const start = () => mode() === "create" ? draftStart() : editStart();
-  const setStart = (v: Date) => mode() === "create" ? setDraftStart(v) : setEditStart(v);
+  const setStart = (v: Date) => {
+    if (mode() === "create") { setDraftStart(v); }
+    else { setEditStart(v); scheduleSave({ start: v }); }
+  };
   const end = () => mode() === "create" ? draftEnd() : editEnd();
-  const setEnd = (v: Date) => mode() === "create" ? setDraftEnd(v) : setEditEnd(v);
+  const setEnd = (v: Date) => {
+    if (mode() === "create") { setDraftEnd(v); }
+    else { setEditEnd(v); scheduleSave({ end: v }); }
+  };
   const location = () => mode() === "create" ? draftLocation() : editLocation();
-  const setLocation = (v: string) => mode() === "create" ? setDraftLocation(v) : setEditLocation(v);
+  const setLocation = (v: string) => {
+    if (mode() === "create") { setDraftLocation(v); }
+    else { setEditLocation(v); scheduleSave({ location: v }); }
+  };
   const description = () => mode() === "create" ? draftDescription() : editDescription();
-  const setDescription = (v: string) => mode() === "create" ? setDraftDescription(v) : setEditDescription(v);
+  const setDescription = (v: string) => {
+    if (mode() === "create") { setDraftDescription(v); }
+    else { setEditDescription(v); scheduleSave({ description: v }); }
+  };
   const isAllDay = () => mode() === "create" ? draftIsAllDay() : editIsAllDay();
   const setIsAllDay = (v: boolean) => mode() === "create" ? setDraftIsAllDay(v) : setEditIsAllDay(v);
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
@@ -222,6 +285,8 @@ export function EventForm() {
         setShadowEnd(null);
       }
     });
+    // Flush time changes immediately on blur
+    if (mode() === "edit") flushSave();
   }
 
   function revertTimeEdit(): void {
@@ -315,9 +380,27 @@ export function EventForm() {
       );
   });
 
+  const statusText = createMemo(() => {
+    const s = saveStatus();
+    if (mode() !== "edit") return null;
+    if (s === "saving") return "Saving...";
+    if (s === "saved") return "Saved";
+    if (s === "error") return "Failed to save";
+    return null;
+  });
+
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
       <div class="flex-1 overflow-y-auto scrollbar-hidden">
+        {/* Save status indicator */}
+        <Show when={statusText()}>
+          <div
+            class={`px-3 pt-2 text-xs ${saveStatus() === "error" ? "text-today" : "text-fg-muted"}`}
+            aria-live="polite"
+          >
+            {statusText()}
+          </div>
+        </Show>
         {/* Title input */}
         <div class="px-3 pt-3 pb-2">
           <input
@@ -326,6 +409,7 @@ export function EventForm() {
             placeholder="Title"
             value={title()}
             onInput={(e) => setTitle(e.currentTarget.value)}
+            onBlur={() => { if (mode() === "edit") flushSave(); }}
             onKeyDown={handleTitleKeyDown}
             class="w-full text-lg font-medium text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
           />
@@ -500,6 +584,7 @@ export function EventForm() {
               aria-label="Location"
               value={location()}
               onInput={(e) => setLocation(e.currentTarget.value)}
+              onBlur={() => { if (mode() === "edit") flushSave(); }}
               class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
             />
           </div>
@@ -519,6 +604,7 @@ export function EventForm() {
                 aria-label="Description"
                 value={description()}
                 onInput={(e) => setDescription(e.currentTarget.value)}
+                onBlur={() => { if (mode() === "edit") flushSave(); }}
                 class="text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none resize-none overflow-hidden row-start-1 col-start-1"
                 rows={2}
                 style={{ "grid-area": "1 / 1 / 2 / 2" }}

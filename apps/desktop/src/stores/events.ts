@@ -605,5 +605,85 @@ export function confirmDelete(eventId: string): void {
   fireDeleteApi(pending.event);
 }
 
+// =============================================================================
+// Event Updates (Optimistic)
+// =============================================================================
+
+export type EventPatch = {
+  title?: string;
+  description?: string;
+  location?: string;
+  start?: Date;
+  end?: Date;
+};
+
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export const [saveStatus, setSaveStatus] = createSignal<SaveStatus>("idle");
+
+/** Saved → idle timer, so "Saved" shows briefly before disappearing */
+let savedTimer: ReturnType<typeof setTimeout> | undefined;
+
+function showSaved(): void {
+  setSaveStatus("saved");
+  if (savedTimer) clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => setSaveStatus("idle"), 2000);
+}
+
+/**
+ * Update an event optimistically: apply patch locally, then PATCH API.
+ * On failure, rollback to the snapshot and set error status.
+ */
+export async function updateEvent(eventId: string, patch: EventPatch): Promise<void> {
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
+
+  // Snapshot for rollback
+  const snapshot = { ...event };
+
+  // Apply optimistic update
+  setEvents((prev) =>
+    prev.map((e) =>
+      e.id === eventId
+        ? {
+            ...e,
+            ...(patch.title !== undefined && { title: patch.title }),
+            ...(patch.description !== undefined && { description: patch.description }),
+            ...(patch.location !== undefined && { location: patch.location }),
+            ...(patch.start !== undefined && { start: patch.start }),
+            ...(patch.end !== undefined && { end: patch.end }),
+          }
+        : e
+    )
+  );
+
+  setSaveStatus("saving");
+
+  // Build API patch body
+  const apiPatch: Record<string, string> = {};
+  if (patch.title !== undefined) apiPatch.summary = patch.title;
+  if (patch.description !== undefined) apiPatch.description = patch.description;
+  if (patch.location !== undefined) apiPatch.location = patch.location;
+  if (patch.start !== undefined) apiPatch.start = patch.start.toISOString();
+  if (patch.end !== undefined) apiPatch.end = patch.end.toISOString();
+
+  try {
+    await apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(apiPatch),
+    });
+    showSaved();
+    revalidateWeeksForDates(event.start, patch.start ?? event.start);
+  } catch (error) {
+    console.error(`[events] Failed to update event ${eventId}:`, error);
+    // Rollback
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? snapshot : e))
+    );
+    setSaveStatus("error");
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => setSaveStatus("idle"), 4000);
+  }
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };
