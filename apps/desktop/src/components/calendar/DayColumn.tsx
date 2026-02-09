@@ -10,7 +10,7 @@ import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../consta
 import { startCreation, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
 import { deselectEvent, selectedEventId } from "../../stores/event-selection";
 import { spansMultipleDays } from "../../utils/allDayLayout";
-import { resizeDragEventId } from "../../stores/event-drag";
+import { resizeDragEventId, unfoldDragEventId } from "../../stores/event-drag";
 import { FLASH_DURATION_MS } from "../../constants/timings";
 
 interface DayColumnProps {
@@ -94,13 +94,14 @@ export function DayColumn(props: DayColumnProps) {
     colEnd.setDate(colEnd.getDate() + 1);
 
     const resizeId = resizeDragEventId();
+    const unfoldId = unfoldDragEventId();
     return allEvents.filter(
       (event) =>
         event.start < colEnd &&
         event.end > colStart &&
         visible.has(event.calendarId) &&
         !event.isAllDay &&
-        (!spansMultipleDays(event) || event.id === resizeId)
+        (!spansMultipleDays(event) || event.id === resizeId || event.id === unfoldId)
     );
   });
 
