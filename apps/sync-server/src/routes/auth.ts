@@ -36,12 +36,6 @@ export const authRoute = new Hono()
       return c.json({ error: "Invalid or expired state" }, 400);
     }
 
-    // Consume state to prevent replay — the callback will re-create the
-    // record when it needs to store the JWT for desktop polling.
-    await db
-      .delete(oauthPendingTokens)
-      .where(eq(oauthPendingTokens.state, state));
-
     // Set state in cookie so we can retrieve it after OAuth callback
     c.header("Set-Cookie", `oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
 
