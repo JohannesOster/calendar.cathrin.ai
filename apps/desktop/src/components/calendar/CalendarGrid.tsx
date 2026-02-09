@@ -82,8 +82,7 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
-const COLLAPSED_ALL_DAY_HEIGHT = 28; // px - matches MIN_SECTION_HEIGHT from AllDaySection
-const GRID_TOP_OFFSET = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + COLLAPSED_ALL_DAY_HEIGHT;
+const ALL_DAY_BASE_HEIGHT = 28; // px - collapsed/minimum height; grid is always positioned here
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -231,9 +230,21 @@ export function CalendarGrid() {
   let snapReEnableTimer: ReturnType<typeof setTimeout> | undefined;
 
   // All-day section expand/collapse state
+  // Uses a JS-driven animation (expandOffset signal) so height changes animate smoothly.
+  // The all-day section overlays the grid (negative margin absorbs expansion) — grid never moves.
   const [allDayExpanded, setAllDayExpanded] = createSignal(false);
+  const [expandOffset, setExpandOffset] = createSignal(0);
+  let expandAnimRaf: number | undefined;
+
   const toggleAllDayExpanded = () => {
-    setAllDayExpanded((prev) => !prev);
+    // Must batch: setAllDayExpanded changes allDayHeight instantly. Without batch,
+    // visualAllDayHeight would flash to the target before expandOffset counteracts it.
+    const currentVisual = allDayHeight() - expandOffset();
+    batch(() => {
+      setAllDayExpanded((prev) => !prev);
+      const newTarget = allDayHeight();
+      setExpandOffset(newTarget - currentVisual);
+    });
   };
 
   // Auto-expand all-day section when creating an all-day event
@@ -677,10 +688,52 @@ export function CalendarGrid() {
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
-  // Total content height = month label + header + collapsed all-day + time grid
-  // Uses collapsed height because expanded all-day overlays the grid (doesn't push it down)
+  // Visual height used for all layout positioning — animated smoothly via expandOffset
+  const visualAllDayHeight = createMemo(() => allDayHeight() - expandOffset());
+
+  // Track the last rendered visual height so we can animate FROM it when allDayHeight changes.
+  // Can't use visualAllDayHeight() inside the effect — by the time it runs, the memo already
+  // reflects the new allDayHeight (expandOffset is 0), so animDelta would be 0.
+  let lastVisualHeight = allDayHeight();
+
+  // Animate visualAllDayHeight toward allDayHeight whenever allDayHeight changes
+  // (toggle, navigation to week with different event count, event created/deleted, etc.)
+  createEffect(on(allDayHeight, (newTarget) => {
+    const animDelta = newTarget - lastVisualHeight;
+    if (animDelta === 0) return;
+
+    setExpandOffset(animDelta);
+
+    const startTime = performance.now();
+    const duration = 200;
+
+    if (expandAnimRaf) cancelAnimationFrame(expandAnimRaf);
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 2); // ease-out quadratic
+      const remaining = animDelta * (1 - eased);
+
+      setExpandOffset(remaining);
+      lastVisualHeight = newTarget - remaining;
+
+      if (progress < 1) {
+        expandAnimRaf = requestAnimationFrame(animate);
+      } else {
+        setExpandOffset(0);
+        lastVisualHeight = newTarget;
+        expandAnimRaf = undefined;
+      }
+    };
+
+    expandAnimRaf = requestAnimationFrame(animate);
+  }, { defer: true }));
+
+  // Use Math.max to prevent clipping during collapse animation when
+  // visualAllDayHeight > allDayHeight temporarily.
   const contentHeight = createMemo(
-    () => GRID_TOP_OFFSET + TOTAL_HEIGHT,
+    () => MONTH_LABEL_HEIGHT + HEADER_HEIGHT + Math.max(allDayHeight(), visualAllDayHeight()) + TOTAL_HEIGHT,
   );
 
   // Calculate day index from scroll position
@@ -1035,7 +1088,7 @@ export function CalendarGrid() {
       if (!gridArea) return;
 
       const gridRect = gridArea.getBoundingClientRect();
-      const stickyHeaderHeight = GRID_TOP_OFFSET;
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
 
       const mouseY = lastDragClientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
       const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
@@ -1058,7 +1111,7 @@ export function CalendarGrid() {
         setSnapEnabled(false);
       }
 
-      const stickyHeaderHeight = GRID_TOP_OFFSET;
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
       const timeColWidth = getTimeColWidth();
       startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition, timeColWidth, colWidth());
       updateAutoScrollCursor(e.clientY, e.clientX);
@@ -1115,6 +1168,11 @@ export function CalendarGrid() {
       if (snapReEnableTimer) {
         clearTimeout(snapReEnableTimer);
       }
+    });
+
+    // Cleanup expand animation
+    onCleanup(() => {
+      if (expandAnimRaf) cancelAnimationFrame(expandAnimRaf);
     });
 
   });
@@ -1412,18 +1470,15 @@ export function CalendarGrid() {
                 </Key>
               </div>
 
-              {/* Sticky All-Day Section Row - overlays the grid when expanded */}
+              {/* Sticky All-Day Section Row */}
               <div
-                class="flex bg-surface border-b border-border"
-                classList={{
-                  "transition-[height,margin-bottom,box-shadow] duration-200 ease-out": true,
-                }}
+                class="flex bg-surface border-b border-border transition-[box-shadow] duration-200 ease-out"
                 style={{
                   position: "sticky",
                   top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT}px`,
                   "z-index": "10",
-                  height: `${allDayHeight()}px`,
-                  "margin-bottom": `${-(allDayHeight() - COLLAPSED_ALL_DAY_HEIGHT)}px`,
+                  height: `${visualAllDayHeight()}px`,
+                  "margin-bottom": `${-(visualAllDayHeight() - ALL_DAY_BASE_HEIGHT)}px`,
                   "box-shadow": allDayExpanded() ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
                   width: "100%",
                   transform: "translateZ(0)",
@@ -1437,7 +1492,7 @@ export function CalendarGrid() {
                     width: "var(--grid-time-col-width)",
                     "min-width": "var(--grid-time-col-width)",
                     "max-width": "var(--grid-time-col-width)",
-                    height: `${allDayHeight()}px`,
+                    height: `${visualAllDayHeight()}px`,
                     "flex-shrink": "0",
                     position: "sticky",
                     left: "0",
@@ -1489,7 +1544,7 @@ export function CalendarGrid() {
                           left: "0",
                           transform: `translateX(${item().left}px)`,
                           width: `${layout().width}px`,
-                          height: `${allDayHeight()}px`,
+                          height: `${visualAllDayHeight()}px`,
                           top: 0,
                         }}
                       >
@@ -1607,6 +1662,7 @@ export function CalendarGrid() {
                   "min-width": "var(--grid-time-col-width)",
                   "max-width": "var(--grid-time-col-width)",
                   height: `${TOTAL_HEIGHT}px`,
+                  "margin-top": `${Math.max(0, visualAllDayHeight() - ALL_DAY_BASE_HEIGHT)}px`,
                   position: "sticky",
                   left: "0",
                   "z-index": "6",
@@ -1626,7 +1682,7 @@ export function CalendarGrid() {
                 </div>
               </div>
 
-              {/* Absolute Day Columns - fixed at collapsed offset (all-day overlays, doesn't push) */}
+              {/* Absolute Day Columns */}
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
@@ -1636,7 +1692,7 @@ export function CalendarGrid() {
                       transform: `translateX(${item().left}px)`,
                       width: `${layout().width}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${GRID_TOP_OFFSET}px`,
+                      top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight()}px`,
                       "z-index": "1",
                     }}
                   >
@@ -1650,7 +1706,7 @@ export function CalendarGrid() {
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${GRID_TOP_OFFSET}px`,
+                  top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight()}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",
