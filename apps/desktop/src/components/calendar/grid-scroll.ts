@@ -256,7 +256,10 @@ export function createGridScroll(deps: GridScrollDeps) {
           return;
         }
         if (navigationTarget() !== null) {
-          setNavigationTarget(null);
+          // Don't clear navigationTarget here — the visibleDaysCount effect
+          // is the intended consumer. Clearing it here caused wrong-date bugs:
+          // this effect runs first (SolidJS creation-order), consuming the target
+          // before the visibleDaysCount effect could use it.
           return;
         }
         if (currentView() !== "Month") {
