@@ -121,7 +121,9 @@ export function CalendarEvent(props: CalendarEventProps) {
     const onUp = () => {
       cleanup();
       if (!started) {
-        // Was a click, not a drag — select the event
+        // Was a click, not a drag — select + focus the event
+        // (preventDefault on pointerdown suppresses native focus)
+        contentRef?.focus();
         selectEvent(props.event.id);
       }
     };
