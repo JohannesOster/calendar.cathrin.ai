@@ -1231,31 +1231,39 @@ export function CalendarGrid() {
       if (!drag) return;
 
       const cursorMinutes = getMinutesFromClientY(lastDragClientY);
+      const cursorDate = getDateFromClientX(lastDragClientX);
+
+      // Anchor = the fixed end of the event (original start time)
+      const anchorDay = new Date(drag.originalStart);
+      anchorDay.setHours(0, 0, 0, 0);
       const anchorMinutes = drag.originalStart.getHours() * 60 + drag.originalStart.getMinutes();
 
-      // Bidirectional: dragging below anchor extends end, above anchor flips start/end
-      let newStartMinutes: number;
-      let newEndMinutes: number;
+      const anchorDateTime = new Date(anchorDay);
+      anchorDateTime.setMinutes(anchorMinutes);
 
-      if (cursorMinutes >= anchorMinutes) {
-        newStartMinutes = anchorMinutes;
-        newEndMinutes = Math.max(anchorMinutes + SNAP_MINUTES, Math.min(cursorMinutes, 24 * 60));
+      const targetDay = cursorDate ? new Date(cursorDate) : new Date(anchorDay);
+      targetDay.setHours(0, 0, 0, 0);
+      const cursorDateTime = new Date(targetDay);
+      cursorDateTime.setMinutes(cursorMinutes);
+
+      let newStart: Date;
+      let newEnd: Date;
+
+      if (cursorDateTime.getTime() >= anchorDateTime.getTime()) {
+        // Dragging forward: anchor is start, cursor is end
+        newStart = anchorDateTime;
+        newEnd = cursorDateTime;
+        if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
+          newEnd = new Date(newStart.getTime() + SNAP_MINUTES * 60000);
+        }
       } else {
-        newStartMinutes = Math.max(0, cursorMinutes);
-        newEndMinutes = anchorMinutes;
-        if (newEndMinutes - newStartMinutes < SNAP_MINUTES) {
-          newStartMinutes = newEndMinutes - SNAP_MINUTES;
+        // Dragging backward: cursor is start, anchor is end
+        newStart = cursorDateTime;
+        newEnd = anchorDateTime;
+        if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
+          newStart = new Date(newEnd.getTime() - SNAP_MINUTES * 60000);
         }
       }
-
-      const baseDate = new Date(drag.originalStart);
-      baseDate.setHours(0, 0, 0, 0);
-
-      const newStart = new Date(baseDate);
-      newStart.setMinutes(newStartMinutes);
-
-      const newEnd = new Date(baseDate);
-      newEnd.setMinutes(newEndMinutes);
 
       setEvents((prev) =>
         prev.map((e) =>
@@ -1302,6 +1310,17 @@ export function CalendarGrid() {
         if (!document.body.classList.contains("dragging")) {
           document.body.classList.add("dragging");
         }
+
+        // Disable scroll snap during drag so horizontal auto-scroll works
+        if (snapEnabled()) {
+          scrollContainerRef.style.scrollSnapType = "none";
+          setSnapEnabled(false);
+        }
+
+        const timeColWidth = getTimeColWidth();
+        const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
+        startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcResizePosition, timeColWidth, colWidth());
+        updateAutoScrollCursor(e.clientY, e.clientX);
 
         recalcResizePosition();
         e.preventDefault();
