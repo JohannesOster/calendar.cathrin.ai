@@ -1205,7 +1205,8 @@ export function CalendarGrid() {
           // 2. pendingCenterDate (local var, set by deferred centerDate effect)
           // 3. Preserve exact fractional scroll position (for +/- stepper)
           const navTarget = navigationTarget();
-          const hasExplicitTarget = navTarget !== null || pendingCenterDate !== null;
+          const pendingTarget = pendingCenterDate;
+          const hasExplicitTarget = navTarget !== null || pendingTarget !== null;
 
           const currentScrollLeft = scrollContainerRef.scrollLeft;
           const oldColWidth = colWidth();
@@ -1228,7 +1229,7 @@ export function CalendarGrid() {
           if (hasExplicitTarget) {
             // Use explicit target date (Day button, navigation, etc.)
             // Apply scroll and width in the same frame to avoid flicker.
-            const targetDate = navTarget ?? pendingCenterDate!;
+            const targetDate = navTarget ?? pendingTarget!;
           const newColWidth = calculateColumnWidth();
             const targetScrollLeft = getScrollLeftForDate(
               targetDate,
