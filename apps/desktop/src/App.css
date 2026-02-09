@@ -244,6 +244,11 @@ body.dragging * {
   background-color: var(--event-color);
 }
 
+/* Undo toast: override zag-js absolute positioning so toasts stack in flex layout */
+[data-scope="toast"][data-part="root"] {
+  position: relative !important;
+}
+
 /* Undo toast animations */
 @keyframes toast-enter {
   from {
