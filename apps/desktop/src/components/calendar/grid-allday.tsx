@@ -103,6 +103,31 @@ export function createAllDayState(deps: AllDayStateDeps) {
     }
   });
 
+  // Auto-expand all-day section when resize finishes with a multi-day event.
+  // During drag the event stays in the time grid (excluded via excludeId);
+  // it only moves to the all-day row on pointerup, so we expand then.
+  let resizeDragIsMultiDay = false;
+  createEffect(() => {
+    const eventId = resizeDragEventId();
+
+    if (!eventId) {
+      if (resizeDragIsMultiDay && !allDayExpanded()) {
+        setAllDayExpanded(true);
+      }
+      resizeDragIsMultiDay = false;
+      return;
+    }
+
+    const event = events().find((e) => e.id === eventId);
+    if (!event) return;
+
+    const effectiveEnd =
+      event.end.getHours() === 0 && event.end.getMinutes() === 0
+        ? new Date(event.end.getTime() - 1)
+        : event.end;
+    resizeDragIsMultiDay = event.start.toDateString() !== effectiveEnd.toDateString();
+  });
+
   // Auto-expand/collapse all-day section when toggling isAllDay in edit mode
   let allDayStateBeforeEdit: boolean | null = null;
   createEffect(() => {
