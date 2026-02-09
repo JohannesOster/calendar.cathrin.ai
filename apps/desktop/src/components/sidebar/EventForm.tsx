@@ -34,7 +34,7 @@ import {
   setShadowEnd,
 } from "../../stores/event-creation";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, saveStatus, setEvents, type EventPatch } from "../../stores/events";
+import { updateEvent, setEvents, type EventPatch } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 
 function formatTime(date: Date): string {
@@ -374,27 +374,9 @@ export function EventForm() {
       );
   });
 
-  const statusText = createMemo(() => {
-    const s = saveStatus();
-    if (mode() !== "edit") return null;
-    if (s === "saving") return "Saving...";
-    if (s === "saved") return "Saved";
-    if (s === "error") return "Failed to save";
-    return null;
-  });
-
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
       <div class="flex-1 overflow-y-auto scrollbar-hidden">
-        {/* Save status indicator */}
-        <Show when={statusText()}>
-          <div
-            class={`px-3 pt-2 text-xs ${saveStatus() === "error" ? "text-today" : "text-fg-muted"}`}
-            aria-live="polite"
-          >
-            {statusText()}
-          </div>
-        </Show>
         {/* Title input */}
         <div class="px-3 pt-3 pb-2">
           <input

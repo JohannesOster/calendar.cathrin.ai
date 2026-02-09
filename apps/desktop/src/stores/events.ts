@@ -617,21 +617,9 @@ export type EventPatch = {
   end?: Date;
 };
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
-export const [saveStatus, setSaveStatus] = createSignal<SaveStatus>("idle");
-
-/** Saved → idle timer, so "Saved" shows briefly before disappearing */
-let savedTimer: ReturnType<typeof setTimeout> | undefined;
-
-function showSaved(): void {
-  setSaveStatus("saved");
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = setTimeout(() => setSaveStatus("idle"), 2000);
-}
-
 /**
  * Update an event optimistically: apply patch locally, then PATCH API.
- * On failure, rollback to the snapshot and set error status.
+ * On failure, rollback to the snapshot.
  */
 export async function updateEvent(eventId: string, patch: EventPatch): Promise<void> {
   const event = events().find((e) => e.id === eventId);
@@ -656,8 +644,6 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
     )
   );
 
-  setSaveStatus("saving");
-
   // Build API patch body
   const apiPatch: Record<string, string> = {};
   if (patch.title !== undefined) apiPatch.summary = patch.title;
@@ -671,7 +657,6 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    showSaved();
     revalidateWeeksForDates(event.start, patch.start ?? event.start);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
@@ -679,9 +664,6 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
     setEvents((prev) =>
       prev.map((e) => (e.id === eventId ? snapshot : e))
     );
-    setSaveStatus("error");
-    if (savedTimer) clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => setSaveStatus("idle"), 4000);
   }
 }
 
