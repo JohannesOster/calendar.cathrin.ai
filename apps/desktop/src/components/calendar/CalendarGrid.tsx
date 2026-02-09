@@ -59,7 +59,7 @@ import { FLASH_DURATION_MS } from "../../constants/timings";
 import { selectedEventId, selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag,
-  isResizeDragging, resizeDrag, cancelResizeDrag, finishResizeDrag,
+  isResizeDragging, resizeDrag, resizeDragEventId, cancelResizeDrag, finishResizeDrag,
 } from "../../stores/event-drag";
 import {
   startAutoScroll,
@@ -546,11 +546,13 @@ export function CalendarGrid() {
     const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
 
     // Calculate layouts using the full range of days
+    // Exclude the resize-dragged event so it stays in the time grid during resize
     const layouts = calculateAllDayLayouts(
       visibleEvents,
       viewStart,
       viewEnd,
       totalColumns,
+      resizeDragEventId(),
     );
 
     // Convert to pixel positions

@@ -130,7 +130,8 @@ export function calculateAllDayLayouts(
   events: CalendarEvent[],
   viewStart: Date,
   viewEnd: Date,
-  totalColumns: number = 7
+  totalColumns: number = 7,
+  excludeEventId?: string | null
 ): Map<string, AllDayLayoutInfo> {
   const layouts = new Map<string, AllDayLayoutInfo>();
 
@@ -139,6 +140,7 @@ export function calculateAllDayLayouts(
   const viewEndDay = getLocalDateOnly(viewEnd);
 
   const allDayEvents = events.filter((e) => {
+    if (excludeEventId && e.id === excludeEventId) return false;
     if (e.isAllDay) return eventOverlapsView(e, viewStart, viewEnd);
     if (!spansMultipleDays(e)) return false;
     // Timed multi-day: use local dates for overlap check
