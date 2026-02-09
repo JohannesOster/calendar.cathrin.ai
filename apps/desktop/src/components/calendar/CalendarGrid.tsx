@@ -1171,7 +1171,7 @@ export function CalendarGrid() {
       );
     };
 
-    const handleDragMouseMove = (e: MouseEvent) => {
+    const handleDragPointerMove = (e: PointerEvent) => {
       lastDragClientY = e.clientY;
       lastDragClientX = e.clientX;
 
@@ -1252,7 +1252,7 @@ export function CalendarGrid() {
       });
     };
 
-    const handleDragMouseUp = () => {
+    const handleDragPointerUp = () => {
       // --- Move drag ---
       if (isMoveDragging()) {
         stopAutoScroll();
@@ -1305,13 +1305,13 @@ export function CalendarGrid() {
       }
     };
 
-    document.addEventListener("mousemove", handleDragMouseMove);
-    document.addEventListener("mouseup", handleDragMouseUp);
+    document.addEventListener("pointermove", handleDragPointerMove);
+    document.addEventListener("pointerup", handleDragPointerUp);
     onCleanup(() => {
       stopAutoScroll();
       document.body.classList.remove("dragging");
-      document.removeEventListener("mousemove", handleDragMouseMove);
-      document.removeEventListener("mouseup", handleDragMouseUp);
+      document.removeEventListener("pointermove", handleDragPointerMove);
+      document.removeEventListener("pointerup", handleDragPointerUp);
     });
 
     // Cleanup direction reset timer
