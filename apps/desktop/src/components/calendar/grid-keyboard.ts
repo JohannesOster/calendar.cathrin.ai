@@ -100,11 +100,13 @@ export function setupKeyboardHandlers() {
         if (!eventId) return;
         const event = events().find((ev) => ev.id === eventId);
         if (!event) return;
-        if (event.isAllDay) {
-          deleteEvent(eventId);
+        // Use burn animation if available (timed event chips in day columns),
+        // otherwise delete directly (all-day chips, multi-day timed in all-day row)
+        const wrapper = eventWrapper as HTMLElement & { triggerBurn?: () => void };
+        if (wrapper.triggerBurn) {
+          wrapper.triggerBurn();
         } else {
-          const wrapper = eventWrapper as HTMLElement & { triggerBurn?: () => void };
-          wrapper.triggerBurn?.();
+          deleteEvent(eventId);
         }
       }
     }

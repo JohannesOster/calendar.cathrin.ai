@@ -1,4 +1,4 @@
-import { Show, onCleanup, createMemo } from "solid-js";
+import { Show, onMount, onCleanup, createMemo } from "solid-js";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
@@ -82,6 +82,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         const onUp = () => {
           cleanup();
           if (!started) {
+            chipRef?.focus();
             selectEvent(props.event.id);
           }
         };
@@ -104,6 +105,15 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
     // Body click — select on pointerup (let click handler do it)
   };
 
+  // Auto-focus when mounting as the selected event — this happens after the
+  // collapsed→expanded transition recreates the chip, restoring keyboard focus
+  // so Delete/Backspace can trigger deletion.
+  onMount(() => {
+    if (isSelected()) {
+      chipRef?.focus();
+    }
+  });
+
   onCleanup(() => cleanupDragDetection?.());
 
   const ariaLabel = () => {
@@ -121,7 +131,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         "all-day-chip--selected": isSelected(),
         "opacity-0 pointer-events-none": isBeingUnfolded(),
       }}
-      onClick={() => selectEvent(props.event.id)}
+      onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
