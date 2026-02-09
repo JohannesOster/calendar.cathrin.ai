@@ -12,10 +12,14 @@ import {
   isCreating,
   draftStart,
   draftEnd,
+  setDraftStart,
+  setDraftEnd,
   draftTitle,
   setDraftTitle,
   draftCalendarId,
   setDraftCalendarId,
+  draftIsAllDay,
+  setDraftIsAllDay,
   commitCreation,
   cancelCreation,
   getDraftColor,
@@ -135,8 +139,8 @@ export function EventForm() {
 
         {/* Time section */}
         <div class="px-3 py-2 border-t border-border space-y-1.5">
-          {/* Start time + End time on one row */}
-          <Show when={draftStart() && draftEnd()}>
+          {/* Start time + End time on one row (hidden for all-day) */}
+          <Show when={draftStart() && draftEnd() && !draftIsAllDay()}>
             <div class="flex items-center gap-2 text-sm text-fg">
               <Clock size={14} class="text-fg-muted shrink-0" />
               <span class="whitespace-nowrap">{formatTime(draftStart()!)}</span>
@@ -149,16 +153,61 @@ export function EventForm() {
           </Show>
           {/* Date row */}
           <Show when={draftStart() && draftEnd()}>
-            <div class="flex gap-4 ml-[22px] text-sm text-fg">
+            <div class={`flex gap-4 text-sm text-fg ${draftIsAllDay() ? "ml-0" : "ml-[22px]"}`}>
+              <Show when={draftIsAllDay()}>
+                <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
+              </Show>
               <span>{formatDate(draftStart()!)}</span>
               <Show when={formatDate(draftStart()!) !== formatDate(draftEnd()!)}>
                 <span>{formatDate(draftEnd()!)}</span>
               </Show>
             </div>
           </Show>
-          {/* All-day / Timezone / Repeat */}
-          <div class="ml-[22px] flex gap-3 text-xs text-fg-disabled">
-            <span>All-day</span>
+          {/* All-day toggle + stubs */}
+          <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
+            <button
+              role="switch"
+              aria-checked={draftIsAllDay()}
+              aria-label="All day"
+              class="inline-flex items-center gap-1.5 cursor-pointer"
+              onClick={() => {
+                const wasAllDay = draftIsAllDay();
+                setDraftIsAllDay(!wasAllDay);
+                if (!wasAllDay) {
+                  // Switching timed → all-day: keep date, will strip time on commit
+                } else {
+                  // Switching all-day → timed: add default times
+                  const start = draftStart();
+                  if (start) {
+                    const newStart = new Date(start);
+                    newStart.setHours(9, 0, 0, 0);
+                    const newEnd = new Date(start);
+                    newEnd.setHours(10, 0, 0, 0);
+                    setDraftStart(newStart);
+                    setDraftEnd(newEnd);
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
+              }}
+            >
+              <span>All-day</span>
+              <div
+                class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
+                  draftIsAllDay() ? "bg-accent" : "bg-border-light"
+                }`}
+              >
+                <div
+                  class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
+                    draftIsAllDay() ? "translate-x-3" : "translate-x-0"
+                  }`}
+                />
+              </div>
+            </button>
             <span>Time zone</span>
             <span>Repeat</span>
           </div>
