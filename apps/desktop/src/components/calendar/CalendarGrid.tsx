@@ -1157,7 +1157,8 @@ export function CalendarGrid() {
       if (!gridArea) return 0;
 
       const gridRect = gridArea.getBoundingClientRect();
-      const mouseY = clientY - gridRect.top - GRID_TOP_OFFSET + gridArea.scrollTop;
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
+      const mouseY = clientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
       const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
       return snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
     };
@@ -1285,7 +1286,8 @@ export function CalendarGrid() {
         }
 
         const timeColWidth = getTimeColWidth();
-        startAutoScroll(scrollContainerRef, GRID_TOP_OFFSET, recalcMovePosition, timeColWidth, colWidth());
+        const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
+        startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcMovePosition, timeColWidth, colWidth());
         updateAutoScrollCursor(e.clientY, e.clientX);
 
         recalcMovePosition();
