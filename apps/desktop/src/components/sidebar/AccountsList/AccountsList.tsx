@@ -10,6 +10,7 @@ import {
   type CollisionDetector,
 } from "@thisbeyond/solid-dnd";
 import { X } from "lucide-solid";
+import { Collapsible } from "@ark-ui/solid/collapsible";
 import {
   authError,
   setAuthError,
@@ -25,7 +26,6 @@ import {
 import {
   isAccountCollapsed,
   toggleAccountCollapse,
-  toggleAccountMenu,
 } from "../../../stores/sidebar-ui";
 import { SIDEBAR } from "../../../constants/sidebar";
 import { SortableAccountItem } from "./SortableAccountItem";
@@ -178,29 +178,39 @@ export function AccountsList() {
           <SortableProvider ids={accountIds()}>
             <For each={orderedAccounts()}>
               {(account) => (
-                <>
+                <Collapsible.Root
+                  open={!isAccountCollapsed(account.id)}
+                  onOpenChange={(details) => {
+                    // Only toggle if the state actually differs
+                    const currentlyCollapsed = isAccountCollapsed(account.id);
+                    if (details.open === currentlyCollapsed) {
+                      toggleAccountCollapse(account.id);
+                    }
+                  }}
+                >
                   {/* Sortable Account Header */}
                   <SortableAccountItem
                     account={account}
                     isCollapsed={isAccountCollapsed(account.id)}
                     toggleCollapse={() => toggleAccountCollapse(account.id)}
-                    toggleMenu={() => toggleAccountMenu(account.id)}
                   />
-                  {/* Calendars - hidden during account drag */}
-                  <Show when={!isDraggingAccounts() && !isAccountCollapsed(account.id)}>
-                    <SortableProvider ids={getOrderedCalendarIds(account.id)}>
-                      <For each={getOrderedCalendars(account.id)}>
-                        {(calendar) => (
-                          <SortableCalendarItem
-                            calendar={calendar}
-                            accountId={account.id}
-                            onToggleVisibility={handleToggleCalendarVisibility}
-                          />
-                        )}
-                      </For>
-                    </SortableProvider>
+                  {/* Calendars - hidden during account drag, animated via Collapsible */}
+                  <Show when={!isDraggingAccounts()}>
+                    <Collapsible.Content>
+                      <SortableProvider ids={getOrderedCalendarIds(account.id)}>
+                        <For each={getOrderedCalendars(account.id)}>
+                          {(calendar) => (
+                            <SortableCalendarItem
+                              calendar={calendar}
+                              accountId={account.id}
+                              onToggleVisibility={handleToggleCalendarVisibility}
+                            />
+                          )}
+                        </For>
+                      </SortableProvider>
+                    </Collapsible.Content>
                   </Show>
-                </>
+                </Collapsible.Root>
               )}
             </For>
           </SortableProvider>

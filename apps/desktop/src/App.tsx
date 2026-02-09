@@ -7,6 +7,7 @@ import { EventForm } from "./components/sidebar/EventForm";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { selectedEventId, deselectEvent } from "./stores/event-selection";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
+import { UndoToastProvider } from "./components/ui/UndoToast";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
 import {
@@ -127,17 +128,20 @@ function App() {
   );
 
   return (
-    <AppShell
-      header={<CalendarHeader />}
-      leftSidebar={<LeftSidebar />}
-      rightSidebar={
-        <Show when={isCreating() || selectedEventId()}>
-          <EventForm />
-        </Show>
-      }
-    >
-      <CalendarGrid />
-    </AppShell>
+    <>
+      <UndoToastProvider />
+      <AppShell
+        header={<CalendarHeader />}
+        leftSidebar={<LeftSidebar />}
+        rightSidebar={
+          <Show when={isCreating() || selectedEventId()}>
+            <EventForm />
+          </Show>
+        }
+      >
+        <CalendarGrid />
+      </AppShell>
+    </>
   );
 }
 

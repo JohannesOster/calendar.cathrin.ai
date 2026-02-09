@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a calendar application built as a **pnpm monorepo** with:
 - **Tauri v2** - Desktop application framework
 - **SolidJS** - Reactive UI framework
+- **Ark UI** - Headless component primitives (popovers, menus, toggles, toasts, etc.)
 - **TypeScript** - Type-safe JavaScript
 - **Tailwind CSS v4** - Styling framework
 - **Vite** - Build tool and dev server
@@ -273,7 +274,7 @@ The app uses a three-layer layout system defined in `apps/desktop/src/components
   - `--grid-header-height`: Header height
   - `--grid-time-col-width`: Time column width
   - `--grid-hour-height`: Height per hour slot
-- Color palette matches Notion-like aesthetics (#fbfbfa backgrounds, #e8e8e8 borders, #91918e muted text)
+- Color palette uses warm dark charcoal (temporary eye-comfort override; final palette TBD via design session)
 
 ### Tauri Configuration
 
@@ -363,6 +364,50 @@ function LayoutRemeasurer(props: { isDragging: () => boolean }) {
 - Always include a `DragOverlay` for the ghost element — it affects collision detection behavior
 - Tag sortables with `{ type: "..." }` data to enable type-filtered collision detection
 - Call `recomputeLayouts()` via `queueMicrotask` when DOM structure changes during drag
+
+### Ark UI — Headless Component Primitives
+
+Uses `@ark-ui/solid` for interactive UI primitives. Ark handles behavior, accessibility (focus trapping, ARIA, keyboard nav) — we supply all styling via Tailwind classes.
+
+**When to use Ark UI:**
+- Popovers, dropdowns, menus, tooltips, dialogs/modals
+- Toggle switches, accordions, tabs
+- Toast notifications
+- Any interactive pattern that needs focus management, click-outside, or keyboard handling
+
+**When NOT to use Ark UI:**
+- Calendar grid, event chips, drag-to-create/move/resize — these are custom domain logic
+- Drag-and-drop sorting — use `@thisbeyond/solid-dnd`
+- Simple buttons or links that don't need compound behavior
+
+**Adoption plan** (incremental, replace hand-rolled patterns as they're touched):
+
+| Component | Current file | Replace with | Priority |
+|-----------|-------------|--------------|----------|
+| Days stepper popover | `DaysStepperButton.tsx` | `Popover` | High |
+| Account overflow menu | `SortableAccountItem.tsx` | `Menu` | High |
+| All-day toggle switch | `EventForm.tsx` | `Switch` | Medium |
+| Account collapse | `SortableAccountItem.tsx` | `Collapsible` | Medium |
+| Undo toast | `UndoToast.tsx` | `Toast` | Medium |
+| EventForm click-outside | `EventForm.tsx` | `Popover` or `Dialog` | Medium |
+| Calendar selector | `EventForm.tsx` | `Select` | Low |
+| Time edit fields | `EventForm.tsx` | `Editable` | Low |
+
+**Pattern:**
+```tsx
+import { Popover } from "@ark-ui/solid/popover";
+
+<Popover.Root>
+  <Popover.Trigger class="...tailwind classes...">Open</Popover.Trigger>
+  <Popover.Positioner>
+    <Popover.Content class="...tailwind classes...">
+      Content here
+    </Popover.Content>
+  </Popover.Positioner>
+</Popover.Root>
+```
+
+Import from specific component paths (e.g., `@ark-ui/solid/popover`) for tree-shaking.
 
 ### TypeScript Configuration
 - Strict mode enabled
@@ -479,4 +524,5 @@ When working on features that touch these, index their docs/repos if not already
 | Hono | `honojs/hono` repo or `https://hono.dev` |
 | Drizzle | `drizzle-team/drizzle-orm` repo or `https://orm.drizzle.team` |
 | solid-dnd | `thisbeyond/solid-dnd` repo |
+| Ark UI | `chakra-ui/ark` repo or `https://ark-ui.com` |
 | Tailwind v4 | `https://tailwindcss.com/docs` |

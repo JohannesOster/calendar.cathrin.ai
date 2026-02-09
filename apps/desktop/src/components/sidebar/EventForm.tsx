@@ -8,7 +8,10 @@ import {
   FileText,
   AlignLeft,
   Bell,
+  ChevronDown,
 } from "lucide-solid";
+import { Switch } from "@ark-ui/solid/switch";
+import { Select, createListCollection } from "@ark-ui/solid/select";
 import {
   isCreating,
   draftStart,
@@ -377,6 +380,14 @@ export function EventForm() {
       );
   });
 
+  const calendarCollection = createMemo(() =>
+    createListCollection({
+      items: allCalendars(),
+      itemToValue: (item) => item.id,
+      itemToString: (item) => item.name,
+    })
+  );
+
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
       <div class="flex-1 overflow-y-auto scrollbar-hidden">
@@ -488,12 +499,9 @@ export function EventForm() {
           </Show>
           {/* All-day toggle + stubs */}
           <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
-            <button
-              role="switch"
-              aria-checked={isAllDay()}
-              aria-label="All day"
-              class="inline-flex items-center gap-1.5 cursor-pointer"
-              onClick={() => {
+            <Switch.Root
+              checked={isAllDay()}
+              onCheckedChange={() => {
                 const wasAllDay = isAllDay();
                 const s = start()!;
                 const editing = mode() === "edit";
@@ -543,26 +551,22 @@ export function EventForm() {
                   }
                 }
               }}
-              onKeyDown={(e) => {
-                if (e.key === " " || e.key === "Enter") {
-                  e.preventDefault();
-                  e.currentTarget.click();
-                }
-              }}
+              class="inline-flex items-center gap-1.5 cursor-pointer"
             >
-              <span>All-day</span>
-              <div
+              <Switch.Label class="text-xs text-fg-disabled cursor-pointer">All-day</Switch.Label>
+              <Switch.Control
                 class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
                   isAllDay() ? "bg-accent" : "bg-border-light"
                 }`}
               >
-                <div
+                <Switch.Thumb
                   class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
                     isAllDay() ? "translate-x-3" : "translate-x-0"
                   }`}
                 />
-              </div>
-            </button>
+              </Switch.Control>
+              <Switch.HiddenInput />
+            </Switch.Root>
             <span>Time zone</span>
             <span>Repeat</span>
           </div>
@@ -624,25 +628,44 @@ export function EventForm() {
 
         {/* Calendar selector + status */}
         <div class="px-3 py-2 border-t border-border space-y-2">
-          <div class="flex items-center gap-2">
-            <div
-              class="w-3 h-3 rounded-full shrink-0"
-              style={{ "background-color": eventColor() }}
-            />
-            <select
-              value={calendarId() ?? ""}
-              onChange={(e) => setCalId(e.currentTarget.value || null)}
-              class="flex-1 text-sm text-fg bg-transparent outline-none border-none cursor-pointer appearance-none"
-            >
-              <For each={allCalendars()}>
-                {(cal) => (
-                  <option value={cal.id}>
-                    {cal.name}
-                  </option>
-                )}
-              </For>
-            </select>
-          </div>
+          <Select.Root
+            collection={calendarCollection()}
+            value={calendarId() ? [calendarId()!] : []}
+            onValueChange={(details) => {
+              setCalId(details.value[0] ?? null);
+            }}
+            positioning={{ placement: "bottom-start", sameWidth: true }}
+          >
+            <Select.Control class="flex items-center gap-2">
+              <div
+                class="w-3 h-3 rounded-full shrink-0"
+                style={{ "background-color": eventColor() }}
+              />
+              <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
+                <Select.ValueText placeholder="Select calendar" />
+                <ChevronDown size={12} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+            </Select.Control>
+            <Select.Positioner>
+              <Select.Content class="bg-surface border border-border rounded-lg shadow-lg py-1 z-50 max-h-48 overflow-y-auto">
+                <For each={allCalendars()}>
+                  {(cal) => (
+                    <Select.Item
+                      item={cal}
+                      class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                    >
+                      <div
+                        class="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ "background-color": cal.color }}
+                      />
+                      <Select.ItemText>{cal.name}</Select.ItemText>
+                    </Select.Item>
+                  )}
+                </For>
+              </Select.Content>
+            </Select.Positioner>
+            <Select.HiddenSelect />
+          </Select.Root>
           <div class="ml-[20px] text-xs text-fg-disabled">Busy</div>
           <div class="ml-[20px] text-xs text-fg-disabled">Default visibility</div>
         </div>

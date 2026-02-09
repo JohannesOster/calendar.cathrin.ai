@@ -5,9 +5,6 @@ const COLLAPSED_ACCOUNTS_KEY = "sidebar-collapsed-accounts";
 // Collapsed accounts state
 const [collapsedAccounts, setCollapsedAccounts] = createSignal<Set<string>>(new Set());
 
-// Account menu state
-const [accountMenuOpen, setAccountMenuOpen] = createSignal<string | null>(null);
-
 /**
  * Check if an account is collapsed
  */
@@ -28,13 +25,6 @@ export function toggleAccountCollapse(accountId: string): void {
     }
     return next;
   });
-}
-
-/**
- * Toggle the account menu for a specific account
- */
-export function toggleAccountMenu(accountId: string): void {
-  setAccountMenuOpen((prev) => (prev === accountId ? null : accountId));
 }
 
 /**
@@ -65,4 +55,4 @@ export function persistCollapsedAccounts(): void {
 }
 
 // Export raw accessors for components that need them
-export { collapsedAccounts, accountMenuOpen };
+export { collapsedAccounts };

@@ -63,7 +63,6 @@ import {
   updateAutoScrollCursor,
   stopAutoScroll,
 } from "../../lib/auto-scroll";
-import { UndoToast } from "../ui/UndoToast";
 
 // Helper to create stable date key for <Key> component
 const getDateKey = (date: Date): string =>
@@ -1612,7 +1611,6 @@ export function CalendarGrid() {
 
   return (
     <div class="flex-1 flex flex-col max-h-full overflow-hidden relative">
-      <UndoToast />
       <Show
         when={currentView() === "Month"}
         fallback={
