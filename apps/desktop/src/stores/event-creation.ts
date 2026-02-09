@@ -14,6 +14,9 @@ export const [draftStart, setDraftStart] = createSignal<Date | null>(null);
 export const [draftEnd, setDraftEnd] = createSignal<Date | null>(null);
 export const [draftTitle, setDraftTitle] = createSignal("");
 export const [draftCalendarId, setDraftCalendarId] = createSignal<string | null>(null);
+export const [draftLocation, setDraftLocation] = createSignal("");
+export const [draftDescription, setDraftDescription] = createSignal("");
+export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
 
 // =============================================================================
 // Helpers
@@ -141,17 +144,33 @@ export function cancelCreation(): void {
   setDraftEnd(null);
   setDraftTitle("");
   setDraftCalendarId(null);
+  setDraftLocation("");
+  setDraftDescription("");
+  setDraftIsAllDay(false);
 }
 
 /**
  * Commit the event creation — optimistic insert + background API call.
  * Returns true if the event was saved, false if nothing to save.
  */
+/**
+ * Format a Date as YYYY-MM-DD for all-day event API calls.
+ */
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function commitCreation(): boolean {
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
   const calId = draftCalendarId() ?? resolveCalendarId();
+  const isAllDay = draftIsAllDay();
+  const location = draftLocation().trim() || undefined;
+  const description = draftDescription().trim() || undefined;
 
   if (!title || !start || !end || !calId) return false;
 
@@ -165,9 +184,15 @@ export function commitCreation(): boolean {
     title,
     start: new Date(start),
     end: new Date(end),
-    isAllDay: false,
+    isAllDay,
     color,
+    location,
+    description,
   });
+
+  // Format start/end for API: date-only for all-day, ISO dateTime for timed
+  const apiStart = isAllDay ? formatDateOnly(start) : start.toISOString();
+  const apiEnd = isAllDay ? formatDateOnly(end) : end.toISOString();
 
   // Reset creation state
   cancelCreation();
@@ -178,9 +203,11 @@ export function commitCreation(): boolean {
     body: JSON.stringify({
       calendarId: calId,
       title,
-      start: start.toISOString(),
-      end: end.toISOString(),
-      isAllDay: false,
+      start: apiStart,
+      end: apiEnd,
+      isAllDay,
+      location,
+      description,
     }),
   })
     .then((serverEvent) => {
