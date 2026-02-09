@@ -71,6 +71,13 @@ let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 // Helpers
 // =============================================================================
 
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
   return {
     id: event.id,
@@ -603,6 +610,79 @@ export function confirmDelete(eventId: string): void {
 
   pendingMap.delete(eventId);
   fireDeleteApi(pending.event);
+}
+
+// =============================================================================
+// Event Updates (Optimistic)
+// =============================================================================
+
+export type EventPatch = {
+  title?: string;
+  description?: string;
+  location?: string;
+  start?: Date;
+  end?: Date;
+  isAllDay?: boolean;
+};
+
+/**
+ * Update an event optimistically: apply patch locally, then PATCH API.
+ * On failure, rollback to the snapshot.
+ */
+export async function updateEvent(eventId: string, patch: EventPatch): Promise<void> {
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
+
+  // Snapshot for rollback
+  const snapshot = { ...event };
+
+  // Apply optimistic update
+  setEvents((prev) =>
+    prev.map((e) =>
+      e.id === eventId
+        ? {
+            ...e,
+            ...(patch.title !== undefined && { title: patch.title }),
+            ...(patch.description !== undefined && { description: patch.description }),
+            ...(patch.location !== undefined && { location: patch.location }),
+            ...(patch.start !== undefined && { start: patch.start }),
+            ...(patch.end !== undefined && { end: patch.end }),
+            ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
+          }
+        : e
+    )
+  );
+
+  // Build API patch body
+  const apiPatch: Record<string, string | boolean> = {};
+  if (patch.title !== undefined) apiPatch.summary = patch.title;
+  if (patch.description !== undefined) apiPatch.description = patch.description;
+  if (patch.location !== undefined) apiPatch.location = patch.location;
+  if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+  if (patch.start !== undefined) {
+    apiPatch.start = patch.isAllDay
+      ? formatDateOnly(patch.start)
+      : patch.start.toISOString();
+  }
+  if (patch.end !== undefined) {
+    apiPatch.end = patch.isAllDay
+      ? formatDateOnly(patch.end)
+      : patch.end.toISOString();
+  }
+
+  try {
+    await apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(apiPatch),
+    });
+    revalidateWeeksForDates(event.start, patch.start ?? event.start);
+  } catch (error) {
+    console.error(`[events] Failed to update event ${eventId}:`, error);
+    // Rollback
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? snapshot : e))
+    );
+  }
 }
 
 // Re-export week utilities for convenience

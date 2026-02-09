@@ -2,11 +2,13 @@ import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js
 import { flashDate } from "./CalendarGrid";
 import { CalendarEvent } from "./CalendarEvent";
 import { EventPlaceholder } from "./EventPlaceholder";
+import { DragGhost } from "./DragGhost";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
 import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
+import { deselectEvent, selectedEventId } from "../../stores/event-selection";
 
 interface DayColumnProps {
   date: Date;
@@ -113,6 +115,7 @@ export function DayColumn(props: DayColumnProps) {
     const target = e.target as HTMLElement;
     if (target.closest("[data-event-id]")) {
       // Clicking on an existing event — cancel any active creation
+      // (selection is handled by CalendarEvent's onClick)
       if (isCreating()) {
         if (draftTitle().trim()) {
           commitCreation();
@@ -121,6 +124,11 @@ export function DayColumn(props: DayColumnProps) {
         }
       }
       return;
+    }
+
+    // Clicking empty space — deselect any selected event
+    if (selectedEventId()) {
+      deselectEvent();
     }
 
     // Commit/cancel any active creation first
@@ -219,6 +227,9 @@ export function DayColumn(props: DayColumnProps) {
           <CalendarEvent event={event} layout={eventLayouts().get(event.id)} columnDate={props.date} />
         )}
       </For>
+
+      {/* Ghost outline at original position during drag-to-move/resize */}
+      <DragGhost date={props.date} />
 
       {/* Event creation placeholder */}
       <EventPlaceholder date={props.date} />

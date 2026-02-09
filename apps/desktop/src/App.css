@@ -146,6 +146,13 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 30%, white);
 }
 
+/* Suppress hover lightening on focused/selected events (they use solid bg) */
+.calendar-event:focus:hover,
+.calendar-event--focused:hover,
+.calendar-event--selected:hover {
+  background-color: var(--event-color);
+}
+
 /* Focus/selected state - solid background color
    :focus applies to the clicked segment, --focused applies to all segments via signal */
 .calendar-event:focus,
@@ -156,8 +163,56 @@ body.dragging * {
 }
 
 .calendar-event:focus .calendar-event__ribbon,
-.calendar-event--focused .calendar-event__ribbon {
+.calendar-event--focused .calendar-event__ribbon,
+.calendar-event--selected .calendar-event__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
+}
+
+/* Selected state - solid background + ring to indicate sidebar editing */
+.calendar-event--selected {
+  background-color: var(--event-color);
+  color: white;
+  box-shadow: 0 0 0 2px var(--event-color), 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Dragging state - reduced opacity and elevated shadow */
+.calendar-event--dragging {
+  opacity: 0.85;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: grabbing !important;
+  pointer-events: none;
+}
+
+/* Resize handle - bottom edge of timed events */
+.calendar-event__resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  border-radius: 0 0 8px 8px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.calendar-event__resize-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 3px;
+  border-radius: 1.5px;
+  background-color: var(--event-color);
+  opacity: 0.5;
+}
+
+.calendar-event:hover .calendar-event__resize-handle,
+.calendar-event--focused .calendar-event__resize-handle,
+.calendar-event:focus .calendar-event__resize-handle {
+  opacity: 1;
 }
 
 /* All-day event chip states */
@@ -169,17 +224,24 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 25%, white);
 }
 
-.all-day-chip:focus {
+.all-day-chip:focus,
+.all-day-chip--selected {
   outline: none;
   background-color: var(--event-color);
 }
 
-.all-day-chip:focus span {
+.all-day-chip:focus span,
+.all-day-chip--selected span {
   color: white;
 }
 
-.all-day-chip:focus .all-day-chip__ribbon {
+.all-day-chip:focus .all-day-chip__ribbon,
+.all-day-chip--selected .all-day-chip__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
+}
+
+.all-day-chip--selected:hover {
+  background-color: var(--event-color);
 }
 
 /* Undo toast animations */

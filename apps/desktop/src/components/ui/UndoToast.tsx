@@ -25,16 +25,20 @@ function UndoToastItem(props: {
 
   requestAnimationFrame(() => setIsVisible(true));
 
-  const dismiss = () => {
+  const dismiss = (immediate = false) => {
     if (dismissed) return;
     if (isExiting()) return;
     dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
-    setIsExiting(true);
-    setTimeout(() => {
-      confirmDelete(props.entry.eventId);
+
+    confirmDelete(props.entry.eventId);
+
+    if (immediate) {
       props.onRemove();
-    }, EXIT_DURATION_MS);
+    } else {
+      setIsExiting(true);
+      setTimeout(() => props.onRemove(), EXIT_DURATION_MS);
+    }
   };
 
   const handleUndo = () => {
@@ -74,7 +78,7 @@ function UndoToastItem(props: {
             </div>
           </div>
           <button
-            onClick={dismiss}
+            onClick={() => dismiss(true)}
             class="text-white/40 hover:text-white transition-colors shrink-0 -mt-0.5"
             aria-label="Dismiss"
           >
@@ -97,7 +101,7 @@ function UndoToastItem(props: {
 export function UndoToast() {
   const [toasts, setToasts] = createSignal<ToastEntry[]>([]);
 
-  const unsub = onDeletion((deletion) => {
+  const unsubDelete = onDeletion((deletion) => {
     const entry: ToastEntry = {
       eventId: deletion.event.id,
       title: deletion.event.title,
@@ -105,7 +109,7 @@ export function UndoToast() {
     setToasts((prev) => [...prev, entry]);
   });
 
-  onCleanup(unsub);
+  onCleanup(() => unsubDelete());
 
   const removeToast = (eventId: string) => {
     setToasts((prev) => prev.filter((t) => t.eventId !== eventId));

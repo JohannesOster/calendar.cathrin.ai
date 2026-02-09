@@ -1,8 +1,11 @@
-import { createSignal, Show, createMemo } from "solid-js";
+import { createSignal, Show, createMemo, onCleanup } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
+import { selectEvent, selectedEventId } from "../../stores/event-selection";
+import { startMoveDrag, moveDragEventId, startResizeDrag, resizeDragEventId, dragActiveEventId } from "../../stores/event-drag";
+import { snapMinutes } from "../../stores/event-creation";
 
 // Shared signal: all segments of the focused event highlight together
 export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
@@ -49,6 +52,96 @@ export function CalendarEvent(props: CalendarEventProps) {
   const [isBurning, setIsBurning] = createSignal(false);
   const [firePosition, setFirePosition] = createSignal(0);
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
+  const isSelected = createMemo(() => selectedEventId() === props.event.id);
+  const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
+
+  /** Threshold in px for click-vs-drag detection */
+  const MOVE_DRAG_THRESHOLD = 3;
+  let cleanupDragDetection: (() => void) | null = null;
+
+  const handleResizePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    if (props.event.isAllDay) return;
+
+    const startY = e.clientY;
+    let started = false;
+
+    const onMove = (me: PointerEvent) => {
+      if (!started && Math.abs(me.clientY - startY) >= MOVE_DRAG_THRESHOLD) {
+        started = true;
+        startResizeDrag(props.event);
+      }
+    };
+
+    const onUp = () => {
+      cleanup();
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handlePointerDown = (e: PointerEvent) => {
+    // Only left button, only single-day timed events
+    if (e.button !== 0) return;
+    if (props.event.isAllDay) return;
+
+    // Don't start move drag from the resize handle
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-resize-handle]")) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+
+    const onMove = (me: PointerEvent) => {
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+      if (!started && Math.sqrt(dx * dx + dy * dy) >= MOVE_DRAG_THRESHOLD) {
+        started = true;
+
+        // Calculate cursor time offset within the event
+        const dayCol = contentRef?.closest("[data-day-column]") as HTMLElement | null;
+        if (!dayCol) return;
+        const rect = dayCol.getBoundingClientRect();
+        const mouseY = startY - rect.top;
+        const cursorMinutes = snapMinutes(Math.max(0, (mouseY / HOUR_HEIGHT_PX) * 60));
+
+        startMoveDrag(props.event, cursorMinutes);
+      }
+    };
+
+    const onUp = () => {
+      cleanup();
+      if (!started) {
+        // Was a click, not a drag — select + focus the event
+        // (preventDefault on pointerdown suppresses native focus)
+        contentRef?.focus();
+        selectEvent(props.event.id);
+      }
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      cleanupDragDetection = null;
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    cleanupDragDetection = cleanup;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  onCleanup(() => cleanupDragDetection?.());
 
   const isSameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() &&
@@ -120,7 +213,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   // Get layout-aware positioning
   const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`;
   const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
-  const getZIndex = () => (isFocused() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
+  const getZIndex = () => (isFocused() || isSelected() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
   const hasOverlap = () => props.layout?.overlaps ?? false;
 
   return (
@@ -140,15 +233,23 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""}`}
+        class={`absolute inset-0 rounded-lg transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
         tabIndex={0}
         role="button"
         aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
+        aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
+        onPointerDown={handlePointerDown}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selectEvent(props.event.id);
+          }
+        }}
       >
         {/* Inner layout - ribbon + content side by side */}
         <div class="flex h-full">
@@ -180,6 +281,16 @@ export function CalendarEvent(props: CalendarEventProps) {
             </Show>
           </div>
         </div>
+
+        {/* Resize handle — bottom edge, visible on hover */}
+        <Show when={!props.event.isAllDay}>
+          <div
+            data-resize-handle
+            class="calendar-event__resize-handle"
+            aria-label="Resize event duration"
+            onPointerDown={handleResizePointerDown}
+          />
+        </Show>
       </div>
 
       {/* Fire GIF overlay - sibling to content, not clipped */}
