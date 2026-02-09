@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createMemo, Show, For } from "solid-js";
+import { onMount, onCleanup, createSignal, createMemo, Show, For } from "solid-js";
 import {
   Clock,
   ArrowRight,
@@ -59,9 +59,65 @@ function formatDate(date: Date): string {
   });
 }
 
+/** Convert Date to "HH:MM" string for <input type="time"> */
+function toTimeInputValue(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Apply "HH:MM" string to an existing Date, preserving the date portion */
+function applyTimeToDate(date: Date, timeValue: string): Date {
+  const [hours, minutes] = timeValue.split(":").map(Number);
+  const result = new Date(date);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}
+
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
   let formRef: HTMLDivElement | undefined;
+  const [editingTime, setEditingTime] = createSignal<"start" | "end" | null>(null);
+
+  function confirmTimeEdit(which: "start" | "end", inputEl: HTMLInputElement): void {
+    const value = inputEl.value;
+    if (!value) {
+      setEditingTime(null);
+      return;
+    }
+
+    const baseDate = which === "start" ? draftStart()! : draftEnd()!;
+    const newDate = applyTimeToDate(baseDate, value);
+
+    if (which === "start") {
+      setDraftStart(newDate);
+      // Auto-adjust end if it's now before or equal to start
+      if (draftEnd()! <= newDate) {
+        const adjusted = new Date(newDate);
+        adjusted.setHours(adjusted.getHours() + 1);
+        setDraftEnd(adjusted);
+      }
+    } else {
+      // If end is before start, auto-adjust to start + 1 hour
+      if (newDate <= draftStart()!) {
+        const adjusted = new Date(draftStart()!);
+        adjusted.setHours(adjusted.getHours() + 1);
+        setDraftEnd(adjusted);
+      } else {
+        setDraftEnd(newDate);
+      }
+    }
+
+    setEditingTime(null);
+  }
+
+  function handleTimeKeyDown(which: "start" | "end", e: KeyboardEvent): void {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmTimeEdit(which, e.currentTarget as HTMLInputElement);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setEditingTime(null);
+    }
+  }
 
   // Auto-focus title input
   onMount(() => {
@@ -148,9 +204,69 @@ export function EventForm() {
           <Show when={draftStart() && draftEnd() && !draftIsAllDay()}>
             <div class="flex items-center gap-2 text-sm text-fg">
               <Clock size={14} class="text-fg-muted shrink-0" />
-              <span class="whitespace-nowrap">{formatTime(draftStart()!)}</span>
+              {/* Start time: click-to-edit */}
+              <Show
+                when={editingTime() === "start"}
+                fallback={
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Start time"
+                    class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
+                    onClick={() => setEditingTime("start")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditingTime("start");
+                      }
+                    }}
+                  >
+                    {formatTime(draftStart()!)}
+                  </span>
+                }
+              >
+                <input
+                  type="time"
+                  aria-label="Start time"
+                  value={toTimeInputValue(draftStart()!)}
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  onBlur={(e) => confirmTimeEdit("start", e.currentTarget)}
+                  onKeyDown={(e) => handleTimeKeyDown("start", e)}
+                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[5.5rem]"
+                />
+              </Show>
               <ArrowRight size={14} class="text-fg-muted shrink-0" />
-              <span class="whitespace-nowrap">{formatTime(draftEnd()!)}</span>
+              {/* End time: click-to-edit */}
+              <Show
+                when={editingTime() === "end"}
+                fallback={
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="End time"
+                    class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
+                    onClick={() => setEditingTime("end")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditingTime("end");
+                      }
+                    }}
+                  >
+                    {formatTime(draftEnd()!)}
+                  </span>
+                }
+              >
+                <input
+                  type="time"
+                  aria-label="End time"
+                  value={toTimeInputValue(draftEnd()!)}
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  onBlur={(e) => confirmTimeEdit("end", e.currentTarget)}
+                  onKeyDown={(e) => handleTimeKeyDown("end", e)}
+                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[5.5rem]"
+                />
+              </Show>
               <Show when={formatDate(draftStart()!) === formatDate(draftEnd()!)}>
                 <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(draftStart()!, draftEnd()!)}</span>
               </Show>
