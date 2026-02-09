@@ -197,8 +197,8 @@ export const eventsRoute = new Hono()
       z.object({
         calendarId: z.string().min(1),
         title: z.string().min(1),
-        start: z.string().datetime(),
-        end: z.string().datetime(),
+        start: z.union([z.string().datetime(), z.string().date()]),
+        end: z.union([z.string().datetime(), z.string().date()]),
         isAllDay: z.boolean().optional(),
         location: z.string().optional(),
         description: z.string().optional(),
