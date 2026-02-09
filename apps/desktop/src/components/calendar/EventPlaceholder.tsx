@@ -4,7 +4,10 @@ import {
   draftStart,
   draftEnd,
   draftTitle,
+  draftIsAllDay,
   getDraftColor,
+  shadowStart,
+  shadowEnd,
 } from "../../stores/event-creation";
 import {
   HOUR_HEIGHT_PX,
@@ -41,7 +44,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
   const segment = createMemo<"none" | "only" | "first" | "middle" | "last">(() => {
     const start = draftStart();
     const end = draftEnd();
-    if (!isCreating() || !start || !end) return "none";
+    if (!isCreating() || !start || !end || draftIsAllDay()) return "none";
 
     const colDay = toMidnight(props.date).getTime();
     const startDay = toMidnight(start).getTime();
@@ -118,7 +121,77 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     return `${displayHour}:${minutes.toString().padStart(2, "0")}${period}`;
   };
 
+  // Shadow segment: shows where the event WAS before inline time editing
+  const shadowSegment = createMemo<"none" | "only" | "first" | "middle" | "last">(() => {
+    const start = shadowStart();
+    const end = shadowEnd();
+    if (!isCreating() || !start || !end || draftIsAllDay()) return "none";
+
+    const colDay = toMidnight(props.date).getTime();
+    const startDay = toMidnight(start).getTime();
+    const endTime = end.getTime();
+    const endForRange = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0
+      ? endTime - 1
+      : endTime;
+    const endDay = toMidnight(new Date(endForRange)).getTime();
+
+    if (colDay < startDay || colDay > endDay) return "none";
+    if (startDay === endDay) return "only";
+    if (colDay === startDay) return "first";
+    if (colDay === endDay) return "last";
+    return "middle";
+  });
+
+  const shadowVisible = createMemo(() => shadowSegment() !== "none");
+
+  const getShadowTop = () => {
+    const seg = shadowSegment();
+    if (seg === "middle" || seg === "last") return 0;
+    const start = shadowStart();
+    if (!start) return 0;
+    return (start.getHours() + start.getMinutes() / 60) * HOUR_HEIGHT_PX;
+  };
+
+  const getShadowHeight = () => {
+    const seg = shadowSegment();
+    const start = shadowStart();
+    const end = shadowEnd();
+    if (!start || !end) return MIN_EVENT_HEIGHT_PX;
+
+    if (seg === "only") {
+      const durationMs = end.getTime() - start.getTime();
+      const rawHeight = (durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX;
+      return Math.max(rawHeight, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "first") {
+      const startMinutes = start.getHours() * 60 + start.getMinutes();
+      return Math.max(((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
+    }
+    if (seg === "last") {
+      const endMinutes = end.getHours() * 60 + end.getMinutes();
+      return Math.max((endMinutes / 60) * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
+    }
+    return TOTAL_GRID_HEIGHT_PX;
+  };
+
   return (
+    <>
+    {/* Shadow/ghost at original position during inline time editing */}
+    <Show when={shadowVisible()}>
+      <div
+        class="absolute rounded-lg pointer-events-none"
+        style={{
+          top: `${getShadowTop()}px`,
+          height: `${getShadowHeight()}px`,
+          left: `${EVENT_MARGIN_LEFT_PX}px`,
+          width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
+          "background-color": getDraftColor(),
+          opacity: "0.15",
+          "z-index": "49",
+          border: `1px dashed ${getDraftColor()}`,
+        }}
+      />
+    </Show>
     <Show when={isVisible()}>
       <div
         data-event-placeholder
@@ -184,5 +257,6 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
         </div>
       </div>
     </Show>
+    </>
   );
 }

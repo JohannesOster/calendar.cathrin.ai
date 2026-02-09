@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createSignal, createMemo, Show, For } from "solid-js";
+import { onMount, onCleanup, createSignal, createMemo, Show, For, batch } from "solid-js";
 import {
   Clock,
   ArrowRight,
@@ -28,6 +28,10 @@ import {
   commitCreation,
   cancelCreation,
   getDraftColor,
+  shadowStart,
+  setShadowStart,
+  shadowEnd,
+  setShadowEnd,
 } from "../../stores/event-creation";
 import { connectedAccounts } from "../../stores/accounts";
 
@@ -59,33 +63,71 @@ function formatDate(date: Date): string {
   });
 }
 
-/** Convert Date to "HH:MM" string for <input type="time"> */
-function toTimeInputValue(date: Date): string {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+/** Convert Date to "H:MM" display string for the text input */
+function toTimeText(date: Date): string {
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-/** Apply "HH:MM" string to an existing Date, preserving the date portion */
-function applyTimeToDate(date: Date, timeValue: string): Date {
-  const [hours, minutes] = timeValue.split(":").map(Number);
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
+/**
+ * Parse a partial time string to hours and minutes.
+ * Rules:
+ * - Empty → 0:00 (midnight)
+ * - "12:1" → 12:01 (minutes are the literal number, not left-shifted)
+ * - "9" → 9:00
+ * - "13:5" → 13:05
+ * - "25" → clamped to 23
+ * Returns null only if the input contains non-numeric/non-colon characters.
+ */
+function parseTimeInput(value: string): { hours: number; minutes: number } | null {
+  const trimmed = value.trim();
+  if (trimmed === "") return { hours: 0, minutes: 0 };
+
+  // Allow only digits and one colon
+  if (!/^[\d:]*$/.test(trimmed)) return null;
+
+  const parts = trimmed.split(":");
+  if (parts.length > 2) return null;
+
+  const hourStr = parts[0];
+  const minStr = parts[1] ?? "";
+
+  const hours = hourStr === "" ? 0 : Math.min(parseInt(hourStr, 10) || 0, 23);
+  const minutes = minStr === "" ? 0 : Math.min(parseInt(minStr, 10) || 0, 59);
+
+  return { hours, minutes };
 }
 
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
   let formRef: HTMLDivElement | undefined;
+  // Remember timed start/end when switching to all-day so we can restore them
+  let savedTimedStart: Date | null = null;
+  let savedTimedEnd: Date | null = null;
   const [editingTime, setEditingTime] = createSignal<"start" | "end" | null>(null);
+  const [startTimeText, setStartTimeText] = createSignal("");
+  const [endTimeText, setEndTimeText] = createSignal("");
 
-  function confirmTimeEdit(which: "start" | "end", inputEl: HTMLInputElement): void {
-    const value = inputEl.value;
-    if (!value) {
-      setEditingTime(null);
-      return;
+  function beginTimeEdit(which: "start" | "end"): void {
+    // Store shadow position (original time before editing)
+    setShadowStart(draftStart() ? new Date(draftStart()!) : null);
+    setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
+
+    if (which === "start") {
+      setStartTimeText(toTimeText(draftStart()!));
+    } else {
+      setEndTimeText(toTimeText(draftEnd()!));
     }
+    setEditingTime(which);
+  }
+
+  /** Apply parsed time to the draft, updating the event chip position live */
+  function applyTimeLive(which: "start" | "end", value: string): void {
+    const parsed = parseTimeInput(value);
+    if (!parsed) return;
 
     const baseDate = which === "start" ? draftStart()! : draftEnd()!;
-    const newDate = applyTimeToDate(baseDate, value);
+    const newDate = new Date(baseDate);
+    newDate.setHours(parsed.hours, parsed.minutes, 0, 0);
 
     if (which === "start") {
       setDraftStart(newDate);
@@ -105,17 +147,45 @@ export function EventForm() {
         setDraftEnd(newDate);
       }
     }
+  }
 
-    setEditingTime(null);
+  function handleTimeInput(which: "start" | "end", value: string): void {
+    if (which === "start") {
+      setStartTimeText(value);
+    } else {
+      setEndTimeText(value);
+    }
+    applyTimeLive(which, value);
+  }
+
+  function finishTimeEdit(): void {
+    batch(() => {
+      setEditingTime(null);
+      setShadowStart(null);
+      setShadowEnd(null);
+    });
+  }
+
+  function revertTimeEdit(): void {
+    // Restore original position from shadow before clearing
+    const origStart = shadowStart();
+    const origEnd = shadowEnd();
+    batch(() => {
+      if (origStart) setDraftStart(origStart);
+      if (origEnd) setDraftEnd(origEnd);
+      setEditingTime(null);
+      setShadowStart(null);
+      setShadowEnd(null);
+    });
   }
 
   function handleTimeKeyDown(which: "start" | "end", e: KeyboardEvent): void {
     if (e.key === "Enter") {
       e.preventDefault();
-      confirmTimeEdit(which, e.currentTarget as HTMLInputElement);
+      finishTimeEdit();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      setEditingTime(null);
+      revertTimeEdit();
     }
   }
 
@@ -204,7 +274,7 @@ export function EventForm() {
           <Show when={draftStart() && draftEnd() && !draftIsAllDay()}>
             <div class="flex items-center gap-2 text-sm text-fg">
               <Clock size={14} class="text-fg-muted shrink-0" />
-              {/* Start time: click-to-edit */}
+              {/* Start time: click-to-edit with live updates */}
               <Show
                 when={editingTime() === "start"}
                 fallback={
@@ -213,11 +283,11 @@ export function EventForm() {
                     tabIndex={0}
                     aria-label="Start time"
                     class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
-                    onClick={() => setEditingTime("start")}
+                    onClick={() => beginTimeEdit("start")}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setEditingTime("start");
+                        beginTimeEdit("start");
                       }
                     }}
                   >
@@ -226,17 +296,20 @@ export function EventForm() {
                 }
               >
                 <input
-                  type="time"
+                  type="text"
+                  inputMode="numeric"
                   aria-label="Start time"
-                  value={toTimeInputValue(draftStart()!)}
-                  ref={(el) => requestAnimationFrame(() => el.focus())}
-                  onBlur={(e) => confirmTimeEdit("start", e.currentTarget)}
+                  value={startTimeText()}
+                  ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
+                  onInput={(e) => handleTimeInput("start", e.currentTarget.value)}
+                  onBlur={() => finishTimeEdit()}
                   onKeyDown={(e) => handleTimeKeyDown("start", e)}
-                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[5.5rem]"
+                  placeholder="0:00"
+                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
                 />
               </Show>
               <ArrowRight size={14} class="text-fg-muted shrink-0" />
-              {/* End time: click-to-edit */}
+              {/* End time: click-to-edit with live updates */}
               <Show
                 when={editingTime() === "end"}
                 fallback={
@@ -245,11 +318,11 @@ export function EventForm() {
                     tabIndex={0}
                     aria-label="End time"
                     class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
-                    onClick={() => setEditingTime("end")}
+                    onClick={() => beginTimeEdit("end")}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setEditingTime("end");
+                        beginTimeEdit("end");
                       }
                     }}
                   >
@@ -258,13 +331,16 @@ export function EventForm() {
                 }
               >
                 <input
-                  type="time"
+                  type="text"
+                  inputMode="numeric"
                   aria-label="End time"
-                  value={toTimeInputValue(draftEnd()!)}
-                  ref={(el) => requestAnimationFrame(() => el.focus())}
-                  onBlur={(e) => confirmTimeEdit("end", e.currentTarget)}
+                  value={endTimeText()}
+                  ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
+                  onInput={(e) => handleTimeInput("end", e.currentTarget.value)}
+                  onBlur={() => finishTimeEdit()}
                   onKeyDown={(e) => handleTimeKeyDown("end", e)}
-                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[5.5rem]"
+                  placeholder="0:00"
+                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
                 />
               </Show>
               <Show when={formatDate(draftStart()!) === formatDate(draftEnd()!)}>
@@ -295,11 +371,20 @@ export function EventForm() {
                 const wasAllDay = draftIsAllDay();
                 setDraftIsAllDay(!wasAllDay);
                 if (!wasAllDay) {
-                  // Switching timed → all-day: keep date, will strip time on commit
+                  // Switching timed → all-day: save current times for later restore
+                  savedTimedStart = draftStart() ? new Date(draftStart()!) : null;
+                  savedTimedEnd = draftEnd() ? new Date(draftEnd()!) : null;
                 } else {
-                  // Switching all-day → timed: add default times
+                  // Switching all-day → timed: restore saved times (or fall back to 9–10 AM)
                   const start = draftStart();
-                  if (start) {
+                  if (start && savedTimedStart && savedTimedEnd) {
+                    const newStart = new Date(start);
+                    newStart.setHours(savedTimedStart.getHours(), savedTimedStart.getMinutes(), 0, 0);
+                    const newEnd = new Date(start);
+                    newEnd.setHours(savedTimedEnd.getHours(), savedTimedEnd.getMinutes(), 0, 0);
+                    setDraftStart(newStart);
+                    setDraftEnd(newEnd);
+                  } else if (start) {
                     const newStart = new Date(start);
                     newStart.setHours(9, 0, 0, 0);
                     const newEnd = new Date(start);
