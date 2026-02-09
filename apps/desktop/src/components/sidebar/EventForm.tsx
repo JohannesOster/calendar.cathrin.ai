@@ -1,277 +1,28 @@
-import { onMount, onCleanup, createSignal, createMemo, createEffect, on, Show, For, batch } from "solid-js";
-import {
-  Clock,
-  ArrowRight,
-  Users,
-  Video,
-  MapPin,
-  FileText,
-  AlignLeft,
-  Bell,
-  ChevronDown,
-} from "lucide-solid";
-import { Switch } from "@ark-ui/solid/switch";
-import { Select, createListCollection } from "@ark-ui/solid/select";
+import { onMount, onCleanup } from "solid-js";
 import {
   isCreating,
-  draftStart,
-  draftEnd,
-  setDraftStart,
-  setDraftEnd,
   draftTitle,
-  setDraftTitle,
-  draftCalendarId,
-  setDraftCalendarId,
-  draftIsAllDay,
-  setDraftIsAllDay,
-  draftLocation,
-  setDraftLocation,
-  draftDescription,
-  setDraftDescription,
   commitCreation,
   cancelCreation,
-  getDraftColor,
-  shadowStart,
-  setShadowStart,
-  shadowEnd,
-  setShadowEnd,
 } from "../../stores/event-creation";
-import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, setEvents, type EventPatch } from "../../stores/events";
-import { connectedAccounts } from "../../stores/accounts";
+import { useEventFormState } from "./useEventFormState";
 import {
-  formatTime,
-  formatDuration,
-  formatDate,
-  toTimeText,
-  parseTimeInput,
-} from "../../lib/format-utils";
-
-// =============================================================================
-// Mode detection
-// =============================================================================
-
-type FormMode = "create" | "edit";
+  TimeSection,
+  DetailsSection,
+  DescriptionSection,
+  CalendarSection,
+  RemindersSection,
+} from "./EventFormSections";
 
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
   let formRef: HTMLDivElement | undefined;
-  // Remember timed start/end when switching to all-day so we can restore them
-  let savedTimedStart: Date | null = null;
-  let savedTimedEnd: Date | null = null;
-  const [editingTime, setEditingTime] = createSignal<"start" | "end" | null>(null);
-  const [startTimeText, setStartTimeText] = createSignal("");
-  const [endTimeText, setEndTimeText] = createSignal("");
 
-  // Edit mode: local signals for editing fields (not persisted until autosave in #111)
-  const [editTitle, setEditTitle] = createSignal("");
-  const [editStart, setEditStart] = createSignal<Date | null>(null);
-  const [editEnd, setEditEnd] = createSignal<Date | null>(null);
-  const [editLocation, setEditLocation] = createSignal("");
-  const [editDescription, setEditDescription] = createSignal("");
-  const [editIsAllDay, setEditIsAllDay] = createSignal(false);
-  const [editCalendarId, setEditCalendarId] = createSignal<string | null>(null);
-
-  const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
-
-  // =========================================================================
-  // Autosave infrastructure (edit mode only)
-  // =========================================================================
-  let pendingPatch: EventPatch = {};
-
-  /** Accumulate a field change. Flushed on blur via flushSave(). */
-  function scheduleSave(patch: EventPatch): void {
-    Object.assign(pendingPatch, patch);
-  }
-
-  function flushSave(): void {
-    const eventId = selectedEventId();
-    if (!eventId || Object.keys(pendingPatch).length === 0) return;
-
-    const patchToSend = { ...pendingPatch };
-    pendingPatch = {};
-    updateEvent(eventId, patchToSend).catch((err) =>
-      console.error("Failed to save event update:", err)
-    );
-  }
-
-  // Flush pending save when deselecting (sidebar closes)
-  createEffect(on(selectedEventId, (id, prevId) => {
-    if (!id && prevId) {
-      flushSave();
-    }
-  }));
-
-  // Flush on unmount
-  onCleanup(() => flushSave());
-
-  // Populate edit signals whenever the selected event changes
-  createEffect(on(selectedEvent, (event) => {
-    if (!event) return;
-    // Clear any pending saves for the previous event
-    pendingPatch = {};
-
-    setEditTitle(event.title);
-    setEditStart(new Date(event.start));
-    setEditEnd(new Date(event.end));
-    setEditLocation(event.location ?? "");
-    setEditDescription(event.description ?? "");
-    setEditIsAllDay(event.isAllDay);
-    setEditCalendarId(event.calendarId);
-    savedTimedStart = null;
-    savedTimedEnd = null;
-  }));
-
-  // Unified accessors — read from the right signal based on mode
-  // In edit mode, setters also schedule an autosave
-  const title = () => mode() === "create" ? draftTitle() : editTitle();
-  const setTitle = (v: string) => {
-    if (mode() === "create") { setDraftTitle(v); }
-    else {
-      setEditTitle(v);
-      // Live-update the chip title on the calendar grid
-      const eventId = selectedEventId();
-      if (eventId) {
-        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, title: v } : e));
-      }
-      scheduleSave({ title: v });
-    }
-  };
-  const start = () => mode() === "create" ? draftStart() : editStart();
-  const setStart = (v: Date) => {
-    if (mode() === "create") { setDraftStart(v); }
-    else { setEditStart(v); scheduleSave({ start: v }); }
-  };
-  const end = () => mode() === "create" ? draftEnd() : editEnd();
-  const setEnd = (v: Date) => {
-    if (mode() === "create") { setDraftEnd(v); }
-    else { setEditEnd(v); scheduleSave({ end: v }); }
-  };
-  const location = () => mode() === "create" ? draftLocation() : editLocation();
-  const setLocation = (v: string) => {
-    if (mode() === "create") { setDraftLocation(v); }
-    else { setEditLocation(v); scheduleSave({ location: v }); }
-  };
-  const description = () => mode() === "create" ? draftDescription() : editDescription();
-  const setDescription = (v: string) => {
-    if (mode() === "create") { setDraftDescription(v); }
-    else { setEditDescription(v); scheduleSave({ description: v }); }
-  };
-  const isAllDay = () => mode() === "create" ? draftIsAllDay() : editIsAllDay();
-  const setIsAllDay = (v: boolean) => {
-    if (mode() === "create") { setDraftIsAllDay(v); return; }
-    setEditIsAllDay(v);
-  };
-  const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
-  const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
-
-  const eventColor = createMemo(() => {
-    if (mode() === "create") return getDraftColor();
-    const event = selectedEvent();
-    return event?.color ?? "#4285f4";
-  });
-
-  function beginTimeEdit(which: "start" | "end"): void {
-    if (mode() === "create") {
-      // Store shadow position (original time before editing)
-      setShadowStart(draftStart() ? new Date(draftStart()!) : null);
-      setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
-    }
-
-    if (which === "start") {
-      setStartTimeText(toTimeText(start()!));
-    } else {
-      setEndTimeText(toTimeText(end()!));
-    }
-    setEditingTime(which);
-  }
-
-  /** Apply parsed time to the draft/edit, updating the event chip position live */
-  function applyTimeLive(which: "start" | "end", value: string): void {
-    const parsed = parseTimeInput(value);
-    if (!parsed) return;
-
-    const baseDate = which === "start" ? start()! : end()!;
-    const newDate = new Date(baseDate);
-    newDate.setHours(parsed.hours, parsed.minutes, 0, 0);
-
-    if (which === "start") {
-      setStart(newDate);
-      // Auto-adjust end if it's now before or equal to start
-      if (end()! <= newDate) {
-        const adjusted = new Date(newDate);
-        adjusted.setHours(adjusted.getHours() + 1);
-        setEnd(adjusted);
-      }
-    } else {
-      // If end is before start, auto-adjust to start + 1 hour
-      if (newDate <= start()!) {
-        const adjusted = new Date(start()!);
-        adjusted.setHours(adjusted.getHours() + 1);
-        setEnd(adjusted);
-      } else {
-        setEnd(newDate);
-      }
-    }
-  }
-
-  function handleTimeInput(which: "start" | "end", value: string): void {
-    if (which === "start") {
-      setStartTimeText(value);
-    } else {
-      setEndTimeText(value);
-    }
-    applyTimeLive(which, value);
-  }
-
-  function finishTimeEdit(): void {
-    batch(() => {
-      setEditingTime(null);
-      if (mode() === "create") {
-        setShadowStart(null);
-        setShadowEnd(null);
-      }
-    });
-    // Flush time changes immediately on blur
-    if (mode() === "edit") flushSave();
-  }
-
-  function revertTimeEdit(): void {
-    if (mode() === "create") {
-      // Restore original position from shadow before clearing
-      const origStart = shadowStart();
-      const origEnd = shadowEnd();
-      batch(() => {
-        if (origStart) setDraftStart(origStart);
-        if (origEnd) setDraftEnd(origEnd);
-        setEditingTime(null);
-        setShadowStart(null);
-        setShadowEnd(null);
-      });
-    } else {
-      // In edit mode, revert to the selected event's times
-      const event = selectedEvent();
-      if (event) {
-        setEditStart(new Date(event.start));
-        setEditEnd(new Date(event.end));
-      }
-      setEditingTime(null);
-    }
-  }
-
-  function handleTimeKeyDown(e: KeyboardEvent): void {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      finishTimeEdit();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      revertTimeEdit();
-    }
-  }
+  const state = useEventFormState();
 
   // Auto-focus title input in create mode only
   onMount(() => {
-    if (mode() === "create") {
+    if (state.mode() === "create") {
       // Small delay to ensure DOM is ready after sidebar content switch
       requestAnimationFrame(() => {
         titleInputRef?.focus();
@@ -308,7 +59,7 @@ export function EventForm() {
   });
 
   const handleTitleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && mode() === "create") {
+    if (e.key === "Enter" && state.mode() === "create") {
       e.preventDefault();
       if (draftTitle().trim()) {
         commitCreation();
@@ -316,24 +67,6 @@ export function EventForm() {
     }
     // Escape is handled by CalendarGrid's document-level handler
   };
-
-  // All visible calendars for the selector
-  const allCalendars = createMemo(() => {
-    return connectedAccounts()
-      .flatMap((a) =>
-        a.calendars
-          .filter((c) => c.visible)
-          .map((c) => ({ ...c, accountEmail: a.email }))
-      );
-  });
-
-  const calendarCollection = createMemo(() =>
-    createListCollection({
-      items: allCalendars(),
-      itemToValue: (item) => item.id,
-      itemToString: (item) => item.name,
-    })
-  );
 
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
@@ -344,287 +77,19 @@ export function EventForm() {
             ref={titleInputRef}
             type="text"
             placeholder="Title"
-            value={title()}
-            onInput={(e) => setTitle(e.currentTarget.value)}
-            onBlur={() => { if (mode() === "edit") flushSave(); }}
+            value={state.title()}
+            onInput={(e) => state.setTitle(e.currentTarget.value)}
+            onBlur={() => { if (state.mode() === "edit") state.flushSave(); }}
             onKeyDown={handleTitleKeyDown}
             class="w-full text-lg font-medium text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
           />
         </div>
 
-        {/* Time section */}
-        <div class="px-3 py-2 border-t border-border space-y-1.5">
-          {/* Start time + End time on one row (hidden for all-day) */}
-          <Show when={start() && end() && !isAllDay()}>
-            <div class="flex items-center gap-2 text-sm text-fg">
-              <Clock size={14} class="text-fg-muted shrink-0" />
-              {/* Start time: click-to-edit with live updates */}
-              <Show
-                when={editingTime() === "start"}
-                fallback={
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Start time"
-                    class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
-                    onClick={() => beginTimeEdit("start")}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        beginTimeEdit("start");
-                      }
-                    }}
-                  >
-                    {formatTime(start()!)}
-                  </span>
-                }
-              >
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  aria-label="Start time"
-                  value={startTimeText()}
-                  ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
-                  onInput={(e) => handleTimeInput("start", e.currentTarget.value)}
-                  onBlur={() => finishTimeEdit()}
-                  onKeyDown={handleTimeKeyDown}
-                  placeholder="0:00"
-                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
-                />
-              </Show>
-              <ArrowRight size={14} class="text-fg-muted shrink-0" />
-              {/* End time: click-to-edit with live updates */}
-              <Show
-                when={editingTime() === "end"}
-                fallback={
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    aria-label="End time"
-                    class="whitespace-nowrap cursor-pointer hover:bg-surface-hover rounded px-0.5 -mx-0.5"
-                    onClick={() => beginTimeEdit("end")}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        beginTimeEdit("end");
-                      }
-                    }}
-                  >
-                    {formatTime(end()!)}
-                  </span>
-                }
-              >
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  aria-label="End time"
-                  value={endTimeText()}
-                  ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
-                  onInput={(e) => handleTimeInput("end", e.currentTarget.value)}
-                  onBlur={() => finishTimeEdit()}
-                  onKeyDown={handleTimeKeyDown}
-                  placeholder="0:00"
-                  class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
-                />
-              </Show>
-              <Show when={formatDate(start()!) === formatDate(end()!)}>
-                <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(start()!, end()!)}</span>
-              </Show>
-            </div>
-          </Show>
-          {/* Date row */}
-          <Show when={start() && end()}>
-            <div class={`flex gap-4 text-sm text-fg ${isAllDay() ? "ml-0" : "ml-[22px]"}`}>
-              <Show when={isAllDay()}>
-                <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
-              </Show>
-              <span>{formatDate(start()!)}</span>
-              <Show when={formatDate(start()!) !== formatDate(end()!)}>
-                <span>{formatDate(end()!)}</span>
-              </Show>
-            </div>
-          </Show>
-          {/* All-day toggle + stubs */}
-          <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
-            <Switch.Root
-              checked={isAllDay()}
-              onCheckedChange={() => {
-                const wasAllDay = isAllDay();
-                const s = start()!;
-                const editing = mode() === "edit";
-
-                if (!wasAllDay) {
-                  // Timed → all-day: save current times, set UTC midnight dates
-                  savedTimedStart = new Date(s);
-                  savedTimedEnd = end() ? new Date(end()!) : null;
-
-                  // All-day events use UTC midnight dates (matching Google's format)
-                  const allDayStart = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate()));
-                  const e = end() ?? s;
-                  const allDayEnd = new Date(Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1));
-
-                  setIsAllDay(true);
-                  if (editing) {
-                    setEditStart(allDayStart);
-                    setEditEnd(allDayEnd);
-                    scheduleSave({ isAllDay: true, start: allDayStart, end: allDayEnd });
-                    flushSave();
-                  }
-                } else {
-                  // All-day → timed: restore saved times or default to 12pm + 1h
-                  let newStart: Date;
-                  let newEnd: Date;
-                  if (savedTimedStart && savedTimedEnd) {
-                    newStart = new Date(s);
-                    newStart.setHours(savedTimedStart.getHours(), savedTimedStart.getMinutes(), 0, 0);
-                    newEnd = new Date(s);
-                    newEnd.setHours(savedTimedEnd.getHours(), savedTimedEnd.getMinutes(), 0, 0);
-                  } else {
-                    newStart = new Date(s);
-                    newStart.setHours(12, 0, 0, 0);
-                    newEnd = new Date(s);
-                    newEnd.setHours(13, 0, 0, 0);
-                  }
-
-                  setIsAllDay(false);
-                  if (editing) {
-                    setEditStart(newStart);
-                    setEditEnd(newEnd);
-                    scheduleSave({ isAllDay: false, start: newStart, end: newEnd });
-                    flushSave();
-                  } else {
-                    setDraftStart(newStart);
-                    setDraftEnd(newEnd);
-                  }
-                }
-              }}
-              class="inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <Switch.Label class="text-xs text-fg-disabled cursor-pointer">All-day</Switch.Label>
-              <Switch.Control
-                class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
-                  isAllDay() ? "bg-accent" : "bg-border-light"
-                }`}
-              >
-                <Switch.Thumb
-                  class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
-                    isAllDay() ? "translate-x-3" : "translate-x-0"
-                  }`}
-                />
-              </Switch.Control>
-              <Switch.HiddenInput />
-            </Switch.Root>
-            <span>Time zone</span>
-            <span>Repeat</span>
-          </div>
-        </div>
-
-        {/* Participants, Conferencing, Location, Docs */}
-        <div class="px-3 py-2 border-t border-border space-y-2">
-          <div class="flex items-center gap-2 text-sm text-fg-disabled">
-            <Users size={14} class="shrink-0" />
-            <span>Participants</span>
-          </div>
-          <div class="flex items-center gap-2 text-sm text-fg-disabled">
-            <Video size={14} class="shrink-0" />
-            <span>Conferencing</span>
-          </div>
-          <div class="flex items-center gap-2 text-sm">
-            <MapPin size={14} class="text-fg-muted shrink-0" />
-            <input
-              type="text"
-              placeholder="Add location"
-              aria-label="Location"
-              value={location()}
-              onInput={(e) => setLocation(e.currentTarget.value)}
-              onBlur={() => { if (mode() === "edit") flushSave(); }}
-              class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
-            />
-          </div>
-          <div class="flex items-center gap-2 text-sm text-fg-disabled">
-            <FileText size={14} class="shrink-0" />
-            <span>Docs and links</span>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div class="px-3 py-2 border-t border-border">
-          <div class="flex items-start gap-2">
-            <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
-            <div class="flex-1 grid" style={{ "grid-template-columns": "1fr" }}>
-              <textarea
-                placeholder="Add description"
-                aria-label="Description"
-                value={description()}
-                onInput={(e) => setDescription(e.currentTarget.value)}
-                onBlur={() => { if (mode() === "edit") flushSave(); }}
-                class="text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none resize-none overflow-hidden row-start-1 col-start-1"
-                rows={2}
-                style={{ "grid-area": "1 / 1 / 2 / 2" }}
-              />
-              <div
-                class="invisible whitespace-pre-wrap text-sm row-start-1 col-start-1 overflow-hidden max-h-40"
-                style={{ "grid-area": "1 / 1 / 2 / 2" }}
-                aria-hidden="true"
-              >
-                {description() + " "}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Calendar selector + status */}
-        <div class="px-3 py-2 border-t border-border space-y-2">
-          <Select.Root
-            collection={calendarCollection()}
-            value={calendarId() ? [calendarId()!] : []}
-            onValueChange={(details) => {
-              setCalId(details.value[0] ?? null);
-            }}
-            positioning={{ placement: "bottom-start", sameWidth: true }}
-          >
-            <Select.Control class="flex items-center gap-2">
-              <div
-                class="w-3 h-3 rounded-full shrink-0"
-                style={{ "background-color": eventColor() }}
-              />
-              <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
-                <Select.ValueText placeholder="Select calendar" />
-                <ChevronDown size={12} class="text-fg-muted shrink-0" />
-              </Select.Trigger>
-            </Select.Control>
-            <Select.Positioner>
-              <Select.Content class="bg-surface border border-border rounded-lg shadow-lg py-1 z-50 max-h-48 overflow-y-auto">
-                <For each={allCalendars()}>
-                  {(cal) => (
-                    <Select.Item
-                      item={cal}
-                      class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
-                    >
-                      <div
-                        class="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ "background-color": cal.color }}
-                      />
-                      <Select.ItemText>{cal.name}</Select.ItemText>
-                    </Select.Item>
-                  )}
-                </For>
-              </Select.Content>
-            </Select.Positioner>
-            <Select.HiddenSelect />
-          </Select.Root>
-          <div class="ml-[20px] text-xs text-fg-disabled">Busy</div>
-          <div class="ml-[20px] text-xs text-fg-disabled">Default visibility</div>
-        </div>
-
-        {/* Reminders */}
-        <div class="px-3 py-2 border-t border-border space-y-1">
-          <div class="flex items-center gap-2 text-sm text-fg-disabled">
-            <Bell size={14} class="shrink-0" />
-            <span>Reminders</span>
-          </div>
-          <div class="ml-[22px] text-xs text-fg-disabled">30min before</div>
-        </div>
+        <TimeSection state={state} />
+        <DetailsSection state={state} />
+        <DescriptionSection state={state} />
+        <CalendarSection state={state} />
+        <RemindersSection />
       </div>
     </div>
   );

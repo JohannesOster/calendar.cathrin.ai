@@ -1,6 +1,6 @@
 import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
-import { setCenterDate, setFlashDate, visibleStartDate } from "../../calendar/CalendarGrid";
+import { setCenterDate, setFlashDate, visibleStartDate } from "../../../stores/calendar-navigation";
 import { getSundayOfWeek, formatMonthYearLocale } from "../../../lib/date-utils";
 import { visibleDaysCount } from "../../../stores/view";
 import { SIDEBAR, WEEKDAY_LABELS } from "../../../constants/sidebar";

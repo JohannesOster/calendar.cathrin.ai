@@ -12,7 +12,7 @@ import {
   setCenterDate,
   setFlashDate,
   setNavigationTarget,
-} from "../calendar/CalendarGrid";
+} from "../../stores/calendar-navigation";
 import {
   currentView,
   setCurrentView,
@@ -20,8 +20,8 @@ import {
   setVisibleDaysCount,
   type ViewType,
 } from "../../stores/view";
-import { isLoadingWeeks } from "../../stores/events";
-import { isAnySyncing } from "../../stores/accounts";
+import { isLoadingWeeks } from "../../stores/event-fetching";
+import { isAnySyncing } from "../../stores/account-sync";
 import { getSundayOfWeek } from "../../lib/date-utils";
 
 // Helper to add days to a date

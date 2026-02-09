@@ -1,7 +1,7 @@
 import { For, createMemo } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { AllDayEventChip } from "./AllDayEventChip";
-import type { CalendarEvent } from "../../stores/events";
+import type { CalendarEvent } from "../../stores/event-types";
 import { ALL_DAY_ROW_HEIGHT } from "../../constants/layout";
 
 interface DaySlot {

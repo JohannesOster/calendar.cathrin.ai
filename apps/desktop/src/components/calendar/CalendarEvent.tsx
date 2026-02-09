@@ -2,7 +2,7 @@ import { createSignal, Show, createMemo, onCleanup } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
-import type { CalendarEvent as CalendarEventData } from "../../stores/events";
+import type { CalendarEvent as CalendarEventData } from "../../stores/event-types";
 import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";

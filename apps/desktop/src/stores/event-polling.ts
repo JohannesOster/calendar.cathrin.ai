@@ -9,11 +9,10 @@ import {
 import {
   setEvents,
   fetchedWeeks,
-  getStaleWeeks,
-  replaceEventsInRange,
-  convertApiEvent,
   _registerPollingFns,
 } from "./events";
+import { getStaleWeeks, replaceEventsInRange } from "./event-fetching";
+import { convertApiEvent } from "./event-types";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
 // =============================================================================

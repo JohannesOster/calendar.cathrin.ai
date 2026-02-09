@@ -8,8 +8,8 @@ import {
   addLocalEvent,
   removeLocalEvent,
   _registerPendingMap,
-  type CalendarEvent,
 } from "./events";
+import type { CalendarEvent } from "./event-types";
 import { revalidateWeeksForDates } from "./event-polling";
 
 // =============================================================================

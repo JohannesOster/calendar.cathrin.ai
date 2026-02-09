@@ -14,15 +14,17 @@ import { Collapsible } from "@ark-ui/solid/collapsible";
 import {
   authError,
   setAuthError,
+  updateCalendarVisibility,
+  defaultCalendarId,
+  type Calendar,
+} from "../../../stores/accounts";
+import {
   orderedAccounts,
   setAccountOrderAndPersist,
   getOrderedCalendars,
   getOrderedCalendarIds,
   setCalendarOrderAndPersist,
-  updateCalendarVisibility,
-  defaultCalendarId,
-  type Calendar,
-} from "../../../stores/accounts";
+} from "../../../stores/account-ordering";
 import {
   isAccountCollapsed,
   toggleAccountCollapse,

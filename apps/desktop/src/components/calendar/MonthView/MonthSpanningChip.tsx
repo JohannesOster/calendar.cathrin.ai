@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "../../../stores/events";
+import type { CalendarEvent } from "../../../stores/event-types";
 import { CHIP_BORDER_RADIUS } from "../../../constants/layout";
 
 interface MonthSpanningChipProps {

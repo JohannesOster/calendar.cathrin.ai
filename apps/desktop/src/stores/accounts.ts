@@ -1,17 +1,7 @@
-import { createSignal, createMemo } from "solid-js";
-import { startServerOAuth, isAuthenticated, onAuthComplete } from "./auth";
+import { createSignal } from "solid-js";
+import { startServerOAuth, isAuthenticated } from "./auth";
 import { apiFetch } from "../lib/api";
-import { refreshEvents } from "./events";
-import type { ApiAccount, ApiCalendar, SyncStatus } from "@cathrin/shared-types";
-
-/**
- * Response format from the calendars API
- */
-interface AccountCalendarsResult {
-  accountId: string;
-  calendars: ApiCalendar[];
-  error?: string;
-}
+import type { SyncStatus } from "@cathrin/shared-types";
 
 export interface Calendar {
   id: string;
@@ -36,165 +26,30 @@ export const [defaultCalendarId, setDefaultCalendarId] = createSignal<
   string | null
 >(null);
 
-const DEFAULT_CALENDAR_KEY = "default-calendar-id";
-const ACCOUNT_ORDER_KEY = "account-order";
-const CALENDAR_ORDER_KEY_PREFIX = "calendar-order-";
+// =============================================================================
+// Cross-module registrations
+//
+// account-ordering.ts and account-sync.ts register their functions here at
+// import time. This breaks circular imports: accounts.ts never imports from
+// those modules, they import from accounts.ts and call these registration fns.
+// =============================================================================
 
-// Account ordering state - stores account IDs in display order
-const [accountOrder, setAccountOrder] = createSignal<string[]>([]);
+let _fetchAccountsFromServer: (() => Promise<CalendarAccount[]>) | null = null;
+let _loadOrderingPreferences: ((accounts: CalendarAccount[]) => void) | null = null;
+let _setCalendarVisibilityLocal: ((calendarId: string, visible: boolean) => void) | null = null;
 
-// Calendar ordering state - stores calendar IDs per account
-const [calendarOrders, setCalendarOrders] = createSignal<
-  Record<string, string[]>
->({});
-
-/**
- * Get accounts sorted by the user's preferred order
- */
-export const orderedAccounts = createMemo(() => {
-  const accounts = connectedAccounts();
-  const order = accountOrder();
-
-  // If no order set, return accounts as-is
-  if (order.length === 0) return accounts;
-
-  // Sort accounts by their position in the order array
-  // Accounts not in order go to the end
-  return [...accounts].sort((a, b) => {
-    const aIndex = order.indexOf(a.id);
-    const bIndex = order.indexOf(b.id);
-    // If not in order array, place at end (use large number)
-    const aPos = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
-    const bPos = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
-    return aPos - bPos;
-  });
-});
-
-/**
- * Get the ordered account IDs for SortableProvider
- */
-export const orderedAccountIds = createMemo(() =>
-  orderedAccounts().map((a) => a.id)
-);
-
-/**
- * Update account order and persist to localStorage
- */
-export function setAccountOrderAndPersist(newOrder: string[]): void {
-  setAccountOrder(newOrder);
-  localStorage.setItem(ACCOUNT_ORDER_KEY, JSON.stringify(newOrder));
+/** Called by account-sync.ts to share its fetch function. */
+export function _registerAccountSyncFn(fn: () => Promise<CalendarAccount[]>): void {
+  _fetchAccountsFromServer = fn;
 }
 
-/**
- * Get calendars for an account sorted by the user's preferred order
- */
-export function getOrderedCalendars(accountId: string): Calendar[] {
-  const accounts = connectedAccounts();
-  const account = accounts.find((a) => a.id === accountId);
-  if (!account) return [];
-
-  const order = calendarOrders()[accountId];
-  if (!order || order.length === 0) return account.calendars;
-
-  // Sort calendars by their position in the order array
-  return [...account.calendars].sort((a, b) => {
-    const aIndex = order.indexOf(a.id);
-    const bIndex = order.indexOf(b.id);
-    const aPos = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
-    const bPos = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
-    return aPos - bPos;
-  });
-}
-
-/**
- * Get ordered calendar IDs for an account (for SortableProvider)
- */
-export function getOrderedCalendarIds(accountId: string): string[] {
-  return getOrderedCalendars(accountId).map((c) => c.id);
-}
-
-/**
- * Update calendar order within an account and persist to localStorage
- */
-export function setCalendarOrderAndPersist(
-  accountId: string,
-  newOrder: string[]
-): void {
-  setCalendarOrders((prev) => ({ ...prev, [accountId]: newOrder }));
-  localStorage.setItem(
-    `${CALENDAR_ORDER_KEY_PREFIX}${accountId}`,
-    JSON.stringify(newOrder)
-  );
-}
-
-/**
- * Set the default calendar for new events
- * Persists to localStorage
- */
-export function setDefaultCalendar(calendarId: string): void {
-  setDefaultCalendarId(calendarId);
-  localStorage.setItem(DEFAULT_CALENDAR_KEY, calendarId);
-}
-
-// Visibility storage key prefix
-const CALENDAR_VISIBILITY_KEY_PREFIX = "calendar-visibility-";
-
-/**
- * Load calendar visibility preferences from localStorage
- */
-function getCalendarVisibility(calendarId: string): boolean {
-  const saved = localStorage.getItem(
-    `${CALENDAR_VISIBILITY_KEY_PREFIX}${calendarId}`,
-  );
-  // Default to visible if not set
-  return saved === null ? true : saved === "true";
-}
-
-/**
- * Save calendar visibility preference to localStorage
- */
-function setCalendarVisibilityLocal(
-  calendarId: string,
-  visible: boolean,
-): void {
-  localStorage.setItem(
-    `${CALENDAR_VISIBILITY_KEY_PREFIX}${calendarId}`,
-    String(visible),
-  );
-}
-
-/**
- * Fetch accounts and calendars from the sync server
- */
-async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
-  // Fetch accounts and calendars in parallel
-  const [accounts, calendarsResponse] = await Promise.all([
-    apiFetch<ApiAccount[]>("/api/accounts"),
-    apiFetch<AccountCalendarsResult[]>("/api/calendars"),
-  ]);
-
-  // Build calendars map by account
-  const calendarsByAccount = new Map<string, Calendar[]>();
-  for (const result of calendarsResponse) {
-    calendarsByAccount.set(
-      result.accountId,
-      result.calendars.map((c) => ({
-        id: c.id,
-        name: c.name,
-        color: c.color,
-        // Use local visibility preference (client-side setting)
-        visible: getCalendarVisibility(c.id),
-      })),
-    );
-  }
-
-  // Merge accounts with calendars
-  return accounts.map((account) => ({
-    id: account.id,
-    email: account.email,
-    calendars: calendarsByAccount.get(account.id) || [],
-    syncStatus: account.syncStatus ?? "pending",
-  }));
+/** Called by account-ordering.ts to share its ordering functions. */
+export function _registerOrderingFns(fns: {
+  loadOrderingPreferences: (accounts: CalendarAccount[]) => void;
+  setCalendarVisibilityLocal: (calendarId: string, visible: boolean) => void;
+}): void {
+  _loadOrderingPreferences = fns.loadOrderingPreferences;
+  _setCalendarVisibilityLocal = fns.setCalendarVisibilityLocal;
 }
 
 // Flag to track if accounts have been initialized
@@ -215,119 +70,11 @@ export async function initializeAccounts(): Promise<void> {
 
   try {
     // Load existing accounts from server
-    const accounts = await fetchAccountsFromServer();
+    const accounts = await _fetchAccountsFromServer!();
     setConnectedAccounts(accounts);
-
-    // Load default calendar from localStorage and validate it exists
-    const savedDefaultId = localStorage.getItem(DEFAULT_CALENDAR_KEY);
-    if (savedDefaultId) {
-      const calendarExists = accounts.some((account) =>
-        account.calendars.some((cal) => cal.id === savedDefaultId)
-      );
-      if (calendarExists) {
-        setDefaultCalendarId(savedDefaultId);
-      } else {
-        // Default calendar was deleted, clear the saved value
-        localStorage.removeItem(DEFAULT_CALENDAR_KEY);
-      }
-    }
-
-    // Load account order from localStorage
-    const savedOrder = localStorage.getItem(ACCOUNT_ORDER_KEY);
-    if (savedOrder) {
-      try {
-        const order = JSON.parse(savedOrder);
-        // Filter to only include accounts that still exist
-        const validOrder = order.filter((id: string) =>
-          accounts.some((a) => a.id === id)
-        );
-        setAccountOrder(validOrder);
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-
-    // Load calendar orders from localStorage for each account
-    const calOrders: Record<string, string[]> = {};
-    for (const account of accounts) {
-      const savedCalOrder = localStorage.getItem(
-        `${CALENDAR_ORDER_KEY_PREFIX}${account.id}`
-      );
-      if (savedCalOrder) {
-        try {
-          const order = JSON.parse(savedCalOrder);
-          // Filter to only include calendars that still exist
-          const validOrder = order.filter((id: string) =>
-            account.calendars.some((c) => c.id === id)
-          );
-          if (validOrder.length > 0) {
-            calOrders[account.id] = validOrder;
-          }
-        } catch {
-          // Invalid JSON, ignore
-        }
-      }
-    }
-    if (Object.keys(calOrders).length > 0) {
-      setCalendarOrders(calOrders);
-    }
+    _loadOrderingPreferences?.(accounts);
   } catch (error) {
     console.error("Failed to load accounts:", error);
-  }
-}
-
-/**
- * Reload accounts from the server
- * Call this after OAuth completes to fetch the new account
- */
-export async function reloadAccounts(): Promise<void> {
-  if (!isAuthenticated()) {
-    return;
-  }
-
-  try {
-    const accounts = await fetchAccountsFromServer();
-    setConnectedAccounts(accounts);
-
-    // Reload ordering preferences from localStorage
-    const savedOrder = localStorage.getItem(ACCOUNT_ORDER_KEY);
-    if (savedOrder) {
-      try {
-        const order = JSON.parse(savedOrder);
-        const validOrder = order.filter((id: string) =>
-          accounts.some((a) => a.id === id),
-        );
-        setAccountOrder(validOrder);
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-
-    // Reload calendar orders
-    const calOrders: Record<string, string[]> = {};
-    for (const account of accounts) {
-      const savedCalOrder = localStorage.getItem(
-        `${CALENDAR_ORDER_KEY_PREFIX}${account.id}`,
-      );
-      if (savedCalOrder) {
-        try {
-          const order = JSON.parse(savedCalOrder);
-          const validOrder = order.filter((id: string) =>
-            account.calendars.some((c) => c.id === id),
-          );
-          if (validOrder.length > 0) {
-            calOrders[account.id] = validOrder;
-          }
-        } catch {
-          // Invalid JSON, ignore
-        }
-      }
-    }
-    if (Object.keys(calOrders).length > 0) {
-      setCalendarOrders(calOrders);
-    }
-  } catch (error) {
-    console.error("Failed to reload accounts:", error);
   }
 }
 
@@ -374,7 +121,7 @@ export async function updateCalendarVisibility(
   visible: boolean,
 ): Promise<void> {
   // Save to localStorage
-  setCalendarVisibilityLocal(calendarId, visible);
+  _setCalendarVisibilityLocal?.(calendarId, visible);
 
   // Update local state
   setConnectedAccounts((prev) =>
@@ -389,68 +136,3 @@ export async function updateCalendarVisibility(
     }),
   );
 }
-
-/**
- * Refresh calendars for all accounts (re-fetches from server)
- */
-export async function refreshAccounts(): Promise<void> {
-  try {
-    const accounts = await fetchAccountsFromServer();
-    setConnectedAccounts(accounts);
-  } catch (error) {
-    console.error("Failed to refresh accounts:", error);
-    throw error;
-  }
-}
-
-/**
- * Check if any account is currently syncing
- */
-export function isAnySyncing(): boolean {
-  return connectedAccounts().some(
-    (a) => a.syncStatus === "pending" || a.syncStatus === "syncing"
-  );
-}
-
-/**
- * Poll for sync completion after adding an account
- * Polls every 2 seconds until all accounts are synced, then refreshes events
- */
-async function pollUntilSyncComplete(): Promise<void> {
-  const POLL_INTERVAL = 2000; // 2 seconds
-  const MAX_POLLS = 60; // Max 2 minutes of polling
-  let polls = 0;
-
-  console.log("[accounts] Starting sync status polling...");
-
-  while (polls < MAX_POLLS) {
-    await reloadAccounts();
-
-    if (!isAnySyncing()) {
-      console.log("[accounts] All accounts synced, refreshing events");
-      refreshEvents();
-      return;
-    }
-
-    polls++;
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
-  }
-
-  console.warn("[accounts] Sync polling timed out after 2 minutes");
-  // Refresh events anyway with whatever data we have
-  refreshEvents();
-}
-
-// Register callback to reload accounts when auth completes
-// This handles both initial login and adding additional accounts
-onAuthComplete(async () => {
-  await reloadAccounts();
-
-  // If any account is still syncing, poll until complete
-  if (isAnySyncing()) {
-    pollUntilSyncComplete();
-  } else {
-    // All accounts already synced, just refresh events
-    refreshEvents();
-  }
-});

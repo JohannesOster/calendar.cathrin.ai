@@ -3,9 +3,9 @@ import { createSortable, useDragDropContext } from "@thisbeyond/solid-dnd";
 import { Eye, EyeOff } from "lucide-solid";
 import {
   defaultCalendarId,
-  setDefaultCalendar,
   type Calendar,
 } from "../../../stores/accounts";
+import { setDefaultCalendar } from "../../../stores/account-ordering";
 import { SIDEBAR } from "../../../constants/sidebar";
 
 // Shared calendar item content used in both sortable items and drag overlay

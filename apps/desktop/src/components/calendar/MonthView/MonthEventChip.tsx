@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "../../../stores/events";
+import type { CalendarEvent } from "../../../stores/event-types";
 import { formatCompactTime } from "../../../lib/format-utils";
 
 interface MonthEventChipProps {

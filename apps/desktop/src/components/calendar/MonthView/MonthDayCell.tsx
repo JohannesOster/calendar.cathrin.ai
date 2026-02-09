@@ -1,6 +1,6 @@
 import { For, Show, createMemo, batch } from "solid-js";
 import { isToday, isSameDay, getSundayOfWeek } from "../../../lib/date-utils";
-import { setCenterDate, setFlashDate, setNavigationTarget } from "../CalendarGrid";
+import { setCenterDate, setFlashDate, setNavigationTarget } from "../../../stores/calendar-navigation";
 import { setCurrentView, setVisibleDaysCount } from "../../../stores/view";
 import { events } from "../../../stores/events";
 import { connectedAccounts } from "../../../stores/accounts";

@@ -1,5 +1,5 @@
 import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js";
-import { flashDate } from "./CalendarGrid";
+import { flashDate } from "../../stores/calendar-navigation";
 import { CalendarEvent } from "./CalendarEvent";
 import { EventPlaceholder } from "./EventPlaceholder";
 import { DragGhost } from "./DragGhost";

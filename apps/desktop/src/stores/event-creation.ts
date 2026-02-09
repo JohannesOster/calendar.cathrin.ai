@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { defaultCalendarId, connectedAccounts, setDefaultCalendar } from "./accounts";
+import { defaultCalendarId, connectedAccounts } from "./accounts";
+import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch } from "../lib/api";

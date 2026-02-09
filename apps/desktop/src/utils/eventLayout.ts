@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "../stores/events";
+import type { CalendarEvent } from "../stores/event-types";
 import {
   SAME_START_THRESHOLD_MS,
   CASCADE_INDENT_PERCENT,

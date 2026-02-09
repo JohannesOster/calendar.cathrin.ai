@@ -4,7 +4,7 @@ import { visibleDaysCount, setVisibleDaysCount } from "../../stores/view";
 import {
   visibleStartDate,
   setNavigationTarget,
-} from "./CalendarGrid";
+} from "../../stores/calendar-navigation";
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 14;

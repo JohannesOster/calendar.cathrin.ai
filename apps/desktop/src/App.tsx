@@ -6,7 +6,8 @@ import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { selectedEventId } from "./stores/event-selection";
-import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
+import { CalendarGrid } from "./components/calendar/CalendarGrid";
+import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
@@ -14,18 +15,17 @@ import {
   initializeEvents,
   getEventsForRange,
   fetchEventsForWeek,
-  getWeekBounds,
   updateVisibleWeeks,
   getFetchedWeeks,
   getFetchingWeeks,
-} from "./stores/events";
+} from "./stores/event-fetching";
 import {
   startPolling,
   stopPolling,
   handleVisibilityChange,
   handleOnline,
 } from "./stores/event-polling";
-import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
+import { getNextWeek, getPreviousWeek, getWeekBounds } from "./lib/date-utils";
 
 // Debounce delay for fetch trigger (ms)
 const FETCH_DEBOUNCE_MS = 100;

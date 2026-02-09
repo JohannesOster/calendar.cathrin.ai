@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, For } from "solid-js";
-import { flashDate } from "./CalendarGrid";
+import { flashDate } from "../../stores/calendar-navigation";
 import { isSameDay } from "../../lib/date-utils";
 import { FLASH_DURATION_MS } from "../../constants/timings";
 import { WEEKDAY_NAMES } from "../../constants/sidebar";

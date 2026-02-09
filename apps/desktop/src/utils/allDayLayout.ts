@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "../stores/events";
+import type { CalendarEvent } from "../stores/event-types";
 
 /**
  * Layout information for positioning an all-day event chip

@@ -1,10 +1,10 @@
 import { Show, onCleanup, createMemo } from "solid-js";
-import type { CalendarEvent } from "../../stores/events";
+import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
 import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
-import { startUnfoldDrag, isUnfolding, unfoldDragEventId } from "../../stores/event-drag";
+import { startUnfoldDrag, unfoldDragEventId } from "../../stores/event-drag";
 
 /** Width in px of the edge hit zone for resize/unfold drag */
 const EDGE_HIT_ZONE = 6;

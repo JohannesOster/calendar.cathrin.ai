@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import type { CalendarEvent } from "./events";
+import type { CalendarEvent } from "./event-types";
 
 // =============================================================================
 // Types

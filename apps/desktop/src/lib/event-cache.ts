@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getWeekId, getWeekBounds, getHotZoneWeeks } from "./date-utils";
-import type { CalendarEvent } from "../stores/events";
+import type { CalendarEvent } from "../stores/event-types";
 
 // =============================================================================
 // Cache Configuration

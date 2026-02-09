@@ -94,3 +94,46 @@ export const AUTO_SCROLL_EDGE_PX = 40;
 
 /** Max scroll speed in px/frame (~720 px/s at 60 fps) */
 export const AUTO_SCROLL_MAX_SPEED = 12;
+
+// =============================================================================
+// CALENDAR GRID LAYOUT
+// =============================================================================
+
+/** Number of hours in a day */
+export const HOURS_PER_DAY = 24;
+
+/** Height of the month/year label row (px) */
+export const MONTH_LABEL_HEIGHT = 36;
+
+/** Height of the day header row (px) - matches --grid-header-height */
+export const HEADER_HEIGHT = 30;
+
+/** Fallback width for the time column (px) - matches --grid-time-col-width */
+export const TIME_COL_WIDTH_FALLBACK = 48;
+
+/** Total height of the 24-hour time grid (px) */
+export const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT_PX;
+
+/** Collapsed/minimum height of the all-day section (px) */
+export const ALL_DAY_BASE_HEIGHT = 28;
+
+/** Large virtual width for infinite horizontal scroll (px) */
+export const CONTAINER_WIDTH = 500000;
+
+/** Anchor point in middle of virtual scroll container (px) */
+export const CENTER_OFFSET = CONTAINER_WIDTH / 2;
+
+/** Days in each direction from anchor for snap points (~3 months) */
+export const SNAP_TRACK_RANGE = 90;
+
+/** Extra days to render off-screen for smooth scrolling */
+export const VISIBLE_BUFFER_DAYS = 5;
+
+/** Hours before current time to show on initial load */
+export const INITIAL_SCROLL_OFFSET_HOURS = 2;
+
+/** Minimum scroll movement (px) to register direction change */
+export const DIRECTION_THRESHOLD_PX = 10;
+
+/** Reset scroll direction to null after this idle period (ms) */
+export const DIRECTION_RESET_DELAY_MS = 2000;
