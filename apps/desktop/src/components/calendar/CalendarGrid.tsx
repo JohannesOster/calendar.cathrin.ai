@@ -31,7 +31,7 @@ import {
   isToday,
   getWeekId,
 } from "../../lib/date-utils";
-import { events } from "../../stores/events";
+import { events, setEvents, moveEvent } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import {
@@ -54,6 +54,7 @@ import {
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
 import { selectedEventId, deselectEvent } from "../../stores/event-selection";
+import { isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag } from "../../stores/event-drag";
 import {
   startAutoScroll,
   updateAutoScrollCursor,
@@ -961,6 +962,25 @@ export function CalendarGrid() {
     // Keyboard handlers
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Cancel move drag on Escape — revert to original position
+        if (isMoveDragging()) {
+          stopAutoScroll();
+          document.body.classList.remove("dragging");
+          const drag = moveDrag();
+          if (drag) {
+            // Revert event to original position
+            setEvents((prev) =>
+              prev.map((ev) =>
+                ev.id === drag.event.id
+                  ? { ...ev, start: drag.originalStart, end: drag.originalEnd }
+                  : ev
+              )
+            );
+          }
+          cancelMoveDrag();
+          e.preventDefault();
+          return;
+        }
         // Cancel event creation on Escape
         if (isDragging() || isCreating()) {
           // During drag: always cancel
@@ -1033,6 +1053,17 @@ export function CalendarGrid() {
       return addDays(anchorDate(), dayIndex);
     };
 
+    /** Calculate minutes-from-midnight from a viewport Y coordinate. */
+    const getMinutesFromClientY = (clientY: number): number => {
+      const gridArea = scrollContainerRef;
+      if (!gridArea) return 0;
+
+      const gridRect = gridArea.getBoundingClientRect();
+      const mouseY = clientY - gridRect.top - GRID_TOP_OFFSET + gridArea.scrollTop;
+      const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
+      return snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+    };
+
     /** Recalculate draft position from the last-known cursor X/Y. Called from
      *  mousemove AND from auto-scroll tick (so the event extends while the
      *  cursor is stationary at an edge). */
@@ -1052,12 +1083,78 @@ export function CalendarGrid() {
       updateDrag(dragOriginMinutes, snapped, dragColumnDate, currentDate);
     };
 
-    const handleDragMouseMove = (e: MouseEvent) => {
-      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
-      if (!scrollContainerRef) return;
+    // -----------------------------------------------------------------------
+    // Move-drag: update event position in real time
+    // -----------------------------------------------------------------------
+    const recalcMovePosition = () => {
+      const drag = moveDrag();
+      if (!drag) return;
 
+      const cursorMinutes = getMinutesFromClientY(lastDragClientY);
+      const newStartMinutes = Math.max(0, cursorMinutes - drag.cursorOffsetMinutes);
+
+      const durationMs = drag.originalEnd.getTime() - drag.originalStart.getTime();
+      const targetDate = getDateFromClientX(lastDragClientX);
+      if (!targetDate) return;
+
+      const newStart = new Date(targetDate);
+      newStart.setHours(0, 0, 0, 0);
+      newStart.setMinutes(newStartMinutes);
+
+      let newEnd = new Date(newStart.getTime() + durationMs);
+
+      // Clamp: don't let event spill past midnight into the next day
+      const dayMidnight = new Date(newStart);
+      dayMidnight.setHours(24, 0, 0, 0);
+      if (newEnd.getTime() > dayMidnight.getTime()) {
+        const durationMinutes = Math.round(durationMs / 60000);
+        const clampedStartMinutes = Math.max(0, 24 * 60 - durationMinutes);
+        newStart.setHours(0, 0, 0, 0);
+        newStart.setMinutes(clampedStartMinutes);
+        newEnd = new Date(newStart.getTime() + durationMs);
+      }
+
+      // Optimistic position update during drag
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === drag.event.id
+            ? { ...e, start: newStart, end: newEnd }
+            : e
+        )
+      );
+    };
+
+    const handleDragMouseMove = (e: MouseEvent) => {
       lastDragClientY = e.clientY;
       lastDragClientX = e.clientX;
+
+      // --- Move drag ---
+      if (isMoveDragging()) {
+        if (!scrollContainerRef) return;
+
+        // Add grabbing cursor to body
+        if (!document.body.classList.contains("dragging")) {
+          document.body.classList.add("dragging");
+        }
+
+        // Disable scroll snap during drag
+        if (snapEnabled()) {
+          scrollContainerRef.style.scrollSnapType = "none";
+          setSnapEnabled(false);
+        }
+
+        const timeColWidth = getTimeColWidth();
+        startAutoScroll(scrollContainerRef, GRID_TOP_OFFSET, recalcMovePosition, timeColWidth, colWidth());
+        updateAutoScrollCursor(e.clientY, e.clientX);
+
+        recalcMovePosition();
+        e.preventDefault();
+        return;
+      }
+
+      // --- Create drag ---
+      if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
+      if (!scrollContainerRef) return;
 
       // Disable scroll snap during drag so horizontal auto-scroll doesn't fight it
       if (snapEnabled()) {
@@ -1074,31 +1171,57 @@ export function CalendarGrid() {
       e.preventDefault();
     };
 
+    /** Settle scroll snap after any drag operation ends. */
+    const settleSnapAfterDrag = () => {
+      if (!scrollContainerRef) return;
+      const currentScrollLeft = scrollContainerRef.scrollLeft;
+      const timeColWidth = getTimeColWidth();
+      const currentColWidth = colWidth();
+      const visualLeftEdge = currentScrollLeft + timeColWidth;
+      const dayIndex = Math.round((visualLeftEdge - CENTER_OFFSET) / currentColWidth);
+      const snappedScrollLeft = CENTER_OFFSET + dayIndex * currentColWidth - timeColWidth;
+      scrollContainerRef.scrollLeft = snappedScrollLeft;
+      handleScroll();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (scrollContainerRef) {
+            scrollContainerRef.style.scrollSnapType = "";
+          }
+          setSnapEnabled(true);
+        });
+      });
+    };
+
     const handleDragMouseUp = () => {
+      // --- Move drag ---
+      if (isMoveDragging()) {
+        stopAutoScroll();
+        document.body.classList.remove("dragging");
+
+        // Read current event position (already updated during drag)
+        const drag = finishMoveDrag();
+        if (drag) {
+          const event = events().find((e) => e.id === drag.event.id);
+          if (event) {
+            moveEvent(
+              drag.event.id,
+              event.start,
+              event.end,
+              drag.originalStart,
+              drag.originalEnd,
+            );
+          }
+        }
+
+        settleSnapAfterDrag();
+        return;
+      }
+
+      // --- Create drag ---
       if (isDragging()) {
         stopAutoScroll();
         finishDrag();
-        // Settle at the nearest valid snap point before re-enabling mandatory snap.
-        // Without this, re-enabling snap causes the browser to jump back to the
-        // pre-drag position (the nearest snap point it remembers).
-        if (scrollContainerRef) {
-          const currentScrollLeft = scrollContainerRef.scrollLeft;
-          const timeColWidth = getTimeColWidth();
-          const currentColWidth = colWidth();
-          const visualLeftEdge = currentScrollLeft + timeColWidth;
-          const dayIndex = Math.round((visualLeftEdge - CENTER_OFFSET) / currentColWidth);
-          const snappedScrollLeft = CENTER_OFFSET + dayIndex * currentColWidth - timeColWidth;
-          scrollContainerRef.scrollLeft = snappedScrollLeft;
-          handleScroll();
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (scrollContainerRef) {
-                scrollContainerRef.style.scrollSnapType = "";
-              }
-              setSnapEnabled(true);
-            });
-          });
-        }
+        settleSnapAfterDrag();
       }
     };
 
@@ -1106,6 +1229,7 @@ export function CalendarGrid() {
     document.addEventListener("mouseup", handleDragMouseUp);
     onCleanup(() => {
       stopAutoScroll();
+      document.body.classList.remove("dragging");
       document.removeEventListener("mousemove", handleDragMouseMove);
       document.removeEventListener("mouseup", handleDragMouseUp);
     });

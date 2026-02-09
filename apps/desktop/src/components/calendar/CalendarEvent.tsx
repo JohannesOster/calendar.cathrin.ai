@@ -1,9 +1,11 @@
-import { createSignal, Show, createMemo } from "solid-js";
+import { createSignal, Show, createMemo, onCleanup } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
+import { startMoveDrag, isMoveDragging, moveDragEventId } from "../../stores/event-drag";
+import { snapMinutes } from "../../stores/event-creation";
 
 // Shared signal: all segments of the focused event highlight together
 export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
@@ -51,6 +53,64 @@ export function CalendarEvent(props: CalendarEventProps) {
   const [firePosition, setFirePosition] = createSignal(0);
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
+  const isBeingDragged = createMemo(() => moveDragEventId() === props.event.id);
+
+  /** Threshold in px for click-vs-drag detection */
+  const MOVE_DRAG_THRESHOLD = 3;
+  let cleanupDragDetection: (() => void) | null = null;
+
+  const handlePointerDown = (e: PointerEvent) => {
+    // Only left button, only single-day timed events
+    if (e.button !== 0) return;
+    if (props.event.isAllDay) return;
+
+    // Don't start drag from a resize handle (future #113)
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-resize-handle]")) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+
+    const onMove = (me: PointerEvent) => {
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+      if (!started && Math.sqrt(dx * dx + dy * dy) >= MOVE_DRAG_THRESHOLD) {
+        started = true;
+
+        // Calculate cursor time offset within the event
+        const dayCol = contentRef?.closest("[data-day-column]") as HTMLElement | null;
+        if (!dayCol) return;
+        const rect = dayCol.getBoundingClientRect();
+        const mouseY = startY - rect.top;
+        const cursorMinutes = snapMinutes(Math.max(0, (mouseY / HOUR_HEIGHT_PX) * 60));
+
+        startMoveDrag(props.event, cursorMinutes);
+      }
+    };
+
+    const onUp = () => {
+      cleanup();
+      if (!started) {
+        // Was a click, not a drag — select the event
+        selectEvent(props.event.id);
+      }
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      cleanupDragDetection = null;
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    cleanupDragDetection = cleanup;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  onCleanup(() => cleanupDragDetection?.());
 
   const isSameDay = (a: Date, b: Date) =>
     a.getDate() === b.getDate() &&
@@ -142,7 +202,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-lg cursor-pointer transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""}`}
+        class={`absolute inset-0 rounded-lg transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
@@ -152,10 +212,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
-        onClick={(e) => {
-          e.stopPropagation();
-          selectEvent(props.event.id);
-        }}
+        onPointerDown={handlePointerDown}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();

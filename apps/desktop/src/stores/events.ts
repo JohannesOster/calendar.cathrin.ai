@@ -685,5 +685,109 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
   }
 }
 
+// =============================================================================
+// Event Move (Deferred API, Undo Toast)
+// =============================================================================
+
+export interface PendingMove {
+  eventId: string;
+  title: string;
+  originalStart: Date;
+  originalEnd: Date;
+  newStart: Date;
+  newEnd: Date;
+}
+
+type MoveListener = (move: PendingMove) => void;
+const moveListeners = new Set<MoveListener>();
+const pendingMoves = new Map<string, PendingMove>();
+
+/** Subscribe to move events (used by UndoToast). */
+export function onMove(fn: MoveListener): () => void {
+  moveListeners.add(fn);
+  return () => moveListeners.delete(fn);
+}
+
+/**
+ * Move an event to a new time. The API call is deferred until the undo
+ * toast dismisses, matching the existing delete pattern.
+ */
+export function moveEvent(
+  eventId: string,
+  newStart: Date,
+  newEnd: Date,
+  originalStart: Date,
+  originalEnd: Date,
+): void {
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
+
+  const move: PendingMove = {
+    eventId,
+    title: event.title,
+    originalStart,
+    originalEnd,
+    newStart,
+    newEnd,
+  };
+  pendingMoves.set(eventId, move);
+
+  // Optimistic update already applied (the drag updated events signal during drag)
+  // Notify toast
+  for (const fn of moveListeners) fn(move);
+}
+
+/**
+ * Undo a pending move — revert to original position.
+ */
+export function undoMove(eventId: string): void {
+  const pending = pendingMoves.get(eventId);
+  if (!pending) return;
+
+  pendingMoves.delete(eventId);
+  setEvents((prev) =>
+    prev.map((e) =>
+      e.id === eventId
+        ? { ...e, start: pending.originalStart, end: pending.originalEnd }
+        : e
+    )
+  );
+}
+
+/**
+ * Confirm a pending move — fire the PATCH API call.
+ */
+export function confirmMove(eventId: string): void {
+  const pending = pendingMoves.get(eventId);
+  if (!pending) return;
+
+  pendingMoves.delete(eventId);
+
+  const apiPatch: Record<string, string> = {
+    start: pending.newStart.toISOString(),
+    end: pending.newEnd.toISOString(),
+  };
+
+  apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(apiPatch),
+  })
+    .then(() => {
+      console.log(`[events] Moved event ${eventId}`);
+      revalidateWeeksForDates(pending.originalStart, pending.newStart);
+    })
+    .catch((error) => {
+      console.error(`[events] Failed to move event ${eventId}:`, error);
+      // Rollback
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === eventId
+            ? { ...e, start: pending.originalStart, end: pending.originalEnd }
+            : e
+        )
+      );
+    });
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };
