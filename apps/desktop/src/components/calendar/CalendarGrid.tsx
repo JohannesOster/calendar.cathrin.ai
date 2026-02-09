@@ -53,7 +53,7 @@ import {
   snapMinutes,
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { selectedEventId, deselectEvent } from "../../stores/event-selection";
+import { selectedEventId, selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag,
   isResizeDragging, resizeDrag, cancelResizeDrag, finishResizeDrag,
@@ -263,6 +263,31 @@ export function CalendarGrid() {
       if (visibleAllDayLayouts().length === 0) {
         setAllDayExpanded(false);
       }
+    }
+  });
+
+  // Auto-expand/collapse all-day section when toggling isAllDay in edit mode
+  // Remember previous state so we can restore it when toggling back
+  let allDayStateBeforeEdit: boolean | null = null;
+  createEffect(() => {
+    const event = selectedEvent();
+    if (!event) {
+      allDayStateBeforeEdit = null;
+      return;
+    }
+
+    if (event.isAllDay) {
+      // Toggled to all-day → remember current state and expand
+      if (allDayStateBeforeEdit === null) {
+        allDayStateBeforeEdit = allDayExpanded();
+      }
+      if (!allDayExpanded()) {
+        setAllDayExpanded(true);
+      }
+    } else if (allDayStateBeforeEdit !== null) {
+      // Toggled back to timed → restore previous state
+      setAllDayExpanded(allDayStateBeforeEdit);
+      allDayStateBeforeEdit = null;
     }
   });
 

@@ -71,6 +71,13 @@ let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 // Helpers
 // =============================================================================
 
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
   return {
     id: event.id,
@@ -615,6 +622,7 @@ export type EventPatch = {
   location?: string;
   start?: Date;
   end?: Date;
+  isAllDay?: boolean;
 };
 
 /**
@@ -639,18 +647,28 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
             ...(patch.location !== undefined && { location: patch.location }),
             ...(patch.start !== undefined && { start: patch.start }),
             ...(patch.end !== undefined && { end: patch.end }),
+            ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
           }
         : e
     )
   );
 
   // Build API patch body
-  const apiPatch: Record<string, string> = {};
+  const apiPatch: Record<string, string | boolean> = {};
   if (patch.title !== undefined) apiPatch.summary = patch.title;
   if (patch.description !== undefined) apiPatch.description = patch.description;
   if (patch.location !== undefined) apiPatch.location = patch.location;
-  if (patch.start !== undefined) apiPatch.start = patch.start.toISOString();
-  if (patch.end !== undefined) apiPatch.end = patch.end.toISOString();
+  if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+  if (patch.start !== undefined) {
+    apiPatch.start = patch.isAllDay
+      ? formatDateOnly(patch.start)
+      : patch.start.toISOString();
+  }
+  if (patch.end !== undefined) {
+    apiPatch.end = patch.isAllDay
+      ? formatDateOnly(patch.end)
+      : patch.end.toISOString();
+  }
 
   try {
     await apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {

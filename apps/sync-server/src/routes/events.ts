@@ -267,8 +267,9 @@ export const eventsRoute = new Hono()
         summary: z.string().optional(),
         description: z.string().optional(),
         location: z.string().optional(),
-        start: z.string().datetime().optional(),
-        end: z.string().datetime().optional(),
+        start: z.union([z.string().datetime(), z.string().date()]).optional(),
+        end: z.union([z.string().datetime(), z.string().date()]).optional(),
+        isAllDay: z.boolean().optional(),
       })
     ),
     async (c) => {
@@ -308,10 +309,24 @@ export const eventsRoute = new Hono()
       if (patch.summary !== undefined) googlePatch.summary = patch.summary;
       if (patch.description !== undefined) googlePatch.description = patch.description;
       if (patch.location !== undefined) googlePatch.location = patch.location;
-      if (patch.start !== undefined) googlePatch.start = { dateTime: patch.start };
-      if (patch.end !== undefined) googlePatch.end = { dateTime: patch.end };
+
+      // All-day events use { date } format, timed events use { dateTime }.
+      // Google PATCH deep-merges nested objects, so we must explicitly null
+      // the conflicting field to clear it when switching between formats.
+      const useDate = patch.isAllDay === true;
+      if (patch.start !== undefined) {
+        googlePatch.start = useDate
+          ? { date: patch.start.slice(0, 10), dateTime: null }
+          : { dateTime: patch.start, date: null };
+      }
+      if (patch.end !== undefined) {
+        googlePatch.end = useDate
+          ? { date: patch.end.slice(0, 10), dateTime: null }
+          : { dateTime: patch.end, date: null };
+      }
 
       try {
+        console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
         const accessToken = await getAccessToken(event.accountId);
         const service = new GoogleCalendarService(accessToken);
         const updated = await service.patchEvent(event.calendarId, googleEventId, googlePatch as Parameters<GoogleCalendarService["patchEvent"]>[2]);
@@ -334,6 +349,7 @@ export const eventsRoute = new Hono()
             title: updated.summary || event.title,
             start: updatedStart,
             end: updatedEnd,
+            isAllDay: !!updated.start.date,
             location: updated.location || null,
             description: updated.description || null,
             updatedAt: new Date(),

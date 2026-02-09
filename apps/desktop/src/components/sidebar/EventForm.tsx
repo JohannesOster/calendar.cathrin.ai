@@ -208,7 +208,10 @@ export function EventForm() {
     else { setEditDescription(v); scheduleSave({ description: v }); }
   };
   const isAllDay = () => mode() === "create" ? draftIsAllDay() : editIsAllDay();
-  const setIsAllDay = (v: boolean) => mode() === "create" ? setDraftIsAllDay(v) : setEditIsAllDay(v);
+  const setIsAllDay = (v: boolean) => {
+    if (mode() === "create") { setDraftIsAllDay(v); return; }
+    setEditIsAllDay(v);
+  };
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
   const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
 
@@ -492,28 +495,50 @@ export function EventForm() {
               class="inline-flex items-center gap-1.5 cursor-pointer"
               onClick={() => {
                 const wasAllDay = isAllDay();
-                setIsAllDay(!wasAllDay);
+                const s = start()!;
+                const editing = mode() === "edit";
+
                 if (!wasAllDay) {
-                  // Switching timed → all-day: save current times for later restore
-                  savedTimedStart = start() ? new Date(start()!) : null;
+                  // Timed → all-day: save current times, set UTC midnight dates
+                  savedTimedStart = new Date(s);
                   savedTimedEnd = end() ? new Date(end()!) : null;
+
+                  // All-day events use UTC midnight dates (matching Google's format)
+                  const allDayStart = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate()));
+                  const allDayEnd = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate() + 1));
+
+                  setIsAllDay(true);
+                  if (editing) {
+                    setEditStart(allDayStart);
+                    setEditEnd(allDayEnd);
+                    scheduleSave({ isAllDay: true, start: allDayStart, end: allDayEnd });
+                    flushSave();
+                  }
                 } else {
-                  // Switching all-day → timed: restore saved times (or fall back to 9–10 AM)
-                  const s = start();
-                  if (s && savedTimedStart && savedTimedEnd) {
-                    const newStart = new Date(s);
+                  // All-day → timed: restore saved times or default to 12pm + 1h
+                  let newStart: Date;
+                  let newEnd: Date;
+                  if (savedTimedStart && savedTimedEnd) {
+                    newStart = new Date(s);
                     newStart.setHours(savedTimedStart.getHours(), savedTimedStart.getMinutes(), 0, 0);
-                    const newEnd = new Date(s);
+                    newEnd = new Date(s);
                     newEnd.setHours(savedTimedEnd.getHours(), savedTimedEnd.getMinutes(), 0, 0);
-                    setStart(newStart);
-                    setEnd(newEnd);
-                  } else if (s) {
-                    const newStart = new Date(s);
-                    newStart.setHours(9, 0, 0, 0);
-                    const newEnd = new Date(s);
-                    newEnd.setHours(10, 0, 0, 0);
-                    setStart(newStart);
-                    setEnd(newEnd);
+                  } else {
+                    newStart = new Date(s);
+                    newStart.setHours(12, 0, 0, 0);
+                    newEnd = new Date(s);
+                    newEnd.setHours(13, 0, 0, 0);
+                  }
+
+                  setIsAllDay(false);
+                  if (editing) {
+                    setEditStart(newStart);
+                    setEditEnd(newEnd);
+                    scheduleSave({ isAllDay: false, start: newStart, end: newEnd });
+                    flushSave();
+                  } else {
+                    setDraftStart(newStart);
+                    setDraftEnd(newEnd);
                   }
                 }
               }}

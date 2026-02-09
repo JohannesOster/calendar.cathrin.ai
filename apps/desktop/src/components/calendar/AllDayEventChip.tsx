@@ -1,5 +1,7 @@
 import { deleteEvent } from "../../stores/events";
 import type { CalendarEvent } from "../../stores/events";
+import { selectEvent } from "../../stores/event-selection";
+import { selectedEventId } from "../../stores/event-selection";
 
 interface AllDayEventChipProps {
   event: CalendarEvent;
@@ -37,12 +39,16 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
     return `${left} ${right} ${right} ${left}`;
   };
 
+  const isSelected = () => selectedEventId() === props.event.id;
+
   const ariaLabel = () =>
     `${props.event.title}, ${formatDateRange(props.event.start, props.event.end)}`;
 
   return (
     <div
       class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
+      classList={{ "all-day-chip--selected": isSelected() }}
+      onClick={() => selectEvent(props.event.id)}
       style={{
         left: "0",
         transform: `translateX(${props.left}px)`,

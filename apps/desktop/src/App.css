@@ -224,17 +224,24 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 25%, white);
 }
 
-.all-day-chip:focus {
+.all-day-chip:focus,
+.all-day-chip--selected {
   outline: none;
   background-color: var(--event-color);
 }
 
-.all-day-chip:focus span {
+.all-day-chip:focus span,
+.all-day-chip--selected span {
   color: white;
 }
 
-.all-day-chip:focus .all-day-chip__ribbon {
+.all-day-chip:focus .all-day-chip__ribbon,
+.all-day-chip--selected .all-day-chip__ribbon {
   background-color: color-mix(in srgb, var(--event-color), white 30%);
+}
+
+.all-day-chip--selected:hover {
+  background-color: var(--event-color);
 }
 
 /* Undo toast animations */

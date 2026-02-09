@@ -108,7 +108,7 @@ export class GoogleCalendarService {
         headers: { Authorization: `Bearer ${this.accessToken}` },
       });
 
-      this.handleErrorResponse(response);
+      await this.handleErrorResponse(response);
 
       const data = (await response.json()) as CalendarListResponse;
       if (data.items) {
@@ -150,7 +150,7 @@ export class GoogleCalendarService {
         headers: { Authorization: `Bearer ${this.accessToken}` },
       });
 
-      this.handleErrorResponse(response);
+      await this.handleErrorResponse(response);
 
       const data = (await response.json()) as EventsListResponse;
       if (data.items) {
@@ -203,7 +203,7 @@ export class GoogleCalendarService {
         throw new SyncTokenExpiredError();
       }
 
-      this.handleErrorResponse(response);
+      await this.handleErrorResponse(response);
 
       const data = (await response.json()) as EventsListResponse;
       if (data.items) {
@@ -258,7 +258,7 @@ export class GoogleCalendarService {
       body: JSON.stringify(event),
     });
 
-    this.handleErrorResponse(response);
+    await this.handleErrorResponse(response);
 
     return (await response.json()) as GoogleEvent;
   }
@@ -273,8 +273,8 @@ export class GoogleCalendarService {
       summary?: string;
       description?: string;
       location?: string;
-      start?: { dateTime: string };
-      end?: { dateTime: string };
+      start?: { dateTime: string } | { date: string };
+      end?: { dateTime: string } | { date: string };
     }
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
@@ -288,7 +288,7 @@ export class GoogleCalendarService {
       body: JSON.stringify(patch),
     });
 
-    this.handleErrorResponse(response);
+    await this.handleErrorResponse(response);
 
     return (await response.json()) as GoogleEvent;
   }
@@ -311,13 +311,13 @@ export class GoogleCalendarService {
       return;
     }
 
-    this.handleErrorResponse(response);
+    await this.handleErrorResponse(response);
   }
 
   /**
    * Handle non-2xx responses
    */
-  private handleErrorResponse(response: Response): void {
+  private async handleErrorResponse(response: Response): Promise<void> {
     if (response.status === 401) {
       throw new TokenExpiredError();
     }
@@ -327,8 +327,15 @@ export class GoogleCalendarService {
     }
 
     if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json() as { error?: { message?: string } };
+        detail = body?.error?.message || JSON.stringify(body);
+      } catch {
+        // Fall back to statusText
+      }
       throw new GoogleApiError(
-        `Google API error: ${response.statusText}`,
+        `Google API error: ${detail}`,
         response.status
       );
     }
