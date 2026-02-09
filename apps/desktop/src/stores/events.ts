@@ -773,6 +773,12 @@ export function confirmMove(eventId: string): void {
 
   pendingMoves.delete(eventId);
 
+  // Update disk cache so refreshes don't flash the old position
+  const event = events().find((e) => e.id === eventId);
+  if (event) {
+    restoreCachedEventToDisk({ ...event, start: pending.newStart, end: pending.newEnd });
+  }
+
   const apiPatch: Record<string, string> = {
     start: pending.newStart.toISOString(),
     end: pending.newEnd.toISOString(),

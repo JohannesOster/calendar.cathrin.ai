@@ -29,20 +29,25 @@ function UndoToastItem(props: {
 
   requestAnimationFrame(() => setIsVisible(true));
 
-  const dismiss = () => {
+  const dismiss = (immediate = false) => {
     if (dismissed) return;
     if (isExiting()) return;
     dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
-    setIsExiting(true);
-    setTimeout(() => {
-      if (props.entry.type === "move" || props.entry.type === "resize") {
-        confirmMove(props.entry.eventId);
-      } else {
-        confirmDelete(props.entry.eventId);
-      }
+
+    // Confirm the action immediately (don't wait for exit animation)
+    if (props.entry.type === "move" || props.entry.type === "resize") {
+      confirmMove(props.entry.eventId);
+    } else {
+      confirmDelete(props.entry.eventId);
+    }
+
+    if (immediate) {
       props.onRemove();
-    }, EXIT_DURATION_MS);
+    } else {
+      setIsExiting(true);
+      setTimeout(() => props.onRemove(), EXIT_DURATION_MS);
+    }
   };
 
   const handleUndo = () => {
@@ -88,7 +93,7 @@ function UndoToastItem(props: {
             </div>
           </div>
           <button
-            onClick={dismiss}
+            onClick={() => dismiss(true)}
             class="text-white/40 hover:text-white transition-colors shrink-0 -mt-0.5"
             aria-label="Dismiss"
           >
