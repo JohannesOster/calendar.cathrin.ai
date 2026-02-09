@@ -107,7 +107,10 @@ function processEvents(
     if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   for (const event of newEvents) {
-    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
+    // Skip deleted events and events with pending moves (preserve optimistic position)
+    if (!pendingMap.has(event.id) && !pendingMoves.has(event.id)) {
+      uniqueEvents.set(event.id, event);
+    }
   }
   return Array.from(uniqueEvents.values()).sort(
     (a, b) => a.start.getTime() - b.start.getTime()
@@ -128,13 +131,17 @@ function replaceEventsInRange(
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
 
-  // Filter out events pending local deletion — server still has them
-  // but the user already deleted them (undo window hasn't closed yet)
-  const filtered = newEvents.filter((e) => !pendingMap.has(e.id));
+  // Filter out events pending local deletion or move — server still has
+  // stale data but the user already changed them (undo window open)
+  const filtered = newEvents.filter(
+    (e) => !pendingMap.has(e.id) && !pendingMoves.has(e.id)
+  );
   const newEventIds = new Set(filtered.map((e) => e.id));
 
   const kept = existingEvents.filter((event) => {
     if (pendingMap.has(event.id)) return false;
+    // Preserve optimistic position for pending moves
+    if (pendingMoves.has(event.id)) return true;
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;
     return !overlaps || newEventIds.has(event.id);
