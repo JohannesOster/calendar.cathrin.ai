@@ -15,7 +15,7 @@ const EXIT_DURATION_MS = 150;
 interface ToastEntry {
   eventId: string;
   title: string;
-  type: "delete" | "move";
+  type: "delete" | "move" | "resize";
 }
 
 function UndoToastItem(props: {
@@ -36,7 +36,7 @@ function UndoToastItem(props: {
     if (dismissTimer) clearTimeout(dismissTimer);
     setIsExiting(true);
     setTimeout(() => {
-      if (props.entry.type === "move") {
+      if (props.entry.type === "move" || props.entry.type === "resize") {
         confirmMove(props.entry.eventId);
       } else {
         confirmDelete(props.entry.eventId);
@@ -48,7 +48,7 @@ function UndoToastItem(props: {
   const handleUndo = () => {
     dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
-    if (props.entry.type === "move") {
+    if (props.entry.type === "move" || props.entry.type === "resize") {
       undoMove(props.entry.eventId);
     } else {
       undoDelete(props.entry.eventId);
@@ -81,7 +81,7 @@ function UndoToastItem(props: {
           <Info size={16} class="text-white/60 shrink-0 mt-0.5" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium">
-              {props.entry.type === "move" ? "Event moved" : "Event deleted"}
+              {props.entry.type === "resize" ? "Duration changed" : props.entry.type === "move" ? "Event moved" : "Event deleted"}
             </div>
             <div class="text-xs text-white/60 mt-0.5 truncate">
               "{props.entry.title}"
@@ -121,12 +121,13 @@ export function UndoToast() {
   });
 
   const unsubMove = onMove((move) => {
-    // Replace existing move toast for the same event (rapid re-drags)
-    setToasts((prev) => prev.filter((t) => !(t.eventId === move.eventId && t.type === "move")));
+    // Replace existing move/resize toast for the same event (rapid re-drags)
+    const toastType = move.kind === "resize" ? "resize" : "move";
+    setToasts((prev) => prev.filter((t) => !(t.eventId === move.eventId && (t.type === "move" || t.type === "resize"))));
     const entry: ToastEntry = {
       eventId: move.eventId,
       title: move.title,
-      type: "move",
+      type: toastType,
     };
     setToasts((prev) => [...prev, entry]);
   });

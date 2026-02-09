@@ -54,7 +54,10 @@ import {
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
 import { selectedEventId, deselectEvent } from "../../stores/event-selection";
-import { isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag } from "../../stores/event-drag";
+import {
+  isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag,
+  isResizeDragging, resizeDrag, cancelResizeDrag, finishResizeDrag,
+} from "../../stores/event-drag";
 import {
   startAutoScroll,
   updateAutoScrollCursor,
@@ -968,7 +971,6 @@ export function CalendarGrid() {
           document.body.classList.remove("dragging");
           const drag = moveDrag();
           if (drag) {
-            // Revert event to original position
             setEvents((prev) =>
               prev.map((ev) =>
                 ev.id === drag.event.id
@@ -978,6 +980,24 @@ export function CalendarGrid() {
             );
           }
           cancelMoveDrag();
+          e.preventDefault();
+          return;
+        }
+        // Cancel resize drag on Escape — revert to original size
+        if (isResizeDragging()) {
+          stopAutoScroll();
+          document.body.classList.remove("dragging");
+          const drag = resizeDrag();
+          if (drag) {
+            setEvents((prev) =>
+              prev.map((ev) =>
+                ev.id === drag.event.id
+                  ? { ...ev, end: drag.originalEnd }
+                  : ev
+              )
+            );
+          }
+          cancelResizeDrag();
           e.preventDefault();
           return;
         }
@@ -1124,6 +1144,33 @@ export function CalendarGrid() {
       );
     };
 
+    // -----------------------------------------------------------------------
+    // Resize-drag: update event end time in real time
+    // -----------------------------------------------------------------------
+    const recalcResizePosition = () => {
+      const drag = resizeDrag();
+      if (!drag) return;
+
+      const cursorMinutes = getMinutesFromClientY(lastDragClientY);
+      const startMinutes = drag.originalStart.getHours() * 60 + drag.originalStart.getMinutes();
+
+      // Enforce minimum duration of one snap increment
+      const minEndMinutes = startMinutes + SNAP_MINUTES;
+      const clampedEndMinutes = Math.max(minEndMinutes, Math.min(cursorMinutes, 24 * 60));
+
+      const newEnd = new Date(drag.originalStart);
+      newEnd.setHours(0, 0, 0, 0);
+      newEnd.setMinutes(clampedEndMinutes);
+
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === drag.event.id
+            ? { ...e, end: newEnd }
+            : e
+        )
+      );
+    };
+
     const handleDragMouseMove = (e: MouseEvent) => {
       lastDragClientY = e.clientY;
       lastDragClientX = e.clientX;
@@ -1148,6 +1195,19 @@ export function CalendarGrid() {
         updateAutoScrollCursor(e.clientY, e.clientX);
 
         recalcMovePosition();
+        e.preventDefault();
+        return;
+      }
+
+      // --- Resize drag ---
+      if (isResizeDragging()) {
+        if (!scrollContainerRef) return;
+
+        if (!document.body.classList.contains("dragging")) {
+          document.body.classList.add("dragging");
+        }
+
+        recalcResizePosition();
         e.preventDefault();
         return;
       }
@@ -1198,7 +1258,6 @@ export function CalendarGrid() {
         stopAutoScroll();
         document.body.classList.remove("dragging");
 
-        // Read current event position (already updated during drag)
         const drag = finishMoveDrag();
         if (drag) {
           const event = events().find((e) => e.id === drag.event.id);
@@ -1214,6 +1273,27 @@ export function CalendarGrid() {
         }
 
         settleSnapAfterDrag();
+        return;
+      }
+
+      // --- Resize drag ---
+      if (isResizeDragging()) {
+        document.body.classList.remove("dragging");
+
+        const drag = finishResizeDrag();
+        if (drag) {
+          const event = events().find((e) => e.id === drag.event.id);
+          if (event) {
+            moveEvent(
+              drag.event.id,
+              event.start,
+              event.end,
+              drag.originalStart,
+              drag.originalEnd,
+              "resize",
+            );
+          }
+        }
         return;
       }
 

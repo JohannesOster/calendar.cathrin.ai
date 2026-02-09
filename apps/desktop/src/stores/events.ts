@@ -692,6 +692,7 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
 export interface PendingMove {
   eventId: string;
   title: string;
+  kind: "move" | "resize";
   originalStart: Date;
   originalEnd: Date;
   newStart: Date;
@@ -709,7 +710,7 @@ export function onMove(fn: MoveListener): () => void {
 }
 
 /**
- * Move an event to a new time. The API call is deferred until the undo
+ * Move or resize an event. The API call is deferred until the undo
  * toast dismisses, matching the existing delete pattern.
  */
 export function moveEvent(
@@ -718,6 +719,7 @@ export function moveEvent(
   newEnd: Date,
   originalStart: Date,
   originalEnd: Date,
+  kind: "move" | "resize" = "move",
 ): void {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
@@ -725,6 +727,7 @@ export function moveEvent(
   const move: PendingMove = {
     eventId,
     title: event.title,
+    kind,
     originalStart,
     originalEnd,
     newStart,

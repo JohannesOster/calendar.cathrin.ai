@@ -4,7 +4,7 @@ import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
 import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
-import { startMoveDrag, isMoveDragging, moveDragEventId } from "../../stores/event-drag";
+import { startMoveDrag, moveDragEventId, startResizeDrag, resizeDragEventId, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
 
 // Shared signal: all segments of the focused event highlight together
@@ -53,18 +53,47 @@ export function CalendarEvent(props: CalendarEventProps) {
   const [firePosition, setFirePosition] = createSignal(0);
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
-  const isBeingDragged = createMemo(() => moveDragEventId() === props.event.id);
+  const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;
   let cleanupDragDetection: (() => void) | null = null;
+
+  const handleResizePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    if (props.event.isAllDay) return;
+
+    const startY = e.clientY;
+    let started = false;
+
+    const onMove = (me: PointerEvent) => {
+      if (!started && Math.abs(me.clientY - startY) >= MOVE_DRAG_THRESHOLD) {
+        started = true;
+        startResizeDrag(props.event);
+      }
+    };
+
+    const onUp = () => {
+      cleanup();
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   const handlePointerDown = (e: PointerEvent) => {
     // Only left button, only single-day timed events
     if (e.button !== 0) return;
     if (props.event.isAllDay) return;
 
-    // Don't start drag from a resize handle (future #113)
+    // Don't start move drag from the resize handle
     const target = e.target as HTMLElement;
     if (target.closest("[data-resize-handle]")) return;
 
@@ -250,6 +279,16 @@ export function CalendarEvent(props: CalendarEventProps) {
             </Show>
           </div>
         </div>
+
+        {/* Resize handle — bottom edge, visible on hover */}
+        <Show when={!props.event.isAllDay}>
+          <div
+            data-resize-handle
+            class="calendar-event__resize-handle"
+            aria-label="Resize event duration"
+            onPointerDown={handleResizePointerDown}
+          />
+        </Show>
       </div>
 
       {/* Fire GIF overlay - sibling to content, not clipped */}

@@ -172,6 +172,38 @@ body.dragging * {
   cursor: grabbing !important;
 }
 
+/* Resize handle - bottom edge of timed events */
+.calendar-event__resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  border-radius: 0 0 8px 8px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.calendar-event__resize-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 3px;
+  border-radius: 1.5px;
+  background-color: var(--event-color);
+  opacity: 0.5;
+}
+
+.calendar-event:hover .calendar-event__resize-handle,
+.calendar-event--focused .calendar-event__resize-handle,
+.calendar-event:focus .calendar-event__resize-handle {
+  opacity: 1;
+}
+
 /* All-day event chip states */
 .all-day-chip {
   background-color: color-mix(in srgb, var(--event-color) 15%, white);
