@@ -1,7 +1,8 @@
+import { Show } from "solid-js";
 import type { CalendarEvent } from "../../stores/events";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
-import { formatDateRange } from "../../lib/format-utils";
+import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
 
 interface AllDayEventChipProps {
@@ -25,8 +26,13 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   const isSelected = () => selectedEventId() === props.event.id;
 
-  const ariaLabel = () =>
-    `${props.event.title}, ${formatDateRange(props.event.start, props.event.end)}`;
+  const hasTimes = () => !props.event.isAllDay;
+
+  const ariaLabel = () => {
+    const base = `${props.event.title}, ${formatDateRange(props.event.start, props.event.end)}`;
+    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}`;
+    return base;
+  };
 
   return (
     <div
@@ -55,6 +61,11 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         }}
       />
       <span class="truncate text-fg ml-0.5">{props.event.title}</span>
+      <Show when={hasTimes()}>
+        <span class="shrink-0 text-[10px] text-fg opacity-50 ml-1">
+          {formatChipTimeRange(props.event.start, props.event.end)}
+        </span>
+      </Show>
     </div>
   );
 }
