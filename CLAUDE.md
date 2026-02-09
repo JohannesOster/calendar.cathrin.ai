@@ -14,6 +14,76 @@ This is a calendar application built as a **pnpm monorepo** with:
 
 The app features a macOS-style calendar with a custom title bar overlay (traffic light positioning) and collapsible sidebars that persist state to localStorage.
 
+## Product & Design Context
+
+### Who We're Designing For
+
+**Primary persona: "The Craft-Conscious Professional"** — people who notice when software is good, have opinions about their tools, and pay for apps because they want to.
+
+- Uses taste apps (Arc, Raycast, Things, Notion) — expects that level of polish
+- Has tried multiple calendar apps and isn't satisfied
+- Works at startups, agencies, design studios, remote-first companies, or freelances
+- Has tool autonomy — can install and pay for apps without IT approval
+- Cross-context: uses work tools (Outlook) but chooses personal tools deliberately
+
+**Anti-persona: "The Locked-Down Enterprise Worker"** — IT controls everything, can't install apps, locked into Microsoft ecosystem. Not our customer. Don't design for IT admins.
+
+### Design Philosophy
+
+**"Craft you can feel."** Not "beautiful" (everyone claims that). Not "delightful" (overused). But:
+- Animations that feel inevitable
+- Spacing that doesn't fight your eyes
+- Interactions that work the way you expect before you expect it
+- Polish that compounds across every touchpoint
+
+**"iPhone, not cartoon."** Sophisticated, simple, warm undertones. Elegant without being cold.
+
+The moat is relentless craft — competitors won't put in this work because it doesn't show up in a feature comparison table.
+
+### In-App Voice & Copy
+
+Tone: **Minimal, warm, brief.** Deadpan and self-aware — never pushy or hyper.
+
+| Context | Example |
+|---------|---------|
+| Empty state | "Nothing here. Enjoy the quiet." |
+| Error state | "Something's off. Try again?" |
+| Feature announcement | "You can now sync multiple calendars. We know, groundbreaking." |
+
+**Words we use:** considered, thoughtful, crafted, simple, clean, calm
+**Words we avoid:** revolutionary, disruptive, game-changing, synergy, leverage, optimize, delightful
+
+### The Mascot: Cathrin
+
+A cute flame character (yellow core, orange edges, expressive eyes, rosy cheeks). Warm, dry, observant personality.
+
+**In-product rule:** Cathrin appears only in empty states, errors, and onboarding. Rare enough to be delightful, not annoying. The product is clean and quiet — Cathrin moments are punctuation, not the sentence.
+
+### What This Product Is (and Isn't)
+
+**Is:** A calendar app with Outlook/Google/iCloud sync, obsessive attention to detail, Mac first.
+**Is not:** A productivity suite, meeting scheduler (Calendly), AI assistant, or notes app with calendar features.
+
+### Competitive Angles
+
+- **vs Fantastical:** Simpler, warmer, fresher (they're complex and earnest)
+- **vs Notion Calendar:** We work with Outlook (they don't)
+- **vs Google Calendar:** Worth paying for (they're ugly and generic)
+- **vs Outlook:** Actually pleasant to use (they're bloated)
+
+### Success Metrics
+
+- **North star:** Daily active users who open Cathrin as their primary calendar
+- **Activation ("aha moment"):** User connects a calendar and views their week — it looks right
+- **Business model:** $8/mo or $72/yr. 7-day trial, full features.
+
+### Visual Direction
+
+The product color palette is not yet finalized — a dedicated design session will establish the definitive system. Current working style uses Notion-like neutrals (see Styling System section below). Brand marketing colors (Warm Amber #F59E0B, Soft Orange #FB923C, Cream #FEF3C7) exist as reference but are not committed to the product UI.
+
+**Do:** Subtle warmth, smooth micro-animations, clean spacious layouts, every micro-interaction considered.
+**Don't:** Literal flames, aggressive reds/oranges, Cathrin on every screen, over-the-top animations.
+
 ## Monorepo Structure
 
 ```
