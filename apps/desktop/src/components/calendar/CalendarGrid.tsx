@@ -82,6 +82,8 @@ const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on i
 
 // Derived dimensions
 const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT;
+const COLLAPSED_ALL_DAY_HEIGHT = 28; // px - matches MIN_SECTION_HEIGHT from AllDaySection
+const GRID_TOP_OFFSET = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + COLLAPSED_ALL_DAY_HEIGHT;
 
 // ============================================================================
 // Constants - Virtual Scroll Container
@@ -230,13 +232,8 @@ export function CalendarGrid() {
 
   // All-day section expand/collapse state
   const [allDayExpanded, setAllDayExpanded] = createSignal(false);
-  const [isAllDayTransitioning, setIsAllDayTransitioning] = createSignal(false);
-  let allDayTransitionTimer: ReturnType<typeof setTimeout> | undefined;
   const toggleAllDayExpanded = () => {
-    setIsAllDayTransitioning(true);
     setAllDayExpanded((prev) => !prev);
-    if (allDayTransitionTimer) clearTimeout(allDayTransitionTimer);
-    allDayTransitionTimer = setTimeout(() => setIsAllDayTransitioning(false), 250);
   };
 
   // Auto-expand all-day section when creating an all-day event
@@ -680,9 +677,10 @@ export function CalendarGrid() {
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
-  // Total content height = month label + header + all-day section + time grid
+  // Total content height = month label + header + collapsed all-day + time grid
+  // Uses collapsed height because expanded all-day overlays the grid (doesn't push it down)
   const contentHeight = createMemo(
-    () => MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight() + TOTAL_HEIGHT,
+    () => GRID_TOP_OFFSET + TOTAL_HEIGHT,
   );
 
   // Calculate day index from scroll position
@@ -979,9 +977,15 @@ export function CalendarGrid() {
         const eventWrapper = activeEl?.closest(
           "[data-event-id]",
         ) as HTMLElement | null;
-        if (eventWrapper && (eventWrapper as any).triggerBurn) {
+        if (eventWrapper) {
           e.preventDefault();
-          (eventWrapper as any).triggerBurn();
+          if ((eventWrapper as any).triggerBurn) {
+            // Timed event — play burn animation, then delete
+            (eventWrapper as any).triggerBurn();
+          } else if ((eventWrapper as any).deleteEvent) {
+            // All-day event — delete immediately
+            (eventWrapper as any).deleteEvent();
+          }
         }
       }
     };
@@ -1031,7 +1035,7 @@ export function CalendarGrid() {
       if (!gridArea) return;
 
       const gridRect = gridArea.getBoundingClientRect();
-      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+      const stickyHeaderHeight = GRID_TOP_OFFSET;
 
       const mouseY = lastDragClientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
       const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
@@ -1054,7 +1058,7 @@ export function CalendarGrid() {
         setSnapEnabled(false);
       }
 
-      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight();
+      const stickyHeaderHeight = GRID_TOP_OFFSET;
       const timeColWidth = getTimeColWidth();
       startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcDragPosition, timeColWidth, colWidth());
       updateAutoScrollCursor(e.clientY, e.clientX);
@@ -1113,12 +1117,6 @@ export function CalendarGrid() {
       }
     });
 
-    // Cleanup all-day transition timer
-    onCleanup(() => {
-      if (allDayTransitionTimer) {
-        clearTimeout(allDayTransitionTimer);
-      }
-    });
   });
 
   // Persist visible days count to localStorage
@@ -1414,17 +1412,19 @@ export function CalendarGrid() {
                 </Key>
               </div>
 
-              {/* Sticky All-Day Section Row - matches header row structure */}
+              {/* Sticky All-Day Section Row - overlays the grid when expanded */}
               <div
                 class="flex bg-surface border-b border-border"
                 classList={{
-                  "transition-[height] duration-200 ease-out": true,
+                  "transition-[height,margin-bottom,box-shadow] duration-200 ease-out": true,
                 }}
                 style={{
                   position: "sticky",
                   top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT}px`,
                   "z-index": "10",
                   height: `${allDayHeight()}px`,
+                  "margin-bottom": `${-(allDayHeight() - COLLAPSED_ALL_DAY_HEIGHT)}px`,
+                  "box-shadow": allDayExpanded() ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
                   width: "100%",
                   transform: "translateZ(0)",
                   contain: "layout",
@@ -1478,122 +1478,125 @@ export function CalendarGrid() {
                   </Show>
                 </div>
 
-                {/* Absolute day slots - matches header date slots */}
-                <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
-                  {(item) => (
-                    <div
-                      class="absolute border-l border-b border-border bg-surface"
-                      style={{
-                        left: "0",
-                        transform: `translateX(${item().left}px)`,
-                        width: `${layout().width}px`,
-                        height: `${allDayHeight()}px`,
-                        top: 0,
-                      }}
-                    >
-                      <AllDayFlashOverlay date={() => item().date} />
-                    </div>
-                  )}
-                </Key>
-
-                {/* All-day event chips (when expanded, or for columns with single events when collapsed) */}
-                <Show
-                  when={allDayExpanded()}
-                  fallback={
-                    <>
-                      {/* When collapsed: show chips only for columns with single events */}
-                      {/* Use Key with event.id to preserve DOM focus during scroll */}
-                      <Key
-                        each={allDayEventLayouts().filter((l) => l.row < 1)}
-                        by={(l) => l.event.id}
+                {/* Clipping wrapper - covers full row, clips chips during height animation */}
+                <div class="absolute inset-0 overflow-hidden" style={{ "z-index": "1" }}>
+                  {/* Absolute day slots - matches header date slots */}
+                  <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                    {(item) => (
+                      <div
+                        class="absolute border-l border-b border-border bg-surface"
+                        style={{
+                          left: "0",
+                          transform: `translateX(${item().left}px)`,
+                          width: `${layout().width}px`,
+                          height: `${allDayHeight()}px`,
+                          top: 0,
+                        }}
                       >
-                        {(layout) => {
-                          // Check if this chip spans any column with multiple events
-                          // Use accessors inside to stay reactive
-                          const shouldHide = () => {
-                            const width = layout().width;
-                            const days = visibleDays();
-                            const counts = eventCountsPerDay();
-                            const chipStartPx = layout().left;
-                            const chipEndPx = layout().left + layout().width;
-
-                            return days.some((day) => {
-                              const dayStartPx = day.left;
-                              const dayEndPx = day.left + width;
-                              const overlaps =
-                                chipStartPx < dayEndPx &&
-                                chipEndPx > dayStartPx;
-                              const count =
-                                counts.get(getDateKey(day.date)) ?? 0;
-                              return overlaps && count > 1;
-                            });
-                          };
-
-                          return (
-                            <Show when={!shouldHide()}>
-                              <AllDayEventChip
-                                event={layout().event}
-                                left={layout().left}
-                                width={layout().width}
-                                row={layout().row}
-                                startsBeforeView={layout().startsBeforeView}
-                                endsAfterView={layout().endsAfterView}
-                              />
-                            </Show>
-                          );
-                        }}
-                      </Key>
-
-                      {/* "X events" labels for columns with multiple events */}
-                      <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
-                        {(day) => {
-                          const count = () =>
-                            eventCountsPerDay().get(getDateKey(day().date)) ??
-                            0;
-
-                          return (
-                            <Show when={count() > 1}>
-                              <div
-                                class="absolute flex items-center px-1.5 text-xs text-fg-muted font-light cursor-pointer hover:text-fg transition-colors"
-                                style={{
-                                  left: "0",
-                                  transform: `translateX(${day().left}px)`,
-                                  width: `${layout().width}px`,
-                                  top: "4px",
-                                  height: "var(--grid-all-day-chip-height)",
-                                }}
-                                onClick={toggleAllDayExpanded}
-                                role="button"
-                                tabIndex={0}
-                                aria-label={`${count()} all-day events. Click to expand.`}
-                              >
-                                {count()} events
-                              </div>
-                            </Show>
-                          );
-                        }}
-                      </Key>
-                    </>
-                  }
-                >
-                  {/* When expanded: show all chips */}
-                  {/* Use Key with event.id to preserve DOM focus during scroll */}
-                  <Key each={allDayEventLayouts()} by={(l) => l.event.id}>
-                    {(layout) => (
-                      <AllDayEventChip
-                        event={layout().event}
-                        left={layout().left}
-                        width={layout().width}
-                        row={layout().row}
-                        startsBeforeView={layout().startsBeforeView}
-                        endsAfterView={layout().endsAfterView}
-                      />
+                        <AllDayFlashOverlay date={() => item().date} />
+                      </div>
                     )}
                   </Key>
-                </Show>
 
-                {/* All-day creation placeholder */}
-                <AllDayPlaceholder days={visibleDays()} colWidth={layout().width} row={allDayPlaceholderRow()} />
+                  {/* All-day event chips (when expanded, or for columns with single events when collapsed) */}
+                  <Show
+                    when={allDayExpanded()}
+                    fallback={
+                      <>
+                        {/* When collapsed: show chips only for columns with single events */}
+                        {/* Use Key with event.id to preserve DOM focus during scroll */}
+                        <Key
+                          each={allDayEventLayouts().filter((l) => l.row < 1)}
+                          by={(l) => l.event.id}
+                        >
+                          {(layout) => {
+                            // Check if this chip spans any column with multiple events
+                            // Use accessors inside to stay reactive
+                            const shouldHide = () => {
+                              const width = layout().width;
+                              const days = visibleDays();
+                              const counts = eventCountsPerDay();
+                              const chipStartPx = layout().left;
+                              const chipEndPx = layout().left + layout().width;
+
+                              return days.some((day) => {
+                                const dayStartPx = day.left;
+                                const dayEndPx = day.left + width;
+                                const overlaps =
+                                  chipStartPx < dayEndPx &&
+                                  chipEndPx > dayStartPx;
+                                const count =
+                                  counts.get(getDateKey(day.date)) ?? 0;
+                                return overlaps && count > 1;
+                              });
+                            };
+
+                            return (
+                              <Show when={!shouldHide()}>
+                                <AllDayEventChip
+                                  event={layout().event}
+                                  left={layout().left}
+                                  width={layout().width}
+                                  row={layout().row}
+                                  startsBeforeView={layout().startsBeforeView}
+                                  endsAfterView={layout().endsAfterView}
+                                />
+                              </Show>
+                            );
+                          }}
+                        </Key>
+
+                        {/* "X events" labels for columns with multiple events */}
+                        <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
+                          {(day) => {
+                            const count = () =>
+                              eventCountsPerDay().get(getDateKey(day().date)) ??
+                              0;
+
+                            return (
+                              <Show when={count() > 1}>
+                                <div
+                                  class="absolute flex items-center px-1.5 text-xs text-fg-muted font-light cursor-pointer hover:text-fg transition-colors"
+                                  style={{
+                                    left: "0",
+                                    transform: `translateX(${day().left}px)`,
+                                    width: `${layout().width}px`,
+                                    top: "4px",
+                                    height: "var(--grid-all-day-chip-height)",
+                                  }}
+                                  onClick={toggleAllDayExpanded}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`${count()} all-day events. Click to expand.`}
+                                >
+                                  {count()} events
+                                </div>
+                              </Show>
+                            );
+                          }}
+                        </Key>
+                      </>
+                    }
+                  >
+                    {/* When expanded: show all chips */}
+                    {/* Use Key with event.id to preserve DOM focus during scroll */}
+                    <Key each={allDayEventLayouts()} by={(l) => l.event.id}>
+                      {(layout) => (
+                        <AllDayEventChip
+                          event={layout().event}
+                          left={layout().left}
+                          width={layout().width}
+                          row={layout().row}
+                          startsBeforeView={layout().startsBeforeView}
+                          endsAfterView={layout().endsAfterView}
+                        />
+                      )}
+                    </Key>
+                  </Show>
+
+                  {/* All-day creation placeholder */}
+                  <AllDayPlaceholder days={visibleDays()} colWidth={layout().width} row={allDayPlaceholderRow()} />
+                </div>
               </div>
 
               {/* Sticky Time Column Body - Sticky Left, below all-day section */}
@@ -1623,20 +1626,17 @@ export function CalendarGrid() {
                 </div>
               </div>
 
-              {/* Absolute Day Columns */}
+              {/* Absolute Day Columns - fixed at collapsed offset (all-day overlays, doesn't push) */}
               <Key each={visibleDays()} by={(d) => getDateKey(d.date)}>
                 {(item) => (
                   <div
                     class="absolute border-l border-border"
-                    classList={{
-                      "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
-                    }}
                     style={{
                       left: "0",
                       transform: `translateX(${item().left}px)`,
                       width: `${layout().width}px`,
                       height: `${TOTAL_HEIGHT}px`,
-                      top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight()}px`,
+                      top: `${GRID_TOP_OFFSET}px`,
                       "z-index": "1",
                     }}
                   >
@@ -1647,14 +1647,10 @@ export function CalendarGrid() {
 
               {/* Current Time Line - spans full width at current time position */}
               <div
-                class=""
-                classList={{
-                  "transition-[top] duration-200 ease-out": isAllDayTransitioning(),
-                }}
                 style={{
                   position: "absolute",
                   left: "0",
-                  top: `${MONTH_LABEL_HEIGHT + HEADER_HEIGHT + allDayHeight()}px`,
+                  top: `${GRID_TOP_OFFSET}px`,
                   width: "100%",
                   height: `${TOTAL_HEIGHT}px`,
                   "pointer-events": "none",

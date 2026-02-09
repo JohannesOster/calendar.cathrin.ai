@@ -16,6 +16,8 @@ import {
   loadEventsFromDisk,
   saveEventsToDisk,
   replaceEventsOnDisk,
+  deleteCachedEventFromDisk,
+  restoreCachedEventToDisk,
   clearAllWeekAccess,
   clearAllWeekFetchTimes,
   clearPersistedFetchTimes,
@@ -102,10 +104,10 @@ function processEvents(
 ): CalendarEvent[] {
   const uniqueEvents = new Map<string, CalendarEvent>();
   for (const event of existingEvents) {
-    uniqueEvents.set(event.id, event);
+    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   for (const event of newEvents) {
-    uniqueEvents.set(event.id, event);
+    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   return Array.from(uniqueEvents.values()).sort(
     (a, b) => a.start.getTime() - b.start.getTime()
@@ -125,15 +127,20 @@ function replaceEventsInRange(
 ): CalendarEvent[] {
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
-  const newEventIds = new Set(newEvents.map((e) => e.id));
+
+  // Filter out events pending local deletion — server still has them
+  // but the user already deleted them (undo window hasn't closed yet)
+  const filtered = newEvents.filter((e) => !pendingMap.has(e.id));
+  const newEventIds = new Set(filtered.map((e) => e.id));
 
   const kept = existingEvents.filter((event) => {
+    if (pendingMap.has(event.id)) return false;
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;
     return !overlaps || newEventIds.has(event.id);
   });
 
-  return processEvents(newEvents, kept);
+  return processEvents(filtered, kept);
 }
 
 function evictStaleWeeks(): void {
@@ -515,71 +522,87 @@ export function removeLocalEvent(eventId: string): void {
 // Event Deletion
 // =============================================================================
 
-export interface DeletedEventInfo {
+export interface PendingDeletion {
   event: CalendarEvent;
-  abortController: AbortController;
 }
 
-const [lastDeletedEvent, setLastDeletedEvent] = createSignal<DeletedEventInfo | null>(null);
-export { lastDeletedEvent, setLastDeletedEvent };
+/**
+ * Non-reactive map of pending deletions. The toast component subscribes
+ * to the `onDeletion` callback to manage its own rendering lifecycle,
+ * which prevents store/signal array mutations from recreating sibling toasts.
+ */
+const pendingMap = new Map<string, PendingDeletion>();
+
+type DeletionListener = (deletion: PendingDeletion) => void;
+const listeners = new Set<DeletionListener>();
+
+/** Subscribe to new deletion events (used by UndoToast). */
+export function onDeletion(fn: DeletionListener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
 
 /**
- * Delete an event: remove from local store, call API in background.
- * Preserves event data + AbortController for undo support.
+ * Fire the actual DELETE API call for an event.
  */
-export function deleteEvent(eventId: string): void {
-  // Find and preserve the event before removing
-  const event = events().find((e) => e.id === eventId);
-  if (!event) return;
-
-  const abortController = new AbortController();
-
-  // Store for undo
-  setLastDeletedEvent({ event, abortController });
-
-  // Optimistic removal
-  removeLocalEvent(eventId);
-
-  // Background API call
-  apiFetch<{ success: boolean }>(`/api/events/${encodeURIComponent(eventId)}`, {
+function fireDeleteApi(event: CalendarEvent): void {
+  apiFetch<{ success: boolean }>(`/api/events/${encodeURIComponent(event.id)}`, {
     method: "DELETE",
-    signal: abortController.signal,
   })
     .then(() => {
-      console.log(`[events] Deleted event ${eventId} from server`);
+      console.log(`[events] Deleted event ${event.id} from server`);
       revalidateWeeksForDates(event.start);
     })
     .catch((error) => {
-      if (error instanceof Error && error.name === "AbortError") {
-        // Undo was triggered — event is already restored
-        return;
-      }
-      console.error(`[events] Failed to delete event ${eventId}:`, error);
-      // Restore on failure
+      console.error(`[events] Failed to delete event ${event.id}:`, error);
+      // Restore on failure — server didn't accept the deletion
       addLocalEvent(event);
+      restoreCachedEventToDisk(event);
     });
 }
 
 /**
- * Undo the last deletion: abort the API call and restore the event.
+ * Delete an event: remove from local store + SQLite cache immediately.
+ * The API call is deferred until the undo toast dismisses.
  */
-export function undoDelete(): void {
-  const deleted = lastDeletedEvent();
-  if (!deleted) return;
+export function deleteEvent(eventId: string): void {
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
 
-  // Abort in-flight DELETE request
-  deleted.abortController.abort();
+  const deletion: PendingDeletion = { event };
+  pendingMap.set(eventId, deletion);
 
-  // Restore event
-  addLocalEvent(deleted.event);
-  setLastDeletedEvent(null);
+  // Notify toast component
+  for (const fn of listeners) fn(deletion);
+
+  // Optimistic removal from UI + disk cache
+  removeLocalEvent(eventId);
+  deleteCachedEventFromDisk(eventId);
 }
 
 /**
- * Clear the last deleted event reference (after toast dismissal).
+ * Undo a specific pending deletion by event ID.
  */
-export function clearLastDeleted(): void {
-  setLastDeletedEvent(null);
+export function undoDelete(eventId: string): void {
+  const pending = pendingMap.get(eventId);
+  if (!pending) return;
+
+  pendingMap.delete(eventId);
+
+  // Restore event to UI + disk cache
+  addLocalEvent(pending.event);
+  restoreCachedEventToDisk(pending.event);
+}
+
+/**
+ * Confirm a specific pending deletion: fire the API call.
+ */
+export function confirmDelete(eventId: string): void {
+  const pending = pendingMap.get(eventId);
+  if (!pending) return;
+
+  pendingMap.delete(eventId);
+  fireDeleteApi(pending.event);
 }
 
 // Re-export week utilities for convenience

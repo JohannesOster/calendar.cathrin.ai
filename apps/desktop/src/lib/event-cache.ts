@@ -276,6 +276,51 @@ export async function saveEventsToDisk(events: ApiEventForCache[]): Promise<void
  * Replace events in a time range on disk: delete stale, then save fresh.
  * Prevents deleted events from persisting in the SQLite cache across reloads.
  */
+/**
+ * Delete a single event from the SQLite cache by ID.
+ * Used during optimistic deletion to prevent stale flash on app restart.
+ */
+export async function deleteCachedEventFromDisk(eventId: string): Promise<void> {
+  try {
+    await invoke("delete_cached_event_by_id", { eventId });
+  } catch (error) {
+    console.warn("[event-cache] Failed to delete event from cache:", error);
+  }
+}
+
+/**
+ * Restore a single event to the SQLite cache.
+ * Used when undoing a deletion.
+ */
+export async function restoreCachedEventToDisk(event: {
+  id: string;
+  calendarId: string;
+  title: string;
+  start: Date;
+  end: Date;
+  isAllDay: boolean;
+  color: string;
+}): Promise<void> {
+  try {
+    await invoke("cache_events_locally", {
+      events: [
+        {
+          id: event.id,
+          calendar_id: event.calendarId,
+          title: event.title,
+          start: event.start.toISOString(),
+          end: event.end.toISOString(),
+          is_all_day: event.isAllDay,
+          color: event.color,
+          provider: "google",
+        },
+      ],
+    });
+  } catch (error) {
+    console.warn("[event-cache] Failed to restore event to cache:", error);
+  }
+}
+
 export async function replaceEventsOnDisk(
   timeMin: string,
   timeMax: string,

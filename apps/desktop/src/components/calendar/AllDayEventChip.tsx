@@ -1,3 +1,4 @@
+import { deleteEvent } from "../../stores/events";
 import type { CalendarEvent } from "../../stores/events";
 
 interface AllDayEventChipProps {
@@ -50,6 +51,10 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         height: "var(--grid-all-day-chip-height)",
         "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
+      }}
+      data-event-id={props.event.id}
+      ref={(el) => {
+        (el as any).deleteEvent = () => deleteEvent(props.event.id);
       }}
       tabIndex={0}
       role="button"

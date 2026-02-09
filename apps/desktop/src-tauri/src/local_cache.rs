@@ -169,6 +169,16 @@ impl LocalCache {
         Ok(deleted)
     }
 
+    /// Delete a single event by its ID
+    pub fn delete_event_by_id(&self, event_id: &str) -> Result<bool, CacheError> {
+        let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
+        let deleted = conn.execute(
+            "DELETE FROM cached_events WHERE id = ?1",
+            params![event_id],
+        )?;
+        Ok(deleted > 0)
+    }
+
     /// Clear all cached events
     pub fn clear(&self) -> Result<(), CacheError> {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;

@@ -1,93 +1,126 @@
-import { createSignal, createEffect, onCleanup, Show } from "solid-js";
+import { createSignal, onCleanup, For } from "solid-js";
 import { X, Info } from "lucide-solid";
 import {
-  lastDeletedEvent,
+  onDeletion,
   undoDelete,
-  clearLastDeleted,
+  confirmDelete,
 } from "../../stores/events";
 
 const AUTO_DISMISS_MS = 5000;
+const EXIT_DURATION_MS = 150;
 
-export function UndoToast() {
+interface ToastEntry {
+  eventId: string;
+  title: string;
+}
+
+function UndoToastItem(props: {
+  entry: ToastEntry;
+  onRemove: () => void;
+}) {
+  const [isVisible, setIsVisible] = createSignal(false);
   const [isExiting, setIsExiting] = createSignal(false);
   let dismissTimer: ReturnType<typeof setTimeout> | undefined;
+  let dismissed = false;
+
+  requestAnimationFrame(() => setIsVisible(true));
 
   const dismiss = () => {
+    if (dismissed) return;
+    if (isExiting()) return;
+    dismissed = true;
+    if (dismissTimer) clearTimeout(dismissTimer);
     setIsExiting(true);
     setTimeout(() => {
-      clearLastDeleted();
-      setIsExiting(false);
-    }, 150); // Match exit animation duration
+      confirmDelete(props.entry.eventId);
+      props.onRemove();
+    }, EXIT_DURATION_MS);
   };
 
   const handleUndo = () => {
+    dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
-    undoDelete();
-    setIsExiting(false);
+    undoDelete(props.entry.eventId);
+    props.onRemove();
   };
 
-  // Auto-dismiss timer, restarted when a new deletion occurs
-  createEffect(() => {
-    const deleted = lastDeletedEvent();
-    if (!deleted) {
-      setIsExiting(false);
-      return;
-    }
-
-    // Reset exit state for new toast
-    setIsExiting(false);
-
-    if (dismissTimer) clearTimeout(dismissTimer);
-    dismissTimer = setTimeout(dismiss, AUTO_DISMISS_MS);
-  });
+  dismissTimer = setTimeout(dismiss, AUTO_DISMISS_MS);
 
   onCleanup(() => {
     if (dismissTimer) clearTimeout(dismissTimer);
   });
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      dismiss();
-    }
+  return (
+    <div
+      role="alert"
+      class="transition-[opacity,transform] ease-out"
+      style={{
+        "transition-duration": isExiting() ? `${EXIT_DURATION_MS}ms` : "200ms",
+        opacity: isExiting() ? 0 : isVisible() ? 1 : 0,
+        transform: isExiting()
+          ? "translateY(8px)"
+          : isVisible()
+            ? "translateY(0)"
+            : "translateY(8px)",
+      }}
+    >
+      <div class="bg-fg text-white rounded-xl shadow-lg px-4 py-3 min-w-[280px] max-w-[400px]">
+        <div class="flex items-start gap-2">
+          <Info size={16} class="text-white/60 shrink-0 mt-0.5" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium">Event deleted</div>
+            <div class="text-xs text-white/60 mt-0.5 truncate">
+              "{props.entry.title}"
+            </div>
+          </div>
+          <button
+            onClick={dismiss}
+            class="text-white/40 hover:text-white transition-colors shrink-0 -mt-0.5"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div class="flex justify-end mt-2">
+          <button
+            onClick={handleUndo}
+            class="px-3 py-1 text-xs font-medium text-white bg-white/10 hover:bg-white/20 rounded transition-colors"
+          >
+            Undo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function UndoToast() {
+  const [toasts, setToasts] = createSignal<ToastEntry[]>([]);
+
+  const unsub = onDeletion((deletion) => {
+    const entry: ToastEntry = {
+      eventId: deletion.event.id,
+      title: deletion.event.title,
+    };
+    setToasts((prev) => [...prev, entry]);
+  });
+
+  onCleanup(unsub);
+
+  const removeToast = (eventId: string) => {
+    setToasts((prev) => prev.filter((t) => t.eventId !== eventId));
   };
 
   return (
-    <Show when={lastDeletedEvent()}>
-      {(deleted) => (
-        <div
-          class={`absolute bottom-4 left-1/2 -translate-x-1/2 z-[200] ${isExiting() ? "animate-toast-exit" : "animate-toast-enter"}`}
-          role="alert"
-          onKeyDown={handleKeyDown}
-        >
-          <div class="bg-fg text-white rounded-xl shadow-lg px-4 py-3 min-w-[280px] max-w-[400px]">
-            <div class="flex items-start gap-2">
-              <Info size={16} class="text-white/60 shrink-0 mt-0.5" />
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium">Event deleted</div>
-                <div class="text-xs text-white/60 mt-0.5 truncate">
-                  "{deleted().event.title}"
-                </div>
-              </div>
-              <button
-                onClick={dismiss}
-                class="text-white/40 hover:text-white transition-colors shrink-0 -mt-0.5"
-                aria-label="Dismiss"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div class="flex justify-end mt-2">
-              <button
-                onClick={handleUndo}
-                class="px-3 py-1 text-xs font-medium text-white bg-white/10 hover:bg-white/20 rounded transition-colors"
-              >
-                Undo
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </Show>
+    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 items-center">
+      <For each={toasts()}>
+        {(entry) => (
+          <UndoToastItem
+            entry={entry}
+            onRemove={() => removeToast(entry.eventId)}
+          />
+        )}
+      </For>
+    </div>
   );
 }
