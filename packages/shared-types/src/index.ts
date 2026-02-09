@@ -53,6 +53,20 @@ export interface ApiCreateEventRequest {
 }
 
 /**
+ * Request body for patching an existing calendar event
+ * All fields optional — only send what changed
+ */
+export interface ApiPatchEventRequest {
+  summary?: string;
+  description?: string;
+  location?: string;
+  /** ISO 8601 datetime string */
+  start?: string;
+  /** ISO 8601 datetime string */
+  end?: string;
+}
+
+/**
  * A calendar as transported over the API
  */
 export interface ApiCalendar {

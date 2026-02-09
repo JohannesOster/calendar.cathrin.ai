@@ -264,6 +264,36 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Patch (partial update) an event in a Google Calendar
+   */
+  async patchEvent(
+    calendarId: string,
+    eventId: string,
+    patch: {
+      summary?: string;
+      description?: string;
+      location?: string;
+      start?: { dateTime: string };
+      end?: { dateTime: string };
+    }
+  ): Promise<GoogleEvent> {
+    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(patch),
+    });
+
+    this.handleErrorResponse(response);
+
+    return (await response.json()) as GoogleEvent;
+  }
+
+  /**
    * Delete an event from a Google Calendar
    */
   async deleteEvent(calendarId: string, eventId: string): Promise<void> {

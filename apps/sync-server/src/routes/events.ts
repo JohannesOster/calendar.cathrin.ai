@@ -259,6 +259,112 @@ export const eventsRoute = new Hono()
       return await createEvent(c, accountId, calendarId, title, start, end, isAllDay, existingEvent?.color, location, description);
     }
   )
+  .patch(
+    "/:eventId",
+    zValidator(
+      "json",
+      z.object({
+        summary: z.string().optional(),
+        description: z.string().optional(),
+        location: z.string().optional(),
+        start: z.string().datetime().optional(),
+        end: z.string().datetime().optional(),
+      })
+    ),
+    async (c) => {
+      if (!db) {
+        return c.json({ error: "Database not configured" }, 500);
+      }
+
+      const userId = c.get("userId");
+      const googleEventId = c.req.param("eventId");
+      const patch = c.req.valid("json");
+
+      // Find the event in our cache to get accountId and calendarId
+      const userAccounts = await db.query.accounts.findMany({
+        where: eq(accounts.userId, userId),
+        columns: { id: true },
+      });
+
+      if (userAccounts.length === 0) {
+        return c.json({ error: "No accounts found" }, 404);
+      }
+
+      const accountIds = userAccounts.map((a) => a.id);
+
+      const event = await db.query.serverEvents.findFirst({
+        where: and(
+          inArray(serverEvents.accountId, accountIds),
+          eq(serverEvents.googleEventId, googleEventId)
+        ),
+      });
+
+      if (!event) {
+        return c.json({ error: "Event not found" }, 404);
+      }
+
+      // Build Google API patch body
+      const googlePatch: Record<string, unknown> = {};
+      if (patch.summary !== undefined) googlePatch.summary = patch.summary;
+      if (patch.description !== undefined) googlePatch.description = patch.description;
+      if (patch.location !== undefined) googlePatch.location = patch.location;
+      if (patch.start !== undefined) googlePatch.start = { dateTime: patch.start };
+      if (patch.end !== undefined) googlePatch.end = { dateTime: patch.end };
+
+      try {
+        const accessToken = await getAccessToken(event.accountId);
+        const service = new GoogleCalendarService(accessToken);
+        const updated = await service.patchEvent(event.calendarId, googleEventId, googlePatch as Parameters<GoogleCalendarService["patchEvent"]>[2]);
+
+        // Update local cache from Google's response (source of truth)
+        const updatedStart = updated.start.dateTime
+          ? new Date(updated.start.dateTime)
+          : updated.start.date
+            ? new Date(updated.start.date)
+            : event.start;
+        const updatedEnd = updated.end.dateTime
+          ? new Date(updated.end.dateTime)
+          : updated.end.date
+            ? new Date(updated.end.date)
+            : event.end;
+
+        await db
+          .update(serverEvents)
+          .set({
+            title: updated.summary || event.title,
+            start: updatedStart,
+            end: updatedEnd,
+            location: updated.location || null,
+            description: updated.description || null,
+            updatedAt: new Date(),
+          })
+          .where(eq(serverEvents.id, event.id));
+
+        const apiEvent: ApiCalendarEvent = {
+          id: updated.id,
+          calendarId: event.calendarId,
+          title: updated.summary || event.title,
+          start: updatedStart.toISOString(),
+          end: updatedEnd.toISOString(),
+          isAllDay: !!updated.start.date,
+          color: event.color || "#4285f4",
+          provider: "google",
+          location: updated.location || undefined,
+          description: updated.description || undefined,
+        };
+
+        return c.json(apiEvent);
+      } catch (error) {
+        if (error instanceof TokenExpiredError) {
+          return c.json({ error: "Token expired - re-authorization required" }, 401);
+        }
+        if (error instanceof GoogleApiError) {
+          return c.json({ error: error.message }, error.statusCode as ContentfulStatusCode);
+        }
+        throw error;
+      }
+    }
+  )
   .delete("/:eventId", async (c) => {
     if (!db) {
       return c.json({ error: "Database not configured" }, 500);
