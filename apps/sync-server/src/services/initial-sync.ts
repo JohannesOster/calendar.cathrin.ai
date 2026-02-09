@@ -86,6 +86,8 @@ export async function performInitialSync(accountId: string): Promise<void> {
               end: new Date(event.end),
               isAllDay: event.isAllDay,
               color: event.color,
+              location: event.location,
+              description: event.description,
               status: "confirmed",
             })
             .onConflictDoUpdate({
@@ -96,6 +98,8 @@ export async function performInitialSync(accountId: string): Promise<void> {
                 end: new Date(event.end),
                 isAllDay: event.isAllDay,
                 color: event.color,
+                location: event.location,
+                description: event.description,
                 updatedAt: new Date(),
               },
             });

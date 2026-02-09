@@ -34,6 +34,8 @@ export interface CalendarEvent {
   end: Date;
   isAllDay: boolean;
   color: string;
+  location?: string;
+  description?: string;
 }
 
 // =============================================================================
@@ -76,6 +78,8 @@ function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     end: new Date(event.end),
     isAllDay: event.isAllDay,
     color: event.color,
+    location: event.location,
+    description: event.description,
   };
 }
 

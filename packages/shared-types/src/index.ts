@@ -33,6 +33,8 @@ export interface ApiCalendarEvent {
   isAllDay: boolean;
   color: string;
   provider: Provider;
+  location?: string;
+  description?: string;
 }
 
 /**
@@ -46,6 +48,8 @@ export interface ApiCreateEventRequest {
   /** ISO 8601 date string */
   end: string;
   isAllDay?: boolean;
+  location?: string;
+  description?: string;
 }
 
 /**

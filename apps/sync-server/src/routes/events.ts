@@ -28,7 +28,9 @@ async function createEvent(
   start: string,
   end: string,
   isAllDay?: boolean,
-  calendarColor?: string | null
+  calendarColor?: string | null,
+  location?: string,
+  description?: string
 ) {
   try {
     const accessToken = await getAccessToken(accountId);
@@ -38,6 +40,8 @@ async function createEvent(
       summary: title,
       start: isAllDay ? { date: start.slice(0, 10) } : { dateTime: start },
       end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end },
+      location,
+      description,
     });
 
     const color = calendarColor || "#4285f4";
@@ -60,6 +64,8 @@ async function createEvent(
         end: eventEnd,
         isAllDay: isAllDay ?? false,
         color,
+        location: googleEvent.location || location,
+        description: googleEvent.description || description,
         status: "confirmed",
       })
       .onConflictDoUpdate({
@@ -70,6 +76,8 @@ async function createEvent(
           end: eventEnd,
           isAllDay: isAllDay ?? false,
           color,
+          location: googleEvent.location || location,
+          description: googleEvent.description || description,
           updatedAt: new Date(),
         },
       });
@@ -83,6 +91,8 @@ async function createEvent(
       isAllDay: isAllDay ?? false,
       color,
       provider: "google",
+      location: googleEvent.location || location || undefined,
+      description: googleEvent.description || description || undefined,
     };
 
     return c.json(apiEvent, 201);
@@ -174,6 +184,8 @@ export const eventsRoute = new Hono()
       isAllDay: event.isAllDay ?? false,
       color: event.color || "#4285f4",
       provider: "google",
+      location: event.location || undefined,
+      description: event.description || undefined,
     }));
 
     return c.json(apiEvents);
@@ -185,9 +197,11 @@ export const eventsRoute = new Hono()
       z.object({
         calendarId: z.string().min(1),
         title: z.string().min(1),
-        start: z.string().datetime(),
-        end: z.string().datetime(),
+        start: z.union([z.string().datetime(), z.string().date()]),
+        end: z.union([z.string().datetime(), z.string().date()]),
         isAllDay: z.boolean().optional(),
+        location: z.string().optional(),
+        description: z.string().optional(),
       })
     ),
     async (c) => {
@@ -196,7 +210,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description } = c.req.valid("json");
 
       // Find the account that owns this calendar
       const userAccounts = await db.query.accounts.findMany({
@@ -239,10 +253,10 @@ export const eventsRoute = new Hono()
           return c.json({ error: "Calendar not found" }, 404);
         }
 
-        return await createEvent(c, weekEntry.accountId, calendarId, title, start, end, isAllDay, null);
+        return await createEvent(c, weekEntry.accountId, calendarId, title, start, end, isAllDay, null, location, description);
       }
 
-      return await createEvent(c, accountId, calendarId, title, start, end, isAllDay, existingEvent?.color);
+      return await createEvent(c, accountId, calendarId, title, start, end, isAllDay, existingEvent?.color, location, description);
     }
   )
   .delete("/:eventId", async (c) => {

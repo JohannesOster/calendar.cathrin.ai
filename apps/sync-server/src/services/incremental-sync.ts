@@ -86,6 +86,8 @@ export async function syncCalendarIncremental(
           end: new Date(event.end),
           isAllDay: event.isAllDay,
           color: event.color,
+          location: event.location,
+          description: event.description,
           status: "confirmed",
         })
         .onConflictDoUpdate({
@@ -96,6 +98,8 @@ export async function syncCalendarIncremental(
             end: new Date(event.end),
             isAllDay: event.isAllDay,
             color: event.color,
+            location: event.location,
+            description: event.description,
             updatedAt: new Date(),
           },
         });
@@ -180,6 +184,8 @@ export async function syncCalendarFull(
         end: new Date(event.end),
         isAllDay: event.isAllDay,
         color: event.color,
+        location: event.location,
+        description: event.description,
         status: "confirmed",
       })
       .onConflictDoUpdate({
@@ -190,6 +196,8 @@ export async function syncCalendarFull(
           end: new Date(event.end),
           isAllDay: event.isAllDay,
           color: event.color,
+          location: event.location,
+          description: event.description,
           updatedAt: new Date(),
         },
       });

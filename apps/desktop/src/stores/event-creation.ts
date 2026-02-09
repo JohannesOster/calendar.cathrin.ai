@@ -14,6 +14,13 @@ export const [draftStart, setDraftStart] = createSignal<Date | null>(null);
 export const [draftEnd, setDraftEnd] = createSignal<Date | null>(null);
 export const [draftTitle, setDraftTitle] = createSignal("");
 export const [draftCalendarId, setDraftCalendarId] = createSignal<string | null>(null);
+export const [draftLocation, setDraftLocation] = createSignal("");
+export const [draftDescription, setDraftDescription] = createSignal("");
+export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
+
+// Shadow position: original start/end before inline time editing begins
+export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
+export const [shadowEnd, setShadowEnd] = createSignal<Date | null>(null);
 
 // =============================================================================
 // Helpers
@@ -141,32 +148,76 @@ export function cancelCreation(): void {
   setDraftEnd(null);
   setDraftTitle("");
   setDraftCalendarId(null);
+  setDraftLocation("");
+  setDraftDescription("");
+  setDraftIsAllDay(false);
+  setShadowStart(null);
+  setShadowEnd(null);
 }
 
 /**
  * Commit the event creation — optimistic insert + background API call.
  * Returns true if the event was saved, false if nothing to save.
  */
+/**
+ * Format a Date as YYYY-MM-DD for all-day event API calls.
+ */
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function commitCreation(): boolean {
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
   const calId = draftCalendarId() ?? resolveCalendarId();
+  const isAllDay = draftIsAllDay();
+  const location = draftLocation().trim() || undefined;
+  const description = draftDescription().trim() || undefined;
 
   if (!title || !start || !end || !calId) return false;
 
   const color = getDraftColor();
   const tempId = `temp-${crypto.randomUUID()}`;
 
+  // For all-day events: use UTC midnight dates to match Google Calendar convention.
+  // allDayLayout.ts uses getUTCDateOnly() which extracts UTC date components,
+  // so optimistic events must also use UTC midnight (not local midnight).
+  // Google Calendar uses exclusive end dates (1-day event on Feb 9 → end = Feb 10).
+  let eventStart = new Date(start);
+  let eventEnd = new Date(end);
+  let apiStart: string;
+  let apiEnd: string;
+
+  if (isAllDay) {
+    // API date strings: use the calendar dates the user selected (local components)
+    apiStart = formatDateOnly(start);
+    const endNextDay = new Date(end);
+    endNextDay.setDate(endNextDay.getDate() + 1);
+    apiEnd = formatDateOnly(endNextDay);
+
+    // Optimistic event dates: UTC midnight to match Google's convention
+    eventStart = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()));
+    eventEnd = new Date(Date.UTC(end.getFullYear(), end.getMonth(), end.getDate() + 1));
+  } else {
+    apiStart = start.toISOString();
+    apiEnd = end.toISOString();
+  }
+
   // Optimistic insert
   addLocalEvent({
     id: tempId,
     calendarId: calId,
     title,
-    start: new Date(start),
-    end: new Date(end),
-    isAllDay: false,
+    start: eventStart,
+    end: eventEnd,
+    isAllDay,
     color,
+    location,
+    description,
   });
 
   // Reset creation state
@@ -178,9 +229,11 @@ export function commitCreation(): boolean {
     body: JSON.stringify({
       calendarId: calId,
       title,
-      start: start.toISOString(),
-      end: end.toISOString(),
-      isAllDay: false,
+      start: apiStart,
+      end: apiEnd,
+      isAllDay,
+      location,
+      description,
     }),
   })
     .then((serverEvent) => {

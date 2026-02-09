@@ -24,6 +24,7 @@ import {
   type AllDayEventLayout,
 } from "./AllDaySection";
 import { AllDayEventChip } from "./AllDayEventChip";
+import { AllDayPlaceholder } from "./AllDayPlaceholder";
 import {
   addDays,
   isSameDay,
@@ -43,6 +44,9 @@ import {
   isDragging,
   isCreating,
   draftTitle,
+  draftIsAllDay,
+  draftStart,
+  draftEnd,
   updateDrag,
   finishDrag,
   cancelCreation,
@@ -234,6 +238,31 @@ export function CalendarGrid() {
     if (allDayTransitionTimer) clearTimeout(allDayTransitionTimer);
     allDayTransitionTimer = setTimeout(() => setIsAllDayTransitioning(false), 250);
   };
+
+  // Auto-expand all-day section when creating an all-day event
+  // Only auto-expand once per creation — don't fight the user if they manually collapse
+  let autoExpandedForCreation = false;
+  createEffect(() => {
+    const creating = isCreating();
+    const allDay = draftIsAllDay();
+
+    if (creating && allDay && !allDayExpanded() && !autoExpandedForCreation) {
+      setAllDayExpanded(true);
+      autoExpandedForCreation = true;
+    }
+    // All-day deselected during creation → collapse (if we auto-expanded)
+    if (autoExpandedForCreation && creating && !allDay) {
+      autoExpandedForCreation = false;
+      setAllDayExpanded(false);
+    }
+    // Creation ended → only collapse if no all-day events remain (i.e. was cancelled)
+    if (autoExpandedForCreation && !creating) {
+      autoExpandedForCreation = false;
+      if (visibleAllDayLayouts().length === 0) {
+        setAllDayExpanded(false);
+      }
+    }
+  });
 
   // Track scroll direction for prefetching
   let lastScrollLeft = CENTER_OFFSET;
@@ -586,13 +615,68 @@ export function CalendarGrid() {
     return false;
   });
 
+  // Row where the all-day creation placeholder sits (first row without conflict)
+  const allDayPlaceholderRow = createMemo(() => {
+    if (!isCreating() || !draftIsAllDay()) return 0;
+
+    const start = draftStart();
+    const end = draftEnd();
+    if (!start || !end) return 0;
+
+    const days = visibleDays();
+    if (days.length === 0) return 0;
+    const width = layout().width;
+
+    // Compute placeholder's pixel range (same logic as AllDayPlaceholder)
+    const startDay = new Date(start);
+    startDay.setHours(0, 0, 0, 0);
+    const endDay = new Date(end);
+    endDay.setHours(0, 0, 0, 0);
+
+    let firstCol: { left: number } | null = null;
+    let lastCol: { left: number } | null = null;
+
+    for (const day of days) {
+      const dayMidnight = new Date(day.date);
+      dayMidnight.setHours(0, 0, 0, 0);
+      const dayTime = dayMidnight.getTime();
+      if (dayTime >= startDay.getTime() && dayTime <= endDay.getTime()) {
+        if (!firstCol) firstCol = day;
+        lastCol = day;
+      }
+    }
+
+    if (!firstCol || !lastCol) return 0;
+
+    const placeholderLeft = firstCol.left;
+    const placeholderRight = lastCol.left + width;
+
+    // Find first row without overlap
+    const layouts = visibleAllDayLayouts();
+    if (layouts.length === 0) return 0;
+
+    let row = 0;
+    while (true) {
+      const hasConflict = layouts.some(
+        (l) => l.row === row && l.left < placeholderRight && placeholderLeft < l.left + l.width
+      );
+      if (!hasConflict) return row;
+      row++;
+    }
+  });
+
   // Calculate all-day section height based on max row of VISIBLE layouts
+  // Also account for the all-day creation placeholder in its own row
   const allDayHeight = createMemo(() => {
     const layouts = visibleAllDayLayouts();
-    if (layouts.length === 0)
+    const isCreatingAllDay = isCreating() && draftIsAllDay();
+
+    if (layouts.length === 0 && !isCreatingAllDay)
       return calculateAllDaySectionHeight(-1, allDayExpanded());
 
-    const maxRow = Math.max(...layouts.map((l) => l.row));
+    const eventsMaxRow = layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
+    // Placeholder gets its own row below existing events
+    const maxRow = isCreatingAllDay ? Math.max(eventsMaxRow, allDayPlaceholderRow()) : eventsMaxRow;
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
@@ -1367,7 +1451,7 @@ export function CalendarGrid() {
                     <Show
                       when={shouldShowToggle()}
                       fallback={
-                        <Show when={allDayEventLayouts().length > 0}>
+                        <Show when={allDayEventLayouts().length > 0 || (isCreating() && draftIsAllDay())}>
                           <span class="text-[10px] text-fg-muted font-light">
                             All day
                           </span>
@@ -1507,6 +1591,9 @@ export function CalendarGrid() {
                     )}
                   </Key>
                 </Show>
+
+                {/* All-day creation placeholder */}
+                <AllDayPlaceholder days={visibleDays()} colWidth={layout().width} row={allDayPlaceholderRow()} />
               </div>
 
               {/* Sticky Time Column Body - Sticky Left, below all-day section */}
