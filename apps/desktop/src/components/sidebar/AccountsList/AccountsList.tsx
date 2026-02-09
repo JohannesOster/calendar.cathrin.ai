@@ -146,11 +146,11 @@ export function AccountsList() {
     <>
       {/* Auth error message */}
       <Show when={authError()}>
-        <div class="mb-3 p-2 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
-          <span class="flex-1 text-xs text-red-600">{authError()}</span>
+        <div class="mb-3 p-2 bg-red-950 border border-red-800 rounded-md flex items-start gap-2">
+          <span class="flex-1 text-xs text-red-400">{authError()}</span>
           <button
             onClick={() => setAuthError(null)}
-            class="p-0.5 rounded hover:bg-red-100 text-red-400"
+            class="p-0.5 rounded hover:bg-red-900 text-red-500"
           >
             <X size={SIDEBAR.ICON_SM} />
           </button>
@@ -160,8 +160,8 @@ export function AccountsList() {
       {/* Empty state */}
       <Show when={orderedAccounts().length === 0}>
         <div class="text-center py-6">
-          <p class="text-sm text-[var(--color-text-secondary)] mb-2">No calendars connected</p>
-          <p class="text-xs text-[var(--color-text-muted)]">
+          <p class="text-sm text-fg-muted mb-2">No calendars connected</p>
+          <p class="text-xs text-fg-faint">
             Add a Google account to see your calendars
           </p>
         </div>
@@ -208,15 +208,15 @@ export function AccountsList() {
         {/* Drag overlay */}
         <DragOverlay class="z-[9999]">
           <Show when={activeItem()}>
-            <div class="px-2 py-1 rounded bg-[var(--color-bg-primary)] border border-[var(--color-border)] shadow-lg">
-              <span class="text-xs font-medium text-[var(--color-text-secondary)]">
+            <div class="px-2 py-1 rounded bg-surface border border-border shadow-lg">
+              <span class="text-xs font-medium text-fg-muted">
                 {orderedAccounts().find((a) => a.id === activeItem())?.email}
               </span>
             </div>
           </Show>
           <Show when={activeCalendar()}>
             {(calendar) => (
-              <div class="opacity-80 bg-[var(--color-bg-primary)] rounded-md shadow-lg border border-[var(--color-border)]">
+              <div class="opacity-80 bg-surface rounded-md shadow-lg border border-border">
                 <CalendarItemContent
                   calendar={calendar()}
                   isDefault={defaultCalendarId() === calendar().id}

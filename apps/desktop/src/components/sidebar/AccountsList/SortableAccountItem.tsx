@@ -32,13 +32,13 @@ export function SortableAccountItem(props: AccountItemProps) {
       </Show>
       <Show when={!sortable.isActiveDraggable}>
         <div
-          class="group px-2 py-1 rounded cursor-pointer hover:bg-[var(--color-bg-hover)] select-none flex items-center gap-1"
+          class="group px-2 py-1 rounded cursor-pointer hover:bg-surface-hover select-none flex items-center gap-1"
           onClick={() => props.toggleCollapse()}
         >
-          <span class="text-xs font-medium text-[var(--color-text-secondary)] truncate flex-1 min-w-0">
+          <span class="text-xs font-medium text-fg-muted truncate flex-1 min-w-0">
             {props.account.email}
           </span>
-          <span class="text-[var(--color-text-secondary)] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+          <span class="text-fg-muted shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
             {props.isCollapsed ? (
               <ChevronUp size={SIDEBAR.ICON_MD} />
             ) : (
@@ -50,7 +50,7 @@ export function SortableAccountItem(props: AccountItemProps) {
               e.stopPropagation();
               props.toggleMenu();
             }}
-            class="p-1 rounded hover:bg-[var(--color-bg-button-hover)] text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-pointer"
+            class="p-1 rounded hover:bg-surface-hover text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0 cursor-pointer"
           >
             <Ellipsis size={SIDEBAR.ICON_MD} />
           </button>

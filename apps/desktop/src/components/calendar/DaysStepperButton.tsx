@@ -68,7 +68,7 @@ export function DaysStepperButton() {
       {/* Popover */}
       <Show when={isOpen()}>
         <div
-          class="absolute top-full right-0 mt-1 flex items-center gap-1 bg-fg rounded-full px-1.5 py-0.5 shadow-lg transition-opacity z-30"
+          class="absolute top-full right-0 mt-1 flex items-center gap-1 bg-surface-active border border-border-light rounded-full px-1.5 py-0.5 shadow-lg transition-opacity z-30"
           style={{ opacity: isOpen() ? 1 : 0 }}
         >
           {/* Decrement button */}
@@ -77,8 +77,8 @@ export function DaysStepperButton() {
             disabled={isAtMin()}
             class="w-5 h-5 flex items-center justify-center rounded-full transition-colors"
             classList={{
-              "text-white/40 cursor-not-allowed": isAtMin(),
-              "text-white hover:bg-white/10": !isAtMin(),
+              "text-fg-disabled cursor-not-allowed": isAtMin(),
+              "text-fg hover:bg-surface-hover": !isAtMin(),
             }}
             aria-label="Show fewer days"
           >
@@ -87,7 +87,7 @@ export function DaysStepperButton() {
 
           {/* Current count */}
           <span
-            class="text-white text-xs font-medium min-w-[1.25rem] text-center select-none cursor-default"
+            class="text-fg text-xs font-medium min-w-[1.25rem] text-center select-none cursor-default"
             aria-live="polite"
           >
             {visibleDaysCount()}
@@ -99,8 +99,8 @@ export function DaysStepperButton() {
             disabled={isAtMax()}
             class="w-5 h-5 flex items-center justify-center rounded-full transition-colors"
             classList={{
-              "text-white/40 cursor-not-allowed": isAtMax(),
-              "text-white hover:bg-white/10": !isAtMax(),
+              "text-fg-disabled cursor-not-allowed": isAtMax(),
+              "text-fg hover:bg-surface-hover": !isAtMax(),
             }}
             aria-label="Show more days"
           >

@@ -1,29 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-surface:          #ffffff;
-  --color-surface-alt:      #fbfbfa;
-  --color-surface-hover:    #efefef;
-  --color-surface-active:   #d8d8d8;
-  --color-surface-input:    #f1f1ef;
-  --color-surface-weekend:  #fafafa;
+  --color-surface:          #1e1e1e;
+  --color-surface-alt:      #252525;
+  --color-surface-hover:    #333333;
+  --color-surface-active:   #444444;
+  --color-surface-input:    #2a2a2a;
+  --color-surface-weekend:  #222222;
 
-  --color-fg:               #37352f;
-  --color-fg-muted:         #91918e;
-  --color-fg-faint:         #b8b8b5;
-  --color-fg-disabled:      #c4c4c4;
+  --color-fg:               #e0e0de;
+  --color-fg-muted:         #9a9a97;
+  --color-fg-faint:         #6b6b68;
+  --color-fg-disabled:      #4a4a4a;
 
-  --color-border:           #e8e8e8;
-  --color-border-light:     #d4d4d4;
+  --color-border:           #333333;
+  --color-border-light:     #3d3d3d;
 
-  --color-accent:           #2383e2;
-  --color-accent-hover:     #1a6fc4;
-  --color-accent-light:     #e8f4fd;
+  --color-accent:           #4a9ee8;
+  --color-accent-hover:     #3a8ed8;
+  --color-accent-light:     #1a3148;
 
   --color-today:            #ea4335;
 
-  --color-scrollbar:        #d1d1d1;
-  --color-scrollbar-hover:  #b1b1b1;
+  --color-scrollbar:        #3a3a3a;
+  --color-scrollbar-hover:  #555555;
 }
 
 html,
@@ -128,7 +128,7 @@ body.dragging * {
 
 /* Calendar event states */
 .calendar-event {
-  background-color: color-mix(in srgb, var(--event-color) 20%, white);
+  background-color: color-mix(in srgb, var(--event-color) 20%, var(--color-surface));
   color: var(--event-color);
 }
 
@@ -139,11 +139,11 @@ body.dragging * {
 
 /* Box-shadow border for visual separation - only applied to overlapping events */
 .calendar-event--overlapping {
-  box-shadow: 0 0 1px 0.25px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 1px 0.25px rgba(0, 0, 0, 0.3);
 }
 
 .calendar-event:hover {
-  background-color: color-mix(in srgb, var(--event-color) 30%, white);
+  background-color: color-mix(in srgb, var(--event-color) 30%, var(--color-surface));
 }
 
 /* Suppress hover lightening on focused/selected events (they use solid bg) */
@@ -165,20 +165,20 @@ body.dragging * {
 .calendar-event:focus .calendar-event__ribbon,
 .calendar-event--focused .calendar-event__ribbon,
 .calendar-event--selected .calendar-event__ribbon {
-  background-color: color-mix(in srgb, var(--event-color), white 30%);
+  background-color: color-mix(in srgb, var(--event-color), var(--color-surface) 30%);
 }
 
 /* Selected state - solid background + ring to indicate sidebar editing */
 .calendar-event--selected {
   background-color: var(--event-color);
   color: white;
-  box-shadow: 0 0 0 2px var(--event-color), 0 1px 3px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 2px var(--event-color), 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Dragging state - reduced opacity and elevated shadow */
 .calendar-event--dragging {
   opacity: 0.85;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   cursor: grabbing !important;
   pointer-events: none;
 }
@@ -217,11 +217,11 @@ body.dragging * {
 
 /* All-day event chip states */
 .all-day-chip {
-  background-color: color-mix(in srgb, var(--event-color) 15%, white);
+  background-color: color-mix(in srgb, var(--event-color) 15%, var(--color-surface));
 }
 
 .all-day-chip:hover {
-  background-color: color-mix(in srgb, var(--event-color) 25%, white);
+  background-color: color-mix(in srgb, var(--event-color) 25%, var(--color-surface));
 }
 
 .all-day-chip:focus,
@@ -237,7 +237,7 @@ body.dragging * {
 
 .all-day-chip:focus .all-day-chip__ribbon,
 .all-day-chip--selected .all-day-chip__ribbon {
-  background-color: color-mix(in srgb, var(--event-color), white 30%);
+  background-color: color-mix(in srgb, var(--event-color), var(--color-surface) 30%);
 }
 
 .all-day-chip--selected:hover {

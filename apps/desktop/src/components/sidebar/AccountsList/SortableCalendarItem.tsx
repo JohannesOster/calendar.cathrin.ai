@@ -20,7 +20,7 @@ interface CalendarItemContentProps {
 export function CalendarItemContent(props: CalendarItemContentProps) {
   return (
     <div
-      class={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[var(--color-bg-hover)] group cursor-grab select-none ${props.class ?? ""}`}
+      class={`flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-hover group cursor-grab select-none ${props.class ?? ""}`}
     >
       {/* Color indicator - clickable to set as default */}
       <button
@@ -35,7 +35,7 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
         style={{
           "background-color": props.calendar.color,
           "box-shadow": props.isDefault
-            ? `0 0 0 2px white, 0 0 0 4px ${props.calendar.color}`
+            ? `0 0 0 2px var(--color-surface), 0 0 0 4px ${props.calendar.color}`
             : undefined,
         }}
         title="Set as default calendar"
@@ -45,8 +45,8 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
       <span
         class="flex-1 text-sm truncate"
         classList={{
-          "text-[var(--color-text-primary)]": props.calendar.visible,
-          "text-[var(--color-text-secondary)]": !props.calendar.visible,
+          "text-fg": props.calendar.visible,
+          "text-fg-muted": !props.calendar.visible,
         }}
       >
         {props.calendar.name}
@@ -54,7 +54,7 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
 
       {/* Default badge */}
       <Show when={props.isDefault}>
-        <span class="text-xs text-[var(--color-text-secondary)]">Default</span>
+        <span class="text-xs text-fg-muted">Default</span>
       </Show>
 
       {/* Visibility toggle */}
@@ -63,7 +63,7 @@ export function CalendarItemContent(props: CalendarItemContentProps) {
           e.stopPropagation();
           props.onToggleVisibility?.();
         }}
-        class="p-1 rounded hover:bg-[var(--color-bg-button-hover)] text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity"
+        class="p-1 rounded hover:bg-surface-hover text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {props.calendar.visible ? (
           <Eye size={SIDEBAR.ICON_MD} />
