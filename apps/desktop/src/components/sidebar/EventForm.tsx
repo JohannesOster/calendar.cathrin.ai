@@ -505,7 +505,8 @@ export function EventForm() {
 
                   // All-day events use UTC midnight dates (matching Google's format)
                   const allDayStart = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate()));
-                  const allDayEnd = new Date(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate() + 1));
+                  const e = end() ?? s;
+                  const allDayEnd = new Date(Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1));
 
                   setIsAllDay(true);
                   if (editing) {
