@@ -9,6 +9,7 @@ import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
 import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
 import { deselectEvent, selectedEventId } from "../../stores/event-selection";
+import { spansMultipleDays } from "../../utils/allDayLayout";
 
 interface DayColumnProps {
   date: Date;
@@ -95,7 +96,8 @@ export function DayColumn(props: DayColumnProps) {
         event.start < colEnd &&
         event.end > colStart &&
         visible.has(event.calendarId) &&
-        !event.isAllDay
+        !event.isAllDay &&
+        !spansMultipleDays(event)
     );
   });
 

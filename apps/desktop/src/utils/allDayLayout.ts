@@ -52,6 +52,24 @@ function daysBetweenViewAndEvent(viewDate: Date, eventDate: Date): number {
   return Math.round((eventDay - viewDay) / MS_PER_DAY);
 }
 
+/** Get the last calendar day (local) a timed event occupies.
+ *  End at exactly midnight doesn't count as occupying the next day. */
+function getTimedEventLastDay(end: Date): number {
+  if (end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0) {
+    return getLocalDateOnly(new Date(end.getTime() - 1));
+  }
+  return getLocalDateOnly(end);
+}
+
+/**
+ * Check if a timed event spans multiple calendar days (local time).
+ * Events ending exactly at midnight don't count as spanning.
+ */
+export function spansMultipleDays(event: CalendarEvent): boolean {
+  if (event.isAllDay) return false;
+  return getLocalDateOnly(event.start) !== getTimedEventLastDay(event.end);
+}
+
 /**
  * Sort comparator: by start date ASC, then by duration DESC (longer first)
  * Longer events first ensures consistent row placement across scrolling
@@ -116,13 +134,18 @@ export function calculateAllDayLayouts(
 ): Map<string, AllDayLayoutInfo> {
   const layouts = new Map<string, AllDayLayoutInfo>();
 
-  // View dates are local midnight - keep them as-is for local calendar day comparison
-  // Event dates are UTC midnight - we'll extract UTC components when comparing
+  // Filter to all-day events and multi-day timed events that overlap the view
+  const viewStartDay = getLocalDateOnly(viewStart);
+  const viewEndDay = getLocalDateOnly(viewEnd);
 
-  // Filter to all-day events that overlap the view
-  const allDayEvents = events.filter(
-    (e) => e.isAllDay && eventOverlapsView(e, viewStart, viewEnd)
-  );
+  const allDayEvents = events.filter((e) => {
+    if (e.isAllDay) return eventOverlapsView(e, viewStart, viewEnd);
+    if (!spansMultipleDays(e)) return false;
+    // Timed multi-day: use local dates for overlap check
+    const startDay = getLocalDateOnly(e.start);
+    const lastDay = getTimedEventLastDay(e.end);
+    return startDay <= viewEndDay && lastDay >= viewStartDay;
+  });
 
   if (allDayEvents.length === 0) return layouts;
 
@@ -134,19 +157,25 @@ export function calculateAllDayLayouts(
   const rows: Array<Array<{ startCol: number; span: number }>> = [];
 
   for (const event of sorted) {
-    // For all-day events, end is exclusive (midnight of next day)
-    // Both start and end are UTC midnight, so use UTC comparison
-    const eventDurationDays = daysBetweenUTC(event.start, event.end);
+    let eventDurationDays: number;
+    let eventStartOffset: number;
 
-    // Calculate event position relative to view
-    // viewStart is local midnight, event.start is UTC midnight
-    const eventStartOffset = daysBetweenViewAndEvent(viewStart, event.start);
+    if (event.isAllDay) {
+      // All-day: UTC dates, exclusive end
+      eventDurationDays = daysBetweenUTC(event.start, event.end);
+      eventStartOffset = daysBetweenViewAndEvent(viewStart, event.start);
+    } else {
+      // Multi-day timed: local dates, inclusive end
+      const startDay = getLocalDateOnly(event.start);
+      const lastDay = getTimedEventLastDay(event.end);
+      eventDurationDays = Math.round((lastDay - startDay) / MS_PER_DAY) + 1;
+      eventStartOffset = Math.round((startDay - viewStartDay) / MS_PER_DAY);
+    }
 
     // startCol: where the event starts in the view (min 0)
     const startCol = Math.max(0, eventStartOffset);
 
     // endCol: where the event ends in the view (max is last column)
-    // The event's last day is at offset: eventStartOffset + eventDurationDays - 1
     const eventEndOffset = eventStartOffset + eventDurationDays - 1;
     const endCol = Math.min(totalColumns - 1, eventEndOffset);
 
@@ -175,13 +204,21 @@ export function calculateAllDayLayouts(
     rows[assignedRow].push(eventSpan);
 
     // Determine if event extends beyond view
-    // Compare event dates (UTC) with view dates (local) as calendar days
-    const eventStartDay = getUTCDateOnly(event.start);
-    const eventEndDay = getUTCDateOnly(event.end); // exclusive
-    const viewStartDay = getLocalDateOnly(viewStart);
-    const viewEndNextDay = getLocalDateOnly(viewEnd) + MS_PER_DAY; // exclusive
-    const startsBeforeView = eventStartDay < viewStartDay;
-    const endsAfterView = eventEndDay > viewEndNextDay;
+    let startsBeforeView: boolean;
+    let endsAfterView: boolean;
+
+    if (event.isAllDay) {
+      const eventStartDay = getUTCDateOnly(event.start);
+      const eventEndDay = getUTCDateOnly(event.end); // exclusive
+      const viewEndNextDay = viewEndDay + MS_PER_DAY;
+      startsBeforeView = eventStartDay < viewStartDay;
+      endsAfterView = eventEndDay > viewEndNextDay;
+    } else {
+      const startDay = getLocalDateOnly(event.start);
+      const lastDay = getTimedEventLastDay(event.end);
+      startsBeforeView = startDay < viewStartDay;
+      endsAfterView = lastDay > viewEndDay;
+    }
 
     layouts.set(event.id, {
       row: assignedRow,
