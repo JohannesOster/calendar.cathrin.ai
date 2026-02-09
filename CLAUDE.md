@@ -442,3 +442,41 @@ const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props
 - Booleans: `is`/`has`/`should` prefix
 - Signals: `[value, setValue]`
 - Constants: `UPPER_SNAKE_CASE`
+
+## Research & Documentation Lookup
+
+Use the `/nia` skill for looking up library APIs, implementation patterns, and documentation. Nia provides full indexed source code and docs — prefer it over web search.
+
+### When to Use Nia
+
+- **Library APIs you're unsure about** — SolidJS reactivity, Tauri v2 commands/plugins, Hono middleware, Drizzle ORM, solid-dnd, Tailwind v4
+- **Implementation patterns** — "how does X library handle Y" with real source code, not blog summaries
+- **Dependency docs** — check what's indexed with `sources.sh list`, search with `search.sh universal`
+- **Package internals** — grep or semantic search into npm/PyPI/crates package source via `packages.sh`
+
+### When NOT to Use Nia
+
+- **Local codebase questions** — use Grep/Glob/Read directly, the code is right here
+- **Simple factual questions** — if you already know the API, just write the code
+- **Cathrin-specific architecture** — this CLAUDE.md and the source files are the authority
+
+### Workflow
+
+1. Check if the source is already indexed: `sources.sh list` / `repos.sh list`
+2. If not indexed, index it: `repos.sh index owner/repo` or `sources.sh index https://docs.example.com`
+3. Browse structure: `repos.sh tree` / `sources.sh tree`
+4. Search: `search.sh universal "<query>"` for broad search, `repos.sh grep` for targeted code search
+5. Read specific files: `repos.sh read owner/repo path/to/file`
+
+### Key Libraries to Index
+
+When working on features that touch these, index their docs/repos if not already present:
+
+| Library | Index target |
+|---------|-------------|
+| SolidJS | `solidjs/solid` repo or `https://docs.solidjs.com` |
+| Tauri v2 | `tauri-apps/tauri` repo or `https://v2.tauri.app` |
+| Hono | `honojs/hono` repo or `https://hono.dev` |
+| Drizzle | `drizzle-team/drizzle-orm` repo or `https://orm.drizzle.team` |
+| solid-dnd | `thisbeyond/solid-dnd` repo |
+| Tailwind v4 | `https://tailwindcss.com/docs` |
