@@ -4,9 +4,6 @@ import {
   onDeletion,
   undoDelete,
   confirmDelete,
-  onMove,
-  undoMove,
-  confirmMove,
 } from "../../stores/events";
 
 const AUTO_DISMISS_MS = 5000;
@@ -15,7 +12,6 @@ const EXIT_DURATION_MS = 150;
 interface ToastEntry {
   eventId: string;
   title: string;
-  type: "delete" | "move" | "resize";
 }
 
 function UndoToastItem(props: {
@@ -35,12 +31,7 @@ function UndoToastItem(props: {
     dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
 
-    // Confirm the action immediately (don't wait for exit animation)
-    if (props.entry.type === "move" || props.entry.type === "resize") {
-      confirmMove(props.entry.eventId);
-    } else {
-      confirmDelete(props.entry.eventId);
-    }
+    confirmDelete(props.entry.eventId);
 
     if (immediate) {
       props.onRemove();
@@ -53,11 +44,7 @@ function UndoToastItem(props: {
   const handleUndo = () => {
     dismissed = true;
     if (dismissTimer) clearTimeout(dismissTimer);
-    if (props.entry.type === "move" || props.entry.type === "resize") {
-      undoMove(props.entry.eventId);
-    } else {
-      undoDelete(props.entry.eventId);
-    }
+    undoDelete(props.entry.eventId);
     props.onRemove();
   };
 
@@ -85,9 +72,7 @@ function UndoToastItem(props: {
         <div class="flex items-start gap-2">
           <Info size={16} class="text-white/60 shrink-0 mt-0.5" />
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium">
-              {props.entry.type === "resize" ? "Duration changed" : props.entry.type === "move" ? "Event moved" : "Event deleted"}
-            </div>
+            <div class="text-sm font-medium">Event deleted</div>
             <div class="text-xs text-white/60 mt-0.5 truncate">
               "{props.entry.title}"
             </div>
@@ -120,27 +105,11 @@ export function UndoToast() {
     const entry: ToastEntry = {
       eventId: deletion.event.id,
       title: deletion.event.title,
-      type: "delete",
     };
     setToasts((prev) => [...prev, entry]);
   });
 
-  const unsubMove = onMove((move) => {
-    // Replace existing move/resize toast for the same event (rapid re-drags)
-    const toastType = move.kind === "resize" ? "resize" : "move";
-    setToasts((prev) => prev.filter((t) => !(t.eventId === move.eventId && (t.type === "move" || t.type === "resize"))));
-    const entry: ToastEntry = {
-      eventId: move.eventId,
-      title: move.title,
-      type: toastType,
-    };
-    setToasts((prev) => [...prev, entry]);
-  });
-
-  onCleanup(() => {
-    unsubDelete();
-    unsubMove();
-  });
+  onCleanup(() => unsubDelete());
 
   const removeToast = (eventId: string) => {
     setToasts((prev) => prev.filter((t) => t.eventId !== eventId));

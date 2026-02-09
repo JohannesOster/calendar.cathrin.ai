@@ -34,7 +34,7 @@ import {
   setShadowEnd,
 } from "../../stores/event-creation";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, saveStatus, type EventPatch } from "../../stores/events";
+import { updateEvent, saveStatus, setEvents, type EventPatch } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 
 function formatTime(date: Date): string {
@@ -129,24 +129,14 @@ export function EventForm() {
   // =========================================================================
   // Autosave infrastructure (edit mode only)
   // =========================================================================
-  const DEBOUNCE_MS = 500;
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingPatch: EventPatch = {};
 
+  /** Accumulate a field change. Flushed on blur via flushSave(). */
   function scheduleSave(patch: EventPatch): void {
-    // Merge into pending patch
     Object.assign(pendingPatch, patch);
-
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(flushSave, DEBOUNCE_MS);
   }
 
   function flushSave(): void {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = undefined;
-    }
-
     const eventId = selectedEventId();
     if (!eventId || Object.keys(pendingPatch).length === 0) return;
 
@@ -162,17 +152,13 @@ export function EventForm() {
     }
   }));
 
-  // Cleanup timer on unmount
-  onCleanup(() => {
-    flushSave();
-    if (debounceTimer) clearTimeout(debounceTimer);
-  });
+  // Flush on unmount
+  onCleanup(() => flushSave());
 
   // Populate edit signals whenever the selected event changes
   createEffect(on(selectedEvent, (event) => {
     if (!event) return;
     // Clear any pending saves for the previous event
-    if (debounceTimer) clearTimeout(debounceTimer);
     pendingPatch = {};
 
     setEditTitle(event.title);
@@ -191,7 +177,15 @@ export function EventForm() {
   const title = () => mode() === "create" ? draftTitle() : editTitle();
   const setTitle = (v: string) => {
     if (mode() === "create") { setDraftTitle(v); }
-    else { setEditTitle(v); scheduleSave({ title: v }); }
+    else {
+      setEditTitle(v);
+      // Live-update the chip title on the calendar grid
+      const eventId = selectedEventId();
+      if (eventId) {
+        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, title: v } : e));
+      }
+      scheduleSave({ title: v });
+    }
   };
   const start = () => mode() === "create" ? draftStart() : editStart();
   const setStart = (v: Date) => {

@@ -107,10 +107,7 @@ function processEvents(
     if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   for (const event of newEvents) {
-    // Skip deleted events and events with pending moves (preserve optimistic position)
-    if (!pendingMap.has(event.id) && !pendingMoves.has(event.id)) {
-      uniqueEvents.set(event.id, event);
-    }
+    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   return Array.from(uniqueEvents.values()).sort(
     (a, b) => a.start.getTime() - b.start.getTime()
@@ -131,17 +128,13 @@ function replaceEventsInRange(
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
 
-  // Filter out events pending local deletion or move — server still has
-  // stale data but the user already changed them (undo window open)
-  const filtered = newEvents.filter(
-    (e) => !pendingMap.has(e.id) && !pendingMoves.has(e.id)
-  );
+  // Filter out events pending local deletion — server still has them
+  // but the user already deleted them (undo window hasn't closed yet)
+  const filtered = newEvents.filter((e) => !pendingMap.has(e.id));
   const newEventIds = new Set(filtered.map((e) => e.id));
 
   const kept = existingEvents.filter((event) => {
     if (pendingMap.has(event.id)) return false;
-    // Preserve optimistic position for pending moves
-    if (pendingMoves.has(event.id)) return true;
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;
     return !overlaps || newEventIds.has(event.id);
@@ -690,119 +683,6 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
     if (savedTimer) clearTimeout(savedTimer);
     savedTimer = setTimeout(() => setSaveStatus("idle"), 4000);
   }
-}
-
-// =============================================================================
-// Event Move (Deferred API, Undo Toast)
-// =============================================================================
-
-export interface PendingMove {
-  eventId: string;
-  title: string;
-  kind: "move" | "resize";
-  originalStart: Date;
-  originalEnd: Date;
-  newStart: Date;
-  newEnd: Date;
-}
-
-type MoveListener = (move: PendingMove) => void;
-const moveListeners = new Set<MoveListener>();
-const pendingMoves = new Map<string, PendingMove>();
-
-/** Subscribe to move events (used by UndoToast). */
-export function onMove(fn: MoveListener): () => void {
-  moveListeners.add(fn);
-  return () => moveListeners.delete(fn);
-}
-
-/**
- * Move or resize an event. The API call is deferred until the undo
- * toast dismisses, matching the existing delete pattern.
- */
-export function moveEvent(
-  eventId: string,
-  newStart: Date,
-  newEnd: Date,
-  originalStart: Date,
-  originalEnd: Date,
-  kind: "move" | "resize" = "move",
-): void {
-  const event = events().find((e) => e.id === eventId);
-  if (!event) return;
-
-  const move: PendingMove = {
-    eventId,
-    title: event.title,
-    kind,
-    originalStart,
-    originalEnd,
-    newStart,
-    newEnd,
-  };
-  pendingMoves.set(eventId, move);
-
-  // Optimistic update already applied (the drag updated events signal during drag)
-  // Notify toast
-  for (const fn of moveListeners) fn(move);
-}
-
-/**
- * Undo a pending move — revert to original position.
- */
-export function undoMove(eventId: string): void {
-  const pending = pendingMoves.get(eventId);
-  if (!pending) return;
-
-  pendingMoves.delete(eventId);
-  setEvents((prev) =>
-    prev.map((e) =>
-      e.id === eventId
-        ? { ...e, start: pending.originalStart, end: pending.originalEnd }
-        : e
-    )
-  );
-}
-
-/**
- * Confirm a pending move — fire the PATCH API call.
- */
-export function confirmMove(eventId: string): void {
-  const pending = pendingMoves.get(eventId);
-  if (!pending) return;
-
-  pendingMoves.delete(eventId);
-
-  // Update disk cache so refreshes don't flash the old position
-  const event = events().find((e) => e.id === eventId);
-  if (event) {
-    restoreCachedEventToDisk({ ...event, start: pending.newStart, end: pending.newEnd });
-  }
-
-  const apiPatch: Record<string, string> = {
-    start: pending.newStart.toISOString(),
-    end: pending.newEnd.toISOString(),
-  };
-
-  apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(apiPatch),
-  })
-    .then(() => {
-      console.log(`[events] Moved event ${eventId}`);
-      revalidateWeeksForDates(pending.originalStart, pending.newStart);
-    })
-    .catch((error) => {
-      console.error(`[events] Failed to move event ${eventId}:`, error);
-      // Rollback
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === eventId
-            ? { ...e, start: pending.originalStart, end: pending.originalEnd }
-            : e
-        )
-      );
-    });
 }
 
 // Re-export week utilities for convenience

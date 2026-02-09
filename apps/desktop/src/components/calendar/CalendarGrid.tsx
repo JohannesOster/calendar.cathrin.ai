@@ -31,7 +31,7 @@ import {
   isToday,
   getWeekId,
 } from "../../lib/date-utils";
-import { events, setEvents, moveEvent } from "../../stores/events";
+import { events, setEvents, updateEvent } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import {
@@ -1281,13 +1281,7 @@ export function CalendarGrid() {
             (event.start.getTime() !== drag.originalStart.getTime() ||
              event.end.getTime() !== drag.originalEnd.getTime());
           if (event && changed) {
-            moveEvent(
-              drag.event.id,
-              event.start,
-              event.end,
-              drag.originalStart,
-              drag.originalEnd,
-            );
+            updateEvent(drag.event.id, { start: event.start, end: event.end });
           }
         }
 
@@ -1306,14 +1300,7 @@ export function CalendarGrid() {
             (event.start.getTime() !== drag.originalStart.getTime() ||
              event.end.getTime() !== drag.originalEnd.getTime());
           if (event && changed) {
-            moveEvent(
-              drag.event.id,
-              event.start,
-              event.end,
-              drag.originalStart,
-              drag.originalEnd,
-              "resize",
-            );
+            updateEvent(drag.event.id, { start: event.start, end: event.end });
           }
         }
         return;
