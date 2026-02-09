@@ -146,6 +146,13 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color) 30%, white);
 }
 
+/* Suppress hover lightening on focused/selected events (they use solid bg) */
+.calendar-event:focus:hover,
+.calendar-event--focused:hover,
+.calendar-event--selected:hover {
+  background-color: var(--event-color);
+}
+
 /* Focus/selected state - solid background color
    :focus applies to the clicked segment, --focused applies to all segments via signal */
 .calendar-event:focus,
