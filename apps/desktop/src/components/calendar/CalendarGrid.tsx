@@ -255,19 +255,35 @@ export function CalendarGrid() {
     });
   };
 
-  // Auto-expand all-day section when creating an all-day event
-  // Only auto-expand once per creation — don't fight the user if they manually collapse
+  // Auto-expand all-day section when creating an event that will appear there.
+  // Covers both true all-day events and multi-day timed events (rendered as chips).
+  // Only auto-expand once per creation — don't fight the user if they manually collapse.
   let autoExpandedForCreation = false;
   createEffect(() => {
     const creating = isCreating();
     const allDay = draftIsAllDay();
+    const start = draftStart();
+    const end = draftEnd();
 
-    if (creating && allDay && !allDayExpanded() && !autoExpandedForCreation) {
+    // Multi-day timed events render as all-day chips — the row needs to be open
+    let spansMultiple = false;
+    if (start && end && !allDay) {
+      // Ending exactly at midnight doesn't count (matches allDayLayout logic)
+      const effectiveEnd =
+        end.getHours() === 0 && end.getMinutes() === 0
+          ? new Date(end.getTime() - 1)
+          : end;
+      spansMultiple = start.toDateString() !== effectiveEnd.toDateString();
+    }
+
+    const needsAllDayRow = allDay || spansMultiple;
+
+    if (creating && needsAllDayRow && !allDayExpanded() && !autoExpandedForCreation) {
       setAllDayExpanded(true);
       autoExpandedForCreation = true;
     }
-    // All-day deselected during creation → collapse (if we auto-expanded)
-    if (autoExpandedForCreation && creating && !allDay) {
+    // Event no longer needs all-day row → collapse (if we auto-expanded)
+    if (autoExpandedForCreation && creating && !needsAllDayRow) {
       autoExpandedForCreation = false;
       setAllDayExpanded(false);
     }
