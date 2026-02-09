@@ -69,6 +69,8 @@ interface GoogleEvent {
   end: EventDateTime;
   colorId?: string;
   status?: string;
+  location?: string;
+  description?: string;
 }
 
 interface EventsListResponse {
@@ -241,6 +243,8 @@ export class GoogleCalendarService {
       summary: string;
       start: { dateTime?: string; date?: string };
       end: { dateTime?: string; date?: string };
+      location?: string;
+      description?: string;
     }
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
@@ -331,6 +335,8 @@ export class GoogleCalendarService {
       isAllDay: !!event.start.date,
       color: calendarColor,
       provider: "google",
+      location: event.location || undefined,
+      description: event.description || undefined,
     };
   }
 }

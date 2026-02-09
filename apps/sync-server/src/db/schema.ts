@@ -92,6 +92,8 @@ export const serverEvents = pgTable(
     end: timestamp("end").notNull(),
     isAllDay: boolean("is_all_day").default(false),
     color: text("color"),
+    location: text("location"),
+    description: text("description"),
     status: text("status"), // confirmed, tentative, cancelled
     raw: jsonb("raw"), // Store raw Google event for future fields
     createdAt: timestamp("created_at").defaultNow(),

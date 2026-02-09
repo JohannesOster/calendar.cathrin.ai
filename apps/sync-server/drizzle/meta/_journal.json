@@ -36,6 +36,13 @@
       "when": 1769876908061,
       "tag": "0004_supreme_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770624968145,
+      "tag": "0005_smiling_mauler",
+      "breakpoints": true
     }
   ]
 }
