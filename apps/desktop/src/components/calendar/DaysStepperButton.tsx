@@ -1,16 +1,22 @@
 import { Popover, usePopoverContext } from "@ark-ui/solid/popover";
 import { Minus, Plus } from "lucide-solid";
 import { visibleDaysCount, setVisibleDaysCount } from "../../stores/view";
+import {
+  visibleStartDate,
+  setNavigationTarget,
+} from "./CalendarGrid";
 
 const MIN_DAYS = 1;
 const MAX_DAYS = 14;
 
 export function DaysStepperButton() {
   const decrement = () => {
+    setNavigationTarget(visibleStartDate());
     setVisibleDaysCount(visibleDaysCount() - 1);
   };
 
   const increment = () => {
+    setNavigationTarget(visibleStartDate());
     setVisibleDaysCount(visibleDaysCount() + 1);
   };
 

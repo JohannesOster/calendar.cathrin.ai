@@ -1509,32 +1509,26 @@ export function CalendarGrid() {
               newColWidth,
             );
             commitLayoutTransition(newColWidth, targetScrollLeft);
-            // Skip the centerDate scroll effect since we handled it
-            skipNextCenterDateScroll = true;
+            // Only skip the next centerDate scroll if centerDate actually changed
+            // in this batch (pendingTarget !== null). When only navigationTarget
+            // was set (e.g., +/- stepper), centerDate didn't change, so the
+            // centerDate effect won't fire and the flag would get stuck — blocking
+            // the next legitimate centerDate navigation (Today button, arrows).
+            if (pendingTarget !== null) {
+              skipNextCenterDateScroll = true;
+            }
           } else {
-            // For +/- stepper: preserve exact fractional scroll position
-            // This prevents the jarring snap when user is mid-momentum-scroll
-
-            // Calculate new column width WITHOUT updating signal yet
+            // Fallback: use the current visible date as the target.
+            // This is safer than pixel-based math which can amplify rounding
+            // errors or be corrupted by stale scroll positions (e.g., snap
+            // jumping to the edge of the snap track during layout transitions).
+            const targetDate = visibleStartDate();
             const newColWidth = calculateColumnWidth();
-
-            // Calculate what pixel position the "visual left edge" is at
-            // Visual left edge = scrollLeft + timeColWidth (because time col is sticky)
-            const visualLeftEdge = currentScrollLeft + timeColWidth;
-
-            // Snap to the nearest whole-day boundary at the left edge.
-            // This keeps the leftmost column pixel-locked during +/- changes.
-            const dayAtLeftEdge = Math.round(
-              (visualLeftEdge - CENTER_OFFSET) / oldColWidth,
+            const targetScrollLeft = getScrollLeftForDate(
+              targetDate,
+              newColWidth,
             );
-
-            // After resize, where should that same day index be?
-          const newVisualLeftEdge = CENTER_OFFSET + dayAtLeftEdge * newColWidth;
-
-            // Convert back to scrollLeft
-          const newScrollLeft = newVisualLeftEdge - timeColWidth;
-
-          commitLayoutTransition(newColWidth, newScrollLeft);
+            commitLayoutTransition(newColWidth, targetScrollLeft);
           }
         }
       },
@@ -1553,6 +1547,12 @@ export function CalendarGrid() {
     on(
       centerDate,
       (target) => {
+        // Always clear pendingCenterDate when centerDate changes, regardless of
+        // which branch handles the scroll. Without this, early returns below
+        // leave pendingCenterDate stale, and the next visibleDaysCount change
+        // would jump to that old date instead of staying at visibleStartDate.
+        pendingCenterDate = null;
+
         if (skipNextCenterDateScroll) {
           skipNextCenterDateScroll = false;
           return;
@@ -1569,10 +1569,6 @@ export function CalendarGrid() {
         if (currentView() !== "Month") {
           scrollToDate(target);
         }
-        // Clear pendingCenterDate since this effect handled the navigation.
-        // Without this, pendingCenterDate would persist and cause the +/- stepper
-        // to scroll back to an old position instead of staying at visibleStartDate.
-        pendingCenterDate = null;
       },
       { defer: true },
     ),
