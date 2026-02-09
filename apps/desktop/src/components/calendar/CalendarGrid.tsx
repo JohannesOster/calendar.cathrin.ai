@@ -1277,7 +1277,10 @@ export function CalendarGrid() {
         const drag = finishMoveDrag();
         if (drag) {
           const event = events().find((e) => e.id === drag.event.id);
-          if (event) {
+          const changed = event &&
+            (event.start.getTime() !== drag.originalStart.getTime() ||
+             event.end.getTime() !== drag.originalEnd.getTime());
+          if (event && changed) {
             moveEvent(
               drag.event.id,
               event.start,
@@ -1299,7 +1302,10 @@ export function CalendarGrid() {
         const drag = finishResizeDrag();
         if (drag) {
           const event = events().find((e) => e.id === drag.event.id);
-          if (event) {
+          const changed = event &&
+            (event.start.getTime() !== drag.originalStart.getTime() ||
+             event.end.getTime() !== drag.originalEnd.getTime());
+          if (event && changed) {
             moveEvent(
               drag.event.id,
               event.start,

@@ -4,6 +4,7 @@ import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_LEFT_PX,
   EVENT_MARGIN_TOTAL_PX,
+  EVENT_MARGIN_BOTTOM_PX,
   MIN_EVENT_HEIGHT_PX,
   MS_PER_HOUR,
   TOTAL_GRID_HEIGHT_PX,
@@ -86,17 +87,17 @@ export function DragGhost(props: DragGhostProps) {
 
     if (seg === "only") {
       const durationMs = end.getTime() - start.getTime();
-      return Math.max((durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
+      return Math.max((durationMs / MS_PER_HOUR) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX, MIN_EVENT_HEIGHT_PX);
     }
     if (seg === "first") {
       const startMinutes = start.getHours() * 60 + start.getMinutes();
-      return Math.max(((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
+      return Math.max(((24 * 60 - startMinutes) / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX, MIN_EVENT_HEIGHT_PX);
     }
     if (seg === "last") {
       const endMinutes = end.getHours() * 60 + end.getMinutes();
-      return Math.max((endMinutes / 60) * HOUR_HEIGHT_PX, MIN_EVENT_HEIGHT_PX);
+      return Math.max((endMinutes / 60) * HOUR_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX, MIN_EVENT_HEIGHT_PX);
     }
-    return TOTAL_GRID_HEIGHT_PX;
+    return TOTAL_GRID_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
   };
 
   return (
@@ -110,7 +111,7 @@ export function DragGhost(props: DragGhostProps) {
           width: `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`,
           "background-color": dragInfo()!.color,
           opacity: "0.15",
-          "z-index": "49",
+          "z-index": "0",
           border: `1px dashed ${dragInfo()!.color}`,
         }}
       />
