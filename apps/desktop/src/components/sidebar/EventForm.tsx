@@ -6,6 +6,7 @@ import {
   Video,
   MapPin,
   FileText,
+  AlignLeft,
   Bell,
 } from "lucide-solid";
 import {
@@ -20,6 +21,10 @@ import {
   setDraftCalendarId,
   draftIsAllDay,
   setDraftIsAllDay,
+  draftLocation,
+  setDraftLocation,
+  draftDescription,
+  setDraftDescription,
   commitCreation,
   cancelCreation,
   getDraftColor,
@@ -223,9 +228,16 @@ export function EventForm() {
             <Video size={14} class="shrink-0" />
             <span>Conferencing</span>
           </div>
-          <div class="flex items-center gap-2 text-sm text-fg-disabled">
-            <MapPin size={14} class="shrink-0" />
-            <span>Location</span>
+          <div class="flex items-center gap-2 text-sm">
+            <MapPin size={14} class="text-fg-muted shrink-0" />
+            <input
+              type="text"
+              placeholder="Add location"
+              aria-label="Location"
+              value={draftLocation()}
+              onInput={(e) => setDraftLocation(e.currentTarget.value)}
+              class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
+            />
           </div>
           <div class="flex items-center gap-2 text-sm text-fg-disabled">
             <FileText size={14} class="shrink-0" />
@@ -235,8 +247,26 @@ export function EventForm() {
 
         {/* Description */}
         <div class="px-3 py-2 border-t border-border">
-          <div class="text-sm text-fg-disabled px-0">
-            Description
+          <div class="flex items-start gap-2">
+            <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
+            <div class="flex-1 grid" style={{ "grid-template-columns": "1fr" }}>
+              <textarea
+                placeholder="Add description"
+                aria-label="Description"
+                value={draftDescription()}
+                onInput={(e) => setDraftDescription(e.currentTarget.value)}
+                class="text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none resize-none overflow-hidden row-start-1 col-start-1"
+                rows={2}
+                style={{ "grid-area": "1 / 1 / 2 / 2" }}
+              />
+              <div
+                class="invisible whitespace-pre-wrap text-sm row-start-1 col-start-1 overflow-hidden max-h-40"
+                style={{ "grid-area": "1 / 1 / 2 / 2" }}
+                aria-hidden="true"
+              >
+                {draftDescription() + " "}
+              </div>
+            </div>
           </div>
         </div>
 
