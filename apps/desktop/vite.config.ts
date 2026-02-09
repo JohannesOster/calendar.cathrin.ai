@@ -23,7 +23,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1430,
+    port: parseInt(process.env.PORT || '1430'),
     strictPort: true,
     host: host || false,
     hmr: host

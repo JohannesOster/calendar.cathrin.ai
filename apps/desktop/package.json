@@ -9,6 +9,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev --config '{\"build\":{\"devUrl\":\"http://localhost:'${PORT:-1430}'\"}}'",
     "test": "vitest",
     "test:run": "vitest run"
   },

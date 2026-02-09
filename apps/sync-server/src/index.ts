@@ -23,27 +23,23 @@ app.use("*", logger());
 // In production, only allow Tauri webview origins
 // In development, also allow Vite dev server
 const isDevelopment = process.env.NODE_ENV !== "production";
-const corsOrigins = isDevelopment
-  ? [
-      "http://localhost:1430", // Vite dev server (development only)
-      "tauri://localhost", // Tauri webview (macOS)
-      "https://tauri.localhost", // Tauri webview (Windows)
-      "http://tauri.localhost", // Tauri webview alternative
-    ]
-  : [
-      "tauri://localhost", // Tauri webview (macOS)
-      "https://tauri.localhost", // Tauri webview (Windows)
-      "http://tauri.localhost", // Tauri webview alternative
-    ];
-
-if (isDevelopment) {
-  console.log("[cors] Development mode - allowing localhost origins");
-}
+const tauriOrigins = [
+  "tauri://localhost", // Tauri webview (macOS)
+  "https://tauri.localhost", // Tauri webview (Windows)
+  "http://tauri.localhost", // Tauri webview alternative
+];
 
 app.use(
   "*",
   cors({
-    origin: corsOrigins,
+    origin: isDevelopment
+      ? (origin) => {
+          // In development, allow any localhost port (parallel worktrees)
+          if (origin.startsWith("http://localhost:")) return origin;
+          if (tauriOrigins.includes(origin)) return origin;
+          return undefined;
+        }
+      : tauriOrigins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,

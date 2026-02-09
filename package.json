@@ -9,7 +9,7 @@
     "test": "turbo run test",
     "test:run": "turbo run test:run",
     "tauri": "pnpm --filter @cathrin/desktop tauri",
-    "tauri:dev": "pnpm --filter @cathrin/desktop tauri dev",
+    "tauri:dev": "pnpm --filter @cathrin/desktop run tauri:dev",
     "tauri:build": "pnpm --filter @cathrin/desktop tauri build"
   },
   "devDependencies": {
