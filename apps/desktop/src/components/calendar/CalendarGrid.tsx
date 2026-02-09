@@ -54,12 +54,13 @@ import {
   snapMinutes,
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { CHIP_MARGIN_LEFT, CHIP_MARGIN_RIGHT } from "../../constants/layout";
+import { CHIP_MARGIN_LEFT, CHIP_MARGIN_RIGHT, ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
 import { FLASH_DURATION_MS } from "../../constants/timings";
 import { selectedEventId, selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag,
-  isResizeDragging, resizeDrag, cancelResizeDrag, finishResizeDrag,
+  isResizeDragging, resizeDrag, resizeDragEventId, cancelResizeDrag, finishResizeDrag,
+  isUnfolding, unfoldDrag, unfoldDragEventId, cancelUnfoldDrag, finishUnfoldDrag,
 } from "../../stores/event-drag";
 import {
   startAutoScroll,
@@ -254,19 +255,35 @@ export function CalendarGrid() {
     });
   };
 
-  // Auto-expand all-day section when creating an all-day event
-  // Only auto-expand once per creation — don't fight the user if they manually collapse
+  // Auto-expand all-day section when creating an event that will appear there.
+  // Covers both true all-day events and multi-day timed events (rendered as chips).
+  // Only auto-expand once per creation — don't fight the user if they manually collapse.
   let autoExpandedForCreation = false;
   createEffect(() => {
     const creating = isCreating();
     const allDay = draftIsAllDay();
+    const start = draftStart();
+    const end = draftEnd();
 
-    if (creating && allDay && !allDayExpanded() && !autoExpandedForCreation) {
+    // Multi-day timed events render as all-day chips — the row needs to be open
+    let spansMultiple = false;
+    if (start && end && !allDay) {
+      // Ending exactly at midnight doesn't count (matches allDayLayout logic)
+      const effectiveEnd =
+        end.getHours() === 0 && end.getMinutes() === 0
+          ? new Date(end.getTime() - 1)
+          : end;
+      spansMultiple = start.toDateString() !== effectiveEnd.toDateString();
+    }
+
+    const needsAllDayRow = allDay || spansMultiple;
+
+    if (creating && needsAllDayRow && !allDayExpanded() && !autoExpandedForCreation) {
       setAllDayExpanded(true);
       autoExpandedForCreation = true;
     }
-    // All-day deselected during creation → collapse (if we auto-expanded)
-    if (autoExpandedForCreation && creating && !allDay) {
+    // Event no longer needs all-day row → collapse (if we auto-expanded)
+    if (autoExpandedForCreation && creating && !needsAllDayRow) {
       autoExpandedForCreation = false;
       setAllDayExpanded(false);
     }
@@ -546,11 +563,14 @@ export function CalendarGrid() {
     const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
 
     // Calculate layouts using the full range of days
+    // Exclude the resize-dragged or unfolding event so it stays in the time grid
+    const excludeId = resizeDragEventId() ?? unfoldDragEventId();
     const layouts = calculateAllDayLayouts(
       visibleEvents,
       viewStart,
       viewEnd,
       totalColumns,
+      excludeId,
     );
 
     // Convert to pixel positions
@@ -718,6 +738,54 @@ export function CalendarGrid() {
     // Placeholder gets its own row below existing events
     const maxRow = isCreatingAllDay ? Math.max(eventsMaxRow, allDayPlaceholderRow()) : eventsMaxRow;
     return calculateAllDaySectionHeight(maxRow, allDayExpanded());
+  });
+
+  // Ghost chip layout for unfold drag — shows dashed outline at original chip position
+  const unfoldGhostLayout = createMemo(() => {
+    const drag = unfoldDrag();
+    if (!drag) return null;
+
+    const days = layout().days;
+    if (days.length === 0) return null;
+
+    const width = layout().width;
+    const firstDayLeft = days[0].left;
+
+    // Calculate which columns the original event spans
+    const getLocalMidnight = (d: Date) => {
+      const m = new Date(d);
+      m.setHours(0, 0, 0, 0);
+      return m;
+    };
+
+    const viewStartTime = getLocalMidnight(days[0].date).getTime();
+    const startDayTime = getLocalMidnight(drag.originalStart).getTime();
+
+    // Handle midnight-exact end times
+    const endTime = drag.originalEnd.getTime();
+    const endForRange =
+      drag.originalEnd.getHours() === 0 &&
+      drag.originalEnd.getMinutes() === 0 &&
+      drag.originalEnd.getSeconds() === 0
+        ? endTime - 1
+        : endTime;
+    const endDayTime = getLocalMidnight(new Date(endForRange)).getTime();
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const startCol = Math.max(0, Math.round((startDayTime - viewStartTime) / msPerDay));
+    const endCol = Math.min(days.length - 1, Math.round((endDayTime - viewStartTime) / msPerDay));
+    const span = endCol - startCol + 1;
+
+    if (span <= 0) return null;
+
+    const chipLeft = firstDayLeft + startCol * width + CHIP_MARGIN_LEFT;
+    const chipWidth = span * width - CHIP_MARGIN_RIGHT - CHIP_MARGIN_LEFT;
+
+    return {
+      left: chipLeft,
+      width: chipWidth,
+      color: drag.event.color,
+    };
   });
 
   // Visual height used for all layout positioning — animated smoothly via expandOffset
@@ -1081,6 +1149,24 @@ export function CalendarGrid() {
           e.preventDefault();
           return;
         }
+        // Cancel unfold drag on Escape — revert to original times
+        if (isUnfolding()) {
+          stopAutoScroll();
+          document.body.classList.remove("dragging");
+          const drag = unfoldDrag();
+          if (drag) {
+            setEvents((prev) =>
+              prev.map((ev) =>
+                ev.id === drag.event.id
+                  ? { ...ev, start: drag.originalStart, end: drag.originalEnd }
+                  : ev
+              )
+            );
+          }
+          cancelUnfoldDrag();
+          e.preventDefault();
+          return;
+        }
         // Cancel event creation on Escape
         if (isDragging() || isCreating()) {
           // During drag: always cancel
@@ -1281,6 +1367,56 @@ export function CalendarGrid() {
       );
     };
 
+    // -----------------------------------------------------------------------
+    // Unfold-drag: multi-day timed chip edge → time grid resize
+    // -----------------------------------------------------------------------
+    const recalcUnfoldPosition = () => {
+      const drag = unfoldDrag();
+      if (!drag) return;
+
+      const cursorMinutes = getMinutesFromClientY(lastDragClientY);
+      const cursorDate = getDateFromClientX(lastDragClientX);
+
+      // The anchor is the OPPOSITE edge from what was grabbed
+      const anchorTime = drag.edge === "end" ? drag.originalStart : drag.originalEnd;
+      const anchorDay = new Date(anchorTime);
+      anchorDay.setHours(0, 0, 0, 0);
+      const anchorMinutes = anchorTime.getHours() * 60 + anchorTime.getMinutes();
+
+      const anchorDateTime = new Date(anchorDay);
+      anchorDateTime.setMinutes(anchorMinutes);
+
+      const targetDay = cursorDate ? new Date(cursorDate) : new Date(anchorDay);
+      targetDay.setHours(0, 0, 0, 0);
+      const cursorDateTime = new Date(targetDay);
+      cursorDateTime.setMinutes(cursorMinutes);
+
+      let newStart: Date;
+      let newEnd: Date;
+
+      if (cursorDateTime.getTime() >= anchorDateTime.getTime()) {
+        newStart = anchorDateTime;
+        newEnd = cursorDateTime;
+        if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
+          newEnd = new Date(newStart.getTime() + SNAP_MINUTES * 60000);
+        }
+      } else {
+        newStart = cursorDateTime;
+        newEnd = anchorDateTime;
+        if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
+          newStart = new Date(newEnd.getTime() - SNAP_MINUTES * 60000);
+        }
+      }
+
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === drag.event.id
+            ? { ...e, start: newStart, end: newEnd }
+            : e
+        )
+      );
+    };
+
     const handleDragPointerMove = (e: PointerEvent) => {
       lastDragClientY = e.clientY;
       lastDragClientX = e.clientX;
@@ -1330,6 +1466,29 @@ export function CalendarGrid() {
         updateAutoScrollCursor(e.clientY, e.clientX);
 
         recalcResizePosition();
+        e.preventDefault();
+        return;
+      }
+
+      // --- Unfold drag ---
+      if (isUnfolding()) {
+        if (!scrollContainerRef) return;
+
+        if (!document.body.classList.contains("dragging")) {
+          document.body.classList.add("dragging");
+        }
+
+        if (snapEnabled()) {
+          scrollContainerRef.style.scrollSnapType = "none";
+          setSnapEnabled(false);
+        }
+
+        const timeColWidth = getTimeColWidth();
+        const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + visualAllDayHeight();
+        startAutoScroll(scrollContainerRef, stickyHeaderHeight, recalcUnfoldPosition, timeColWidth, colWidth());
+        updateAutoScrollCursor(e.clientY, e.clientX);
+
+        recalcUnfoldPosition();
         e.preventDefault();
         return;
       }
@@ -1409,6 +1568,26 @@ export function CalendarGrid() {
             updateEvent(drag.event.id, { start: event.start, end: event.end });
           }
         }
+        return;
+      }
+
+      // --- Unfold drag ---
+      if (isUnfolding()) {
+        stopAutoScroll();
+        document.body.classList.remove("dragging");
+
+        const drag = finishUnfoldDrag();
+        if (drag) {
+          const event = events().find((e) => e.id === drag.event.id);
+          const changed = event &&
+            (event.start.getTime() !== drag.originalStart.getTime() ||
+             event.end.getTime() !== drag.originalEnd.getTime());
+          if (event && changed) {
+            updateEvent(drag.event.id, { start: event.start, end: event.end });
+          }
+        }
+
+        settleSnapAfterDrag();
         return;
       }
 
@@ -1920,6 +2099,26 @@ export function CalendarGrid() {
 
                   {/* All-day creation placeholder */}
                   <AllDayPlaceholder days={visibleDays()} colWidth={layout().width} row={allDayPlaceholderRow()} />
+
+                  {/* Ghost chip during unfold drag — dashed outline at original position */}
+                  <Show when={unfoldGhostLayout()}>
+                    {(ghost) => (
+                      <div
+                        class="absolute rounded pointer-events-none"
+                        style={{
+                          left: "0",
+                          transform: `translateX(${ghost().left}px)`,
+                          width: `${ghost().width}px`,
+                          top: "4px",
+                          height: "var(--grid-all-day-chip-height)",
+                          "background-color": `color-mix(in srgb, ${ghost().color} 10%, transparent)`,
+                          border: `1px dashed ${ghost().color}`,
+                          "border-radius": CHIP_BORDER_RADIUS,
+                          opacity: "0.6",
+                        }}
+                      />
+                    )}
+                  </Show>
                 </div>
               </div>
 

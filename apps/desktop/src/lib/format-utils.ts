@@ -36,6 +36,26 @@ export function formatTimeRange(start: Date, end: Date): string {
 }
 
 /**
+ * Format a Date to an ultra-compact 12-hour string for all-day chip time indicators.
+ * Uses lowercase single-letter period: "2p", "2:30p", "11a"
+ */
+export function formatChipTime(date: Date): string {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const period = hours >= 12 ? "p" : "a";
+  const displayHour = hours % 12 || 12;
+  if (minutes === 0) return `${displayHour}${period}`;
+  return `${displayHour}:${minutes.toString().padStart(2, "0")}${period}`;
+}
+
+/**
+ * Format a compact time range for all-day chip display: "2p–4p", "2:30p–11a"
+ */
+export function formatChipTimeRange(start: Date, end: Date): string {
+  return `${formatChipTime(start)}–${formatChipTime(end)}`;
+}
+
+/**
  * Format the duration between two dates: "1h", "30min", "1h 30min"
  */
 export function formatDuration(start: Date, end: Date): string {

@@ -135,8 +135,10 @@ async function pollForToken(state: string): Promise<string> {
       `${SYNC_SERVER_URL}/auth/poll?state=${state}`,
     );
 
-    if (response.status === 202) {
-      // Still pending, continue polling
+    if (response.status === 202 || response.status === 404) {
+      // 202 = still pending, 404 = state transiently missing (race between
+      // /auth/start consuming it and callback re-creating it). Both cases:
+      // keep polling.
       continue;
     }
 

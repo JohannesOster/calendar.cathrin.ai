@@ -1,8 +1,15 @@
+import { Show, onCleanup, createMemo } from "solid-js";
 import type { CalendarEvent } from "../../stores/events";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
-import { formatDateRange } from "../../lib/format-utils";
+import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
+import { startUnfoldDrag, isUnfolding, unfoldDragEventId } from "../../stores/event-drag";
+
+/** Width in px of the edge hit zone for resize/unfold drag */
+const EDGE_HIT_ZONE = 6;
+/** Minimum px movement before treating as drag */
+const DRAG_THRESHOLD = 3;
 
 interface AllDayEventChipProps {
   event: CalendarEvent;
@@ -16,6 +23,9 @@ interface AllDayEventChipProps {
 }
 
 export function AllDayEventChip(props: AllDayEventChipProps) {
+  let chipRef: HTMLDivElement | undefined;
+  let cleanupDragDetection: (() => void) | null = null;
+
   // Determine border radius based on spanning
   const getBorderRadius = () => {
     const left = props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS;
@@ -25,14 +35,96 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   const isSelected = () => selectedEventId() === props.event.id;
 
-  const ariaLabel = () =>
-    `${props.event.title}, ${formatDateRange(props.event.start, props.event.end)}`;
+  const hasTimes = () => !props.event.isAllDay;
+
+  /** Detect which edge of the chip the pointer is near */
+  const getEdge = (clientX: number): "start" | "end" | null => {
+    if (!chipRef) return null;
+    const rect = chipRef.getBoundingClientRect();
+    if (clientX - rect.left < EDGE_HIT_ZONE) return "start";
+    if (rect.right - clientX < EDGE_HIT_ZONE) return "end";
+    return null;
+  };
+
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!hasTimes()) return;
+    const edge = getEdge(e.clientX);
+    if (chipRef) {
+      chipRef.style.cursor = edge ? "col-resize" : "pointer";
+    }
+  };
+
+  const handlePointerLeave = () => {
+    if (chipRef) {
+      chipRef.style.cursor = "pointer";
+    }
+  };
+
+  const isBeingUnfolded = createMemo(() => unfoldDragEventId() === props.event.id);
+
+  const handlePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+
+    // Multi-day timed chip: check for edge drag
+    if (hasTimes()) {
+      const edge = getEdge(e.clientX);
+      if (edge) {
+        const startX = e.clientX;
+        let started = false;
+
+        const onMove = (me: PointerEvent) => {
+          if (!started && Math.abs(me.clientX - startX) >= DRAG_THRESHOLD) {
+            started = true;
+            startUnfoldDrag(props.event, edge);
+          }
+        };
+
+        const onUp = () => {
+          cleanup();
+          if (!started) {
+            selectEvent(props.event.id);
+          }
+        };
+
+        const cleanup = () => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          cleanupDragDetection = null;
+        };
+
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        cleanupDragDetection = cleanup;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+    }
+
+    // Body click — select on pointerup (let click handler do it)
+  };
+
+  onCleanup(() => cleanupDragDetection?.());
+
+  const ariaLabel = () => {
+    const type = hasTimes() ? "multi-day timed event" : "all-day event";
+    const base = `${props.event.title}, ${type}, ${formatDateRange(props.event.start, props.event.end)}`;
+    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}`;
+    return base;
+  };
 
   return (
     <div
+      ref={chipRef}
       class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
-      classList={{ "all-day-chip--selected": isSelected() }}
+      classList={{
+        "all-day-chip--selected": isSelected(),
+        "opacity-0 pointer-events-none": isBeingUnfolded(),
+      }}
       onClick={() => selectEvent(props.event.id)}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
       style={{
         left: "0",
         transform: `translateX(${props.left}px)`,
@@ -41,6 +133,9 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         height: "var(--grid-all-day-chip-height)",
         "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
+        transition: isBeingUnfolded()
+          ? "opacity 150ms ease-out, background-color 75ms"
+          : "background-color 75ms",
       }}
       data-event-id={props.event.id}
       tabIndex={0}
@@ -55,6 +150,11 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         }}
       />
       <span class="truncate text-fg ml-0.5">{props.event.title}</span>
+      <Show when={hasTimes()}>
+        <span class="shrink-0 text-[10px] text-fg opacity-50 ml-1">
+          {formatChipTimeRange(props.event.start, props.event.end)}
+        </span>
+      </Show>
     </div>
   );
 }
