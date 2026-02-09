@@ -1,4 +1,5 @@
 import type { CalendarEvent } from "../../../stores/events";
+import { CHIP_BORDER_RADIUS } from "../../../constants/layout";
 
 interface MonthSpanningChipProps {
   event: CalendarEvent;
@@ -14,8 +15,8 @@ interface MonthSpanningChipProps {
 
 export function MonthSpanningChip(props: MonthSpanningChipProps) {
   const getBorderRadius = () => {
-    const left = props.startsBeforeView ? "0" : "4px";
-    const right = props.endsAfterView ? "0" : "4px";
+    const left = props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS;
+    const right = props.endsAfterView ? "0" : CHIP_BORDER_RADIUS;
     return `${left} ${right} ${right} ${left}`;
   };
 
@@ -38,7 +39,7 @@ export function MonthSpanningChip(props: MonthSpanningChipProps) {
         class="all-day-chip__ribbon absolute left-0 top-0 bottom-0 w-[3px]"
         style={{
           "background-color": props.event.color,
-          "border-radius": `${props.startsBeforeView ? "0" : "4px"} 0 0 ${props.startsBeforeView ? "0" : "4px"}`,
+          "border-radius": `${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS} 0 0 ${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS}`,
         }}
       />
       <span class="truncate text-fg ml-0.5">{props.event.title}</span>

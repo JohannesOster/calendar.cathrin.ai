@@ -82,6 +82,20 @@ interface EventsListResponse {
 }
 
 /**
+ * Patch body for Google Calendar PATCH endpoint.
+ * Date fields include a null counterpart because Google deep-merges nested
+ * objects, so switching between date/dateTime requires explicitly nulling
+ * the other field.
+ */
+export interface GoogleEventPatch {
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
+  end?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
+}
+
+/**
  * Google Calendar API client service
  *
  * Fetches calendars and events from Google's Calendar API using OAuth access tokens.
@@ -164,9 +178,9 @@ export class GoogleCalendarService {
       pageToken = data.nextPageToken;
     } while (pageToken);
 
-    return allEvents.map((event) =>
-      this.mapEvent(event, calendarId, calendarColor)
-    );
+    return allEvents
+      .map((event) => this.mapEvent(event, calendarId, calendarColor))
+      .filter((e): e is ApiCalendarEvent => e !== null);
   }
 
   /**
@@ -226,9 +240,9 @@ export class GoogleCalendarService {
     const activeEvents = allEvents.filter((e) => e.status !== "cancelled");
 
     return {
-      events: activeEvents.map((event) =>
-        this.mapEvent(event, calendarId, calendarColor)
-      ),
+      events: activeEvents
+        .map((event) => this.mapEvent(event, calendarId, calendarColor))
+        .filter((e): e is ApiCalendarEvent => e !== null),
       cancelledIds,
       nextSyncToken,
     };
@@ -265,17 +279,15 @@ export class GoogleCalendarService {
 
   /**
    * Patch (partial update) an event in a Google Calendar
+   *
+   * Google PATCH deep-merges nested objects. When switching between all-day
+   * and timed formats, the caller must null-out the conflicting field
+   * (e.g., { date: "2025-01-01", dateTime: null }) so Google clears it.
    */
   async patchEvent(
     calendarId: string,
     eventId: string,
-    patch: {
-      summary?: string;
-      description?: string;
-      location?: string;
-      start?: { dateTime: string } | { date: string };
-      end?: { dateTime: string } | { date: string };
-    }
+    patch: GoogleEventPatch
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
 
@@ -356,19 +368,30 @@ export class GoogleCalendarService {
   }
 
   /**
-   * Map Google event to ApiCalendarEvent
+   * Map Google event to ApiCalendarEvent.
+   * Returns null if the event has no start or end date (skipped with a warning).
    */
   private mapEvent(
     event: GoogleEvent,
     calendarId: string,
     calendarColor: string
-  ): ApiCalendarEvent {
+  ): ApiCalendarEvent | null {
+    const start = event.start.dateTime || event.start.date;
+    const end = event.end.dateTime || event.end.date;
+
+    if (!start || !end) {
+      console.warn(
+        `[google-calendar] Skipping event "${event.id}" — missing ${!start ? "start" : "end"} date`
+      );
+      return null;
+    }
+
     return {
       id: event.id,
       calendarId,
       title: event.summary || "(No title)",
-      start: event.start.dateTime || event.start.date || "",
-      end: event.end.dateTime || event.end.date || "",
+      start,
+      end,
       isAllDay: !!event.start.date,
       color: calendarColor,
       provider: "google",

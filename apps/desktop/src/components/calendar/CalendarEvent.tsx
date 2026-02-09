@@ -2,10 +2,12 @@ import { createSignal, Show, createMemo, onCleanup } from "solid-js";
 import { burnElement } from "../../lib/animations/burn";
 import fireGif from "../../assets/fire.gif";
 import type { EventLayoutInfo } from "../../utils/eventLayout";
-import { deleteEvent, type CalendarEvent as CalendarEventData } from "../../stores/events";
+import type { CalendarEvent as CalendarEventData } from "../../stores/events";
+import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
-import { startMoveDrag, moveDragEventId, startResizeDrag, resizeDragEventId, dragActiveEventId } from "../../stores/event-drag";
+import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
+import { formatCompactTime, formatTimeRange } from "../../lib/format-utils";
 
 // Shared signal: all segments of the focused event highlight together
 export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
@@ -29,22 +31,6 @@ interface CalendarEventProps {
   event: CalendarEventData;
   layout?: EventLayoutInfo;
   columnDate?: Date;
-}
-
-function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHour = hours % 12 || 12;
-
-  if (minutes === 0) {
-    return `${displayHour}${period}`;
-  }
-  return `${displayHour}:${minutes.toString().padStart(2, "0")}${period}`;
-}
-
-function formatTimeRange(start: Date, end: Date): string {
-  return `${formatTime(start)} – ${formatTime(end)}`;
 }
 
 export function CalendarEvent(props: CalendarEventProps) {
@@ -276,7 +262,7 @@ export function CalendarEvent(props: CalendarEventProps) {
                 {props.event.title}
               </div>
               <div class="text-[10px] font-light mt-0.5 opacity-80 whitespace-nowrap">
-                {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
+                {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatCompactTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
               </div>
             </Show>
           </div>

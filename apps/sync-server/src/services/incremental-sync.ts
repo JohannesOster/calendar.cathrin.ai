@@ -7,6 +7,7 @@ import {
   SyncTokenExpiredError,
 } from "./google-calendar.js";
 import { getWeekId, getWeeksInRange } from "../lib/week-utils.js";
+import { upsertServerEvents } from "./event-storage.js";
 
 /**
  * Perform incremental sync for a calendar using its syncToken
@@ -74,37 +75,9 @@ export async function syncCalendarIncremental(
     // Upsert active events
     for (const event of events) {
       affectedWeekIds.add(getWeekId(new Date(event.start)));
-
-      await db
-        .insert(serverEvents)
-        .values({
-          accountId,
-          calendarId,
-          googleEventId: event.id,
-          title: event.title,
-          start: new Date(event.start),
-          end: new Date(event.end),
-          isAllDay: event.isAllDay,
-          color: event.color,
-          location: event.location,
-          description: event.description,
-          status: "confirmed",
-        })
-        .onConflictDoUpdate({
-          target: [serverEvents.accountId, serverEvents.googleEventId],
-          set: {
-            title: event.title,
-            start: new Date(event.start),
-            end: new Date(event.end),
-            isAllDay: event.isAllDay,
-            color: event.color,
-            location: event.location,
-            description: event.description,
-            updatedAt: new Date(),
-          },
-        });
-      updated++;
     }
+    await upsertServerEvents(db, events, accountId, calendarId);
+    updated = events.length;
 
     // Update fetchedAt for all affected weeks
     if (affectedWeekIds.size > 0) {
@@ -172,36 +145,7 @@ export async function syncCalendarFull(
   );
 
   // Store events
-  for (const event of events) {
-    await db
-      .insert(serverEvents)
-      .values({
-        accountId,
-        calendarId,
-        googleEventId: event.id,
-        title: event.title,
-        start: new Date(event.start),
-        end: new Date(event.end),
-        isAllDay: event.isAllDay,
-        color: event.color,
-        location: event.location,
-        description: event.description,
-        status: "confirmed",
-      })
-      .onConflictDoUpdate({
-        target: [serverEvents.accountId, serverEvents.googleEventId],
-        set: {
-          title: event.title,
-          start: new Date(event.start),
-          end: new Date(event.end),
-          isAllDay: event.isAllDay,
-          color: event.color,
-          location: event.location,
-          description: event.description,
-          updatedAt: new Date(),
-        },
-      });
-  }
+  await upsertServerEvents(db, events, accountId, calendarId);
 
   // Remove events in the fetched range that Google no longer returns
   const fetchedEventIds = new Set(events.map((e) => e.id));

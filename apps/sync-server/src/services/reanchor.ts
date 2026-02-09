@@ -4,7 +4,6 @@ import {
   accounts,
   calendarSyncState,
   fetchedWeeks,
-  serverEvents,
 } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
@@ -15,6 +14,7 @@ import {
   getWeekDistance,
   addWeeks,
 } from "../lib/week-utils.js";
+import { upsertServerEvents } from "./event-storage.js";
 
 // Reanchoring configuration
 const EDGE_THRESHOLD_WEEKS = 8; // ~2 months - trigger reanchoring when this close to edge
@@ -89,32 +89,7 @@ async function fetchWeekRange(
   );
 
   // Store events
-  for (const event of events) {
-    await db
-      .insert(serverEvents)
-      .values({
-        accountId,
-        calendarId,
-        googleEventId: event.id,
-        title: event.title,
-        start: new Date(event.start),
-        end: new Date(event.end),
-        isAllDay: event.isAllDay,
-        color: event.color,
-        status: "confirmed",
-      })
-      .onConflictDoUpdate({
-        target: [serverEvents.accountId, serverEvents.googleEventId],
-        set: {
-          title: event.title,
-          start: new Date(event.start),
-          end: new Date(event.end),
-          isAllDay: event.isAllDay,
-          color: event.color,
-          updatedAt: new Date(),
-        },
-      });
-  }
+  await upsertServerEvents(db, events, accountId, calendarId);
 
   // Mark weeks as fetched
   const weeksInRange = getWeeksInRange(start, end);

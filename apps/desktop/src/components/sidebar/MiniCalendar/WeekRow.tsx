@@ -48,7 +48,7 @@ export function WeekRow(props: WeekRowProps) {
       <Show when={backgroundStyle()}>
         {(style) => (
           <div
-            class="absolute top-0 bottom-0 bg-surface-input rounded-md"
+            class="absolute top-0 bottom-0 bg-surface-hover rounded-md"
             style={style()}
           />
         )}
@@ -70,7 +70,7 @@ export function WeekRow(props: WeekRowProps) {
 
             return (
               <button
-                class="w-7 h-6 flex items-center justify-center text-xs transition-colors rounded"
+                class="h-6 flex items-center justify-center text-xs transition-colors rounded"
                 classList={{
                   "text-fg": dayInfo.isCurrentMonth && !isTodayDate,
                   "text-fg-disabled": !dayInfo.isCurrentMonth && !isVisible(),

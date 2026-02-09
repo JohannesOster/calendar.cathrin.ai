@@ -151,12 +151,3 @@ export function addWeeks(weekId: string, weeks: number): string {
   newDate.setUTCDate(newDate.getUTCDate() + weeks * 7);
   return getWeekId(newDate);
 }
-
-/**
- * Compare two week IDs
- * Returns negative if a < b, zero if equal, positive if a > b
- */
-export function compareWeeks(a: string, b: string): number {
-  // Week IDs are lexicographically comparable (YYYY-Wnn format)
-  return a.localeCompare(b);
-}

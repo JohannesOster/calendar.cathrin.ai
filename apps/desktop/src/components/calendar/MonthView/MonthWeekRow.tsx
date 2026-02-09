@@ -4,7 +4,7 @@ import { MonthSpanningChip } from "./MonthSpanningChip";
 import { calculateAllDayLayouts, type AllDayLayoutInfo } from "../../../utils/allDayLayout";
 import { events } from "../../../stores/events";
 import { connectedAccounts } from "../../../stores/accounts";
-import { addDays, isSameDay } from "../../../lib/date-utils";
+import { isSameDay } from "../../../lib/date-utils";
 
 // Layout constants matching MonthDayCell
 const DAY_NUMBER_HEIGHT = 28;

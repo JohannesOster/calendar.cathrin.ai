@@ -2,6 +2,7 @@ import { For, createMemo } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { AllDayEventChip } from "./AllDayEventChip";
 import type { CalendarEvent } from "../../stores/events";
+import { ALL_DAY_ROW_HEIGHT } from "../../constants/layout";
 
 interface DaySlot {
   date: Date;
@@ -27,7 +28,6 @@ interface AllDaySectionProps {
 }
 
 // Layout constants
-const ROW_HEIGHT = 24; // chip height (20px) + gap (4px)
 const BASE_PADDING = 4; // top padding
 const MAX_COLLAPSED_ROWS = 1;
 const MIN_SECTION_HEIGHT = 28; // minimum height when empty
@@ -44,7 +44,7 @@ export function calculateAllDaySectionHeight(
   const visibleRows = isExpanded
     ? totalRows
     : Math.min(totalRows, MAX_COLLAPSED_ROWS);
-  return Math.max(MIN_SECTION_HEIGHT, visibleRows * ROW_HEIGHT + BASE_PADDING);
+  return Math.max(MIN_SECTION_HEIGHT, visibleRows * ALL_DAY_ROW_HEIGHT + BASE_PADDING);
 }
 
 // Helper to create stable date key for <Key> component

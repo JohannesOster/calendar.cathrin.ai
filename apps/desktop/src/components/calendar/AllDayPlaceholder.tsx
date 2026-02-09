@@ -7,6 +7,7 @@ import {
   draftIsAllDay,
   getDraftColor,
 } from "../../stores/event-creation";
+import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS, CHIP_MARGIN_LEFT, CHIP_MARGIN_RIGHT } from "../../constants/layout";
 
 interface DaySlot {
   date: Date;
@@ -18,8 +19,6 @@ interface AllDayPlaceholderProps {
   colWidth: number;
   row: number;
 }
-
-const ROW_HEIGHT = 24;
 
 export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
   const placeholderLayout = createMemo(() => {
@@ -55,8 +54,8 @@ export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
 
     if (!firstCol || !lastCol) return null;
 
-    const left = firstCol.left + 1; // 1px left margin
-    const width = lastCol.left + props.colWidth - firstCol.left - 4 - 1; // 4px right gap, 1px left margin
+    const left = firstCol.left + CHIP_MARGIN_LEFT;
+    const width = lastCol.left + props.colWidth - firstCol.left - CHIP_MARGIN_RIGHT - CHIP_MARGIN_LEFT;
 
     return { left, width };
   });
@@ -73,12 +72,12 @@ export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
             left: "0",
             transform: `translateX(${layout().left}px)`,
             width: `${layout().width}px`,
-            top: `${props.row * ROW_HEIGHT + 4}px`,
+            top: `${props.row * ALL_DAY_ROW_HEIGHT + 4}px`,
             height: "var(--grid-all-day-chip-height)",
             "background-color": hasTitle()
               ? `color-mix(in srgb, ${getDraftColor()} 18%, var(--color-surface))`
               : `color-mix(in srgb, ${getDraftColor()} 10%, var(--color-surface))`,
-            "border-radius": "4px",
+            "border-radius": CHIP_BORDER_RADIUS,
             "z-index": "50",
           }}
         >
@@ -86,7 +85,7 @@ export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
             class="absolute left-0 top-0 bottom-0 w-[3px]"
             style={{
               "background-color": getDraftColor(),
-              "border-radius": "4px 0 0 4px",
+              "border-radius": `${CHIP_BORDER_RADIUS} 0 0 ${CHIP_BORDER_RADIUS}`,
             }}
           />
           <Show when={hasTitle()}>

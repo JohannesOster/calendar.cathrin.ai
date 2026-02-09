@@ -38,35 +38,6 @@ export interface ApiCalendarEvent {
 }
 
 /**
- * Request body for creating a new calendar event
- */
-export interface ApiCreateEventRequest {
-  calendarId: string;
-  title: string;
-  /** ISO 8601 date string */
-  start: string;
-  /** ISO 8601 date string */
-  end: string;
-  isAllDay?: boolean;
-  location?: string;
-  description?: string;
-}
-
-/**
- * Request body for patching an existing calendar event
- * All fields optional — only send what changed
- */
-export interface ApiPatchEventRequest {
-  summary?: string;
-  description?: string;
-  location?: string;
-  /** ISO 8601 datetime string */
-  start?: string;
-  /** ISO 8601 datetime string */
-  end?: string;
-}
-
-/**
  * A calendar as transported over the API
  */
 export interface ApiCalendar {

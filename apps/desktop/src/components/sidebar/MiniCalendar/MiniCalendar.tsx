@@ -2,6 +2,7 @@ import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
 import { setCenterDate, setFlashDate, visibleStartDate } from "../../calendar/CalendarGrid";
 import { getSundayOfWeek, formatMonthYearLocale } from "../../../lib/date-utils";
+import { visibleDaysCount } from "../../../stores/view";
 import { SIDEBAR, WEEKDAY_LABELS } from "../../../constants/sidebar";
 import { WeekRow, type DayInfo } from "./WeekRow";
 
@@ -14,11 +15,12 @@ export function MiniCalendar() {
   const weeksInMonth = createMemo(() => computeWeeksInMonth(currentMonth()));
 
   // Compute the visible date range as timestamps for efficient comparison
+  // Uses visibleDaysCount so the highlight adapts to 1-day, 3-day, 7-day, etc.
   const visibleRange = createMemo(() => {
     const startDate = new Date(visibleStartDate());
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 6);
+    endDate.setDate(startDate.getDate() + visibleDaysCount() - 1);
     endDate.setHours(23, 59, 59, 999);
     return { start: startDate.getTime(), end: endDate.getTime() };
   });
@@ -52,10 +54,12 @@ export function MiniCalendar() {
     navigateToDate(today);
   };
 
-  // Navigate main grid to show the week containing a date, flash that date
+  // Navigate main grid to show a date, flash that date
+  // For 7-day view: snap to Sunday of the week (full week alignment)
+  // For fewer days: navigate directly to the clicked date
   const navigateToDate = (date: Date) => {
-    const weekStart = getSundayOfWeek(date);
-    setCenterDate(weekStart);
+    const target = visibleDaysCount() >= 7 ? getSundayOfWeek(date) : date;
+    setCenterDate(target);
     setFlashDate(date);
     setTimeout(() => setFlashDate(null), SIDEBAR.FLASH_CLEAR_DELAY);
   };
@@ -135,7 +139,7 @@ export function MiniCalendar() {
       <div class="grid grid-cols-7 mb-1 cursor-default">
         <For each={WEEKDAY_LABELS}>
           {(day) => (
-            <div class="w-7 text-center text-xs text-fg-muted">{day}</div>
+            <div class="text-center text-xs text-fg-muted">{day}</div>
           )}
         </For>
       </div>

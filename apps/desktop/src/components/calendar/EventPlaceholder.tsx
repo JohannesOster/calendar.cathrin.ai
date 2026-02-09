@@ -29,11 +29,6 @@ interface EventPlaceholderProps {
 }
 
 export function EventPlaceholder(props: EventPlaceholderProps) {
-  const isSameDay = (a: Date, b: Date) =>
-    a.getDate() === b.getDate() &&
-    a.getMonth() === b.getMonth() &&
-    a.getFullYear() === b.getFullYear();
-
   const toMidnight = (d: Date) => {
     const m = new Date(d);
     m.setHours(0, 0, 0, 0);

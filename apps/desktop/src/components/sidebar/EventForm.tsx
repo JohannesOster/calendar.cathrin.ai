@@ -39,68 +39,13 @@ import {
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
 import { updateEvent, setEvents, type EventPatch } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
-
-function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHour = hours % 12 || 12;
-  if (minutes === 0) return `${displayHour} ${period}`;
-  return `${displayHour}:${minutes.toString().padStart(2, "0")} ${period}`;
-}
-
-function formatDuration(start: Date, end: Date): string {
-  const diffMs = end.getTime() - start.getTime();
-  const totalMinutes = Math.round(diffMs / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours === 0) return `${minutes}min`;
-  if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}min`;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-/** Convert Date to "H:MM" display string for the text input */
-function toTimeText(date: Date): string {
-  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-/**
- * Parse a partial time string to hours and minutes.
- * Rules:
- * - Empty → 0:00 (midnight)
- * - "12:1" → 12:01 (minutes are the literal number, not left-shifted)
- * - "9" → 9:00
- * - "13:5" → 13:05
- * - "25" → clamped to 23
- * Returns null only if the input contains non-numeric/non-colon characters.
- */
-function parseTimeInput(value: string): { hours: number; minutes: number } | null {
-  const trimmed = value.trim();
-  if (trimmed === "") return { hours: 0, minutes: 0 };
-
-  // Allow only digits and one colon
-  if (!/^[\d:]*$/.test(trimmed)) return null;
-
-  const parts = trimmed.split(":");
-  if (parts.length > 2) return null;
-
-  const hourStr = parts[0];
-  const minStr = parts[1] ?? "";
-
-  const hours = hourStr === "" ? 0 : Math.min(parseInt(hourStr, 10) || 0, 23);
-  const minutes = minStr === "" ? 0 : Math.min(parseInt(minStr, 10) || 0, 59);
-
-  return { hours, minutes };
-}
+import {
+  formatTime,
+  formatDuration,
+  formatDate,
+  toTimeText,
+  parseTimeInput,
+} from "../../lib/format-utils";
 
 // =============================================================================
 // Mode detection
@@ -145,7 +90,9 @@ export function EventForm() {
 
     const patchToSend = { ...pendingPatch };
     pendingPatch = {};
-    updateEvent(eventId, patchToSend);
+    updateEvent(eventId, patchToSend).catch((err) =>
+      console.error("Failed to save event update:", err)
+    );
   }
 
   // Flush pending save when deselecting (sidebar closes)
@@ -312,7 +259,7 @@ export function EventForm() {
     }
   }
 
-  function handleTimeKeyDown(which: "start" | "end", e: KeyboardEvent): void {
+  function handleTimeKeyDown(e: KeyboardEvent): void {
     if (e.key === "Enter") {
       e.preventDefault();
       finishTimeEdit();
@@ -440,7 +387,7 @@ export function EventForm() {
                   ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
                   onInput={(e) => handleTimeInput("start", e.currentTarget.value)}
                   onBlur={() => finishTimeEdit()}
-                  onKeyDown={(e) => handleTimeKeyDown("start", e)}
+                  onKeyDown={handleTimeKeyDown}
                   placeholder="0:00"
                   class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
                 />
@@ -475,7 +422,7 @@ export function EventForm() {
                   ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
                   onInput={(e) => handleTimeInput("end", e.currentTarget.value)}
                   onBlur={() => finishTimeEdit()}
-                  onKeyDown={(e) => handleTimeKeyDown("end", e)}
+                  onKeyDown={handleTimeKeyDown}
                   placeholder="0:00"
                   class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
                 />

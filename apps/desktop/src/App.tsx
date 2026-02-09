@@ -5,7 +5,7 @@ import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
 import { isCreating, isDragging } from "./stores/event-creation";
-import { selectedEventId, deselectEvent } from "./stores/event-selection";
+import { selectedEventId } from "./stores/event-selection";
 import { CalendarGrid, activeVisibleWeeks, scrollDirection } from "./components/calendar/CalendarGrid";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { initAuth } from "./stores/auth";
@@ -18,11 +18,13 @@ import {
   updateVisibleWeeks,
   getFetchedWeeks,
   getFetchingWeeks,
+} from "./stores/events";
+import {
   startPolling,
   stopPolling,
   handleVisibilityChange,
   handleOnline,
-} from "./stores/events";
+} from "./stores/event-polling";
 import { getNextWeek, getPreviousWeek } from "./lib/date-utils";
 
 // Debounce delay for fetch trigger (ms)
@@ -105,7 +107,8 @@ function App() {
 
         if (missingWeeks.length > 0) {
           // Fetch all missing weeks in parallel
-          Promise.all(missingWeeks.map(week => fetchEventsForWeek(week)));
+          Promise.all(missingWeeks.map(week => fetchEventsForWeek(week)))
+            .catch((error) => console.error("[App] Failed to fetch missing weeks:", error));
         }
 
         // Directional prefetching: fetch next week in scroll direction

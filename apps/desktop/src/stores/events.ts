@@ -14,14 +14,7 @@ import {
   filterEventsForWeeks,
   deleteEvictedWeeksFromDisk,
   loadEventsFromDisk,
-  saveEventsToDisk,
   replaceEventsOnDisk,
-  deleteCachedEventFromDisk,
-  restoreCachedEventToDisk,
-  clearAllWeekAccess,
-  clearAllWeekFetchTimes,
-  clearPersistedFetchTimes,
-  STALE_THRESHOLD_MS,
 } from "../lib/event-cache";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
@@ -46,9 +39,6 @@ export interface CalendarEvent {
 const DAYS_BEFORE = 7;
 const DAYS_AFTER = 30;
 
-// Polling interval matches staleness threshold for responsive updates
-const POLL_INTERVAL_MS = STALE_THRESHOLD_MS;
-
 // =============================================================================
 // Signals
 // =============================================================================
@@ -56,19 +46,42 @@ export const [events, setEvents] = createSignal<CalendarEvent[]>([]);
 export const [isLoading, setIsLoading] = createSignal(false);
 export const [lastRefreshed, setLastRefreshed] = createSignal<Date | null>(null);
 export const [eventsError, setEventsError] = createSignal<string | null>(null);
-const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
+export const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
-const [revalidatingWeeks, setRevalidatingWeeks] = createSignal<Set<string>>(new Set());
 
 // =============================================================================
 // Request Tracking
 // =============================================================================
 let currentRequestId = 0;
-let currentVisibleWeeks: Set<string> = new Set();
-let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
 // =============================================================================
-// Helpers
+// Cross-module registrations
+//
+// event-deletion.ts and event-polling.ts register their functions here at
+// import time. This breaks circular imports: events.ts never imports from
+// those modules, they import from events.ts and call these registration fns.
+// =============================================================================
+
+let _pendingDeletionMap: Map<string, unknown> = new Map();
+let _revalidateWeeksForDates: ((...dates: Date[]) => void) | null = null;
+let _setVisibleWeeksForPolling: ((weeks: Set<string>) => void) | null = null;
+
+/** Called by event-deletion.ts to share its pendingMap reference. */
+export function _registerPendingMap(map: Map<string, unknown>): void {
+  _pendingDeletionMap = map;
+}
+
+/** Called by event-polling.ts to share its revalidation + visibility functions. */
+export function _registerPollingFns(fns: {
+  revalidateWeeksForDates: (...dates: Date[]) => void;
+  setVisibleWeeksForPolling: (weeks: Set<string>) => void;
+}): void {
+  _revalidateWeeksForDates = fns.revalidateWeeksForDates;
+  _setVisibleWeeksForPolling = fns.setVisibleWeeksForPolling;
+}
+
+// =============================================================================
+// Helpers (some exported for use by event-polling)
 // =============================================================================
 
 function formatDateOnly(date: Date): string {
@@ -78,7 +91,7 @@ function formatDateOnly(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
+export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
   return {
     id: event.id,
     calendarId: event.calendarId,
@@ -111,10 +124,10 @@ function processEvents(
 ): CalendarEvent[] {
   const uniqueEvents = new Map<string, CalendarEvent>();
   for (const event of existingEvents) {
-    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
+    if (!_pendingDeletionMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   for (const event of newEvents) {
-    if (!pendingMap.has(event.id)) uniqueEvents.set(event.id, event);
+    if (!_pendingDeletionMap.has(event.id)) uniqueEvents.set(event.id, event);
   }
   return Array.from(uniqueEvents.values()).sort(
     (a, b) => a.start.getTime() - b.start.getTime()
@@ -126,7 +139,7 @@ function processEvents(
  * Events overlapping the range that are absent from the new response are removed,
  * ensuring deletions on the server propagate to the client cache.
  */
-function replaceEventsInRange(
+export function replaceEventsInRange(
   rangeStart: Date,
   rangeEnd: Date,
   newEvents: CalendarEvent[],
@@ -137,11 +150,11 @@ function replaceEventsInRange(
 
   // Filter out events pending local deletion — server still has them
   // but the user already deleted them (undo window hasn't closed yet)
-  const filtered = newEvents.filter((e) => !pendingMap.has(e.id));
+  const filtered = newEvents.filter((e) => !_pendingDeletionMap.has(e.id));
   const newEventIds = new Set(filtered.map((e) => e.id));
 
   const kept = existingEvents.filter((event) => {
-    if (pendingMap.has(event.id)) return false;
+    if (_pendingDeletionMap.has(event.id)) return false;
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;
     return !overlaps || newEventIds.has(event.id);
@@ -160,41 +173,6 @@ function evictStaleWeeks(): void {
     setFetchedWeeks(weeksToKeep);
     setEvents((prev) => filterEventsForWeeks(prev, weeksToKeep));
     deleteEvictedWeeksFromDisk(evictedWeeks);
-  }
-}
-
-// =============================================================================
-// Revalidation
-// =============================================================================
-
-async function revalidateWeekBackground(weekId: string): Promise<void> {
-  if (revalidatingWeeks().has(weekId)) {
-    console.log(`[events] Skipping revalidation for ${weekId} - already in progress`);
-    return;
-  }
-
-  setRevalidatingWeeks((prev) => new Set([...prev, weekId]));
-  console.log(`[events] Revalidating stale week ${weekId}...`);
-
-  try {
-    const { start, end } = getWeekBounds(weekId);
-    const apiEvents = await apiFetch<ApiCalendarEvent[]>(
-      `/api/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`
-    );
-
-    const newEvents = apiEvents.map(convertApiEvent);
-    recordWeekFetch(weekId);
-    recordWeekAccess(weekId);
-    setEvents((prev) => replaceEventsInRange(start, end, newEvents, prev));
-    console.log(`[events] Revalidated ${weekId} - ${newEvents.length} events`);
-  } catch (error) {
-    console.warn(`[events] Failed to revalidate ${weekId}:`, error);
-  } finally {
-    setRevalidatingWeeks((prev) => {
-      const updated = new Set(prev);
-      updated.delete(weekId);
-      return updated;
-    });
   }
 }
 
@@ -294,10 +272,6 @@ export function isLoadingWeeks(): boolean {
   return isLoading() || fetchingWeeks().size > 0;
 }
 
-export function isRevalidatingWeeks(): boolean {
-  return revalidatingWeeks().size > 0;
-}
-
 export function getStaleWeeks(weekIds: string[]): string[] {
   return weekIds.filter((weekId) => fetchedWeeks().has(weekId) && isWeekStale(weekId));
 }
@@ -327,7 +301,7 @@ export function updateVisibleWeeks(weeks: string[]): void {
     });
   }
 
-  currentVisibleWeeks = newVisible;
+  _setVisibleWeeksForPolling?.(newVisible);
 }
 
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
@@ -346,7 +320,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
   }
 
   if (isFetched && stale) {
-    revalidateWeekBackground(weekId);
+    _revalidateWeeksForDates?.(new Date());
     return;
   }
 
@@ -407,105 +381,6 @@ export function getEventsForRange(
 }
 
 // =============================================================================
-// Polling
-// =============================================================================
-
-async function pollVisibleWeeks(): Promise<void> {
-  if (currentVisibleWeeks.size === 0 || !isAuthenticated()) {
-    return;
-  }
-
-  const staleWeeks = getStaleWeeks([...currentVisibleWeeks]);
-  if (staleWeeks.length === 0) {
-    return;
-  }
-
-  console.log(`[events] Polling ${staleWeeks.length} stale visible weeks:`, staleWeeks);
-  await Promise.all(staleWeeks.map(revalidateWeekBackground));
-}
-
-/**
- * Force revalidation of all currently visible weeks, regardless of staleness.
- * Used on window focus and network reconnect for immediate freshness.
- */
-async function forceRevalidateVisibleWeeks(): Promise<void> {
-  if (currentVisibleWeeks.size === 0 || !isAuthenticated()) return;
-
-  const visibleFetched = [...currentVisibleWeeks].filter((w) => fetchedWeeks().has(w));
-  if (visibleFetched.length === 0) return;
-
-  console.log(`[events] Force-revalidating ${visibleFetched.length} visible weeks`);
-  await Promise.all(visibleFetched.map(revalidateWeekBackground));
-}
-
-export function startPolling(): void {
-  if (pollIntervalId) return;
-  console.log(`[events] Starting polling (interval: ${POLL_INTERVAL_MS / 1000}s)`);
-  pollIntervalId = setInterval(() => {
-    pollVisibleWeeks().catch((error) => console.warn("[events] Poll failed:", error));
-  }, POLL_INTERVAL_MS);
-}
-
-export function stopPolling(): void {
-  if (pollIntervalId) {
-    clearInterval(pollIntervalId);
-    pollIntervalId = null;
-    console.log("[events] Stopped polling");
-  }
-}
-
-export function isPollingActive(): boolean {
-  return pollIntervalId !== null;
-}
-
-export function handleVisibilityChange(): void {
-  if (document.hidden) {
-    stopPolling();
-  } else {
-    startPolling();
-    // Force-revalidate all visible weeks on focus, not just stale ones
-    forceRevalidateVisibleWeeks().catch((error) => console.warn("[events] Focus revalidation failed:", error));
-  }
-}
-
-export function handleOnline(): void {
-  if (!isAuthenticated()) return;
-  console.log("[events] Network reconnected, revalidating...");
-  forceRevalidateVisibleWeeks().catch((error) => console.warn("[events] Online revalidation failed:", error));
-}
-
-export function clearEvents(): void {
-  stopPolling();
-  setEvents([]);
-  setFetchedWeeks(new Set<string>());
-  setFetchingWeeks(new Set<string>());
-  setRevalidatingWeeks(new Set<string>());
-  setLastRefreshed(null);
-  setEventsError(null);
-  clearAllWeekAccess();
-  clearAllWeekFetchTimes();
-  currentRequestId++;
-  clearPersistedFetchTimes();
-}
-
-// =============================================================================
-// Post-Mutation Revalidation
-// =============================================================================
-
-/**
- * Revalidate weeks affected by a mutation (create/delete).
- * Called after API calls succeed to sync optimistic state with server truth.
- */
-export function revalidateWeeksForDates(...dates: Date[]): void {
-  const weekIds = new Set(dates.map((d) => getWeekId(d)));
-  for (const weekId of weekIds) {
-    if (fetchedWeeks().has(weekId)) {
-      revalidateWeekBackground(weekId);
-    }
-  }
-}
-
-// =============================================================================
 // Optimistic Local Events
 // =============================================================================
 
@@ -523,93 +398,6 @@ export function addLocalEvent(event: CalendarEvent): void {
  */
 export function removeLocalEvent(eventId: string): void {
   setEvents((prev) => prev.filter((e) => e.id !== eventId));
-}
-
-// =============================================================================
-// Event Deletion
-// =============================================================================
-
-export interface PendingDeletion {
-  event: CalendarEvent;
-}
-
-/**
- * Non-reactive map of pending deletions. The toast component subscribes
- * to the `onDeletion` callback to manage its own rendering lifecycle,
- * which prevents store/signal array mutations from recreating sibling toasts.
- */
-const pendingMap = new Map<string, PendingDeletion>();
-
-type DeletionListener = (deletion: PendingDeletion) => void;
-const listeners = new Set<DeletionListener>();
-
-/** Subscribe to new deletion events (used by UndoToast). */
-export function onDeletion(fn: DeletionListener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-/**
- * Fire the actual DELETE API call for an event.
- */
-function fireDeleteApi(event: CalendarEvent): void {
-  apiFetch<{ success: boolean }>(`/api/events/${encodeURIComponent(event.id)}`, {
-    method: "DELETE",
-  })
-    .then(() => {
-      console.log(`[events] Deleted event ${event.id} from server`);
-      revalidateWeeksForDates(event.start);
-    })
-    .catch((error) => {
-      console.error(`[events] Failed to delete event ${event.id}:`, error);
-      // Restore on failure — server didn't accept the deletion
-      addLocalEvent(event);
-      restoreCachedEventToDisk(event);
-    });
-}
-
-/**
- * Delete an event: remove from local store + SQLite cache immediately.
- * The API call is deferred until the undo toast dismisses.
- */
-export function deleteEvent(eventId: string): void {
-  const event = events().find((e) => e.id === eventId);
-  if (!event) return;
-
-  const deletion: PendingDeletion = { event };
-  pendingMap.set(eventId, deletion);
-
-  // Notify toast component
-  for (const fn of listeners) fn(deletion);
-
-  // Optimistic removal from UI + disk cache
-  removeLocalEvent(eventId);
-  deleteCachedEventFromDisk(eventId);
-}
-
-/**
- * Undo a specific pending deletion by event ID.
- */
-export function undoDelete(eventId: string): void {
-  const pending = pendingMap.get(eventId);
-  if (!pending) return;
-
-  pendingMap.delete(eventId);
-
-  // Restore event to UI + disk cache
-  addLocalEvent(pending.event);
-  restoreCachedEventToDisk(pending.event);
-}
-
-/**
- * Confirm a specific pending deletion: fire the API call.
- */
-export function confirmDelete(eventId: string): void {
-  const pending = pendingMap.get(eventId);
-  if (!pending) return;
-
-  pendingMap.delete(eventId);
-  fireDeleteApi(pending.event);
 }
 
 // =============================================================================
@@ -675,7 +463,7 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    revalidateWeeksForDates(event.start, patch.start ?? event.start);
+    _revalidateWeeksForDates?.(event.start, patch.start ?? event.start);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
     // Rollback

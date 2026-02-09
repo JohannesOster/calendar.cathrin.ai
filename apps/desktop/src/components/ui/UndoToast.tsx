@@ -9,10 +9,8 @@ import {
   onDeletion,
   undoDelete,
   confirmDelete,
-} from "../../stores/events";
-
-const AUTO_DISMISS_MS = 5000;
-const EXIT_DURATION_MS = 150;
+} from "../../stores/event-deletion";
+import { AUTO_DISMISS_MS, EXIT_DURATION_MS } from "../../constants/timings";
 
 const undoneIds = new Set<string>();
 

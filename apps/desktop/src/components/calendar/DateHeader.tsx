@@ -1,13 +1,13 @@
 import { createSignal, createEffect, onCleanup, For } from "solid-js";
 import { flashDate } from "./CalendarGrid";
 import { isSameDay } from "../../lib/date-utils";
+import { FLASH_DURATION_MS } from "../../constants/timings";
+import { WEEKDAY_NAMES } from "../../constants/sidebar";
 
 interface DateHeaderProps {
   date: Date;
   isToday?: boolean;
 }
-
-const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function DateHeader(props: DateHeaderProps) {
   // Use a counter to force re-mount of flash element, restarting CSS animation
@@ -37,7 +37,7 @@ export function DateHeader(props: DateHeaderProps) {
       setShowFlash(true);
       flashTimeout = window.setTimeout(() => {
         setShowFlash(false);
-      }, 2000);
+      }, FLASH_DURATION_MS);
     } else {
       // A different date was flashed, cancel our flash
       setShowFlash(false);
@@ -47,7 +47,7 @@ export function DateHeader(props: DateHeaderProps) {
     if (flashTimeout) clearTimeout(flashTimeout);
   });
 
-  const dayName = () => dayNames[props.date.getDay()];
+  const dayName = () => WEEKDAY_NAMES[props.date.getDay()];
   const dayNumber = () => props.date.getDate();
 
   return (

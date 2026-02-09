@@ -15,7 +15,10 @@ import {
   GoogleCalendarService,
   GoogleApiError,
   TokenExpiredError,
+  type GoogleEventPatch,
 } from "../services/google-calendar.js";
+import { upsertServerEvent } from "../services/event-storage.js";
+import { mapServerEventToApi } from "../services/event-mapper.js";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -52,36 +55,6 @@ async function createEvent(
       ? new Date(googleEvent.end.date!)
       : new Date(googleEvent.end.dateTime!);
 
-    // Store in local cache
-    await db!
-      .insert(serverEvents)
-      .values({
-        accountId,
-        calendarId,
-        googleEventId: googleEvent.id,
-        title: googleEvent.summary || title,
-        start: eventStart,
-        end: eventEnd,
-        isAllDay: isAllDay ?? false,
-        color,
-        location: googleEvent.location || location,
-        description: googleEvent.description || description,
-        status: "confirmed",
-      })
-      .onConflictDoUpdate({
-        target: [serverEvents.accountId, serverEvents.googleEventId],
-        set: {
-          title: googleEvent.summary || title,
-          start: eventStart,
-          end: eventEnd,
-          isAllDay: isAllDay ?? false,
-          color,
-          location: googleEvent.location || location,
-          description: googleEvent.description || description,
-          updatedAt: new Date(),
-        },
-      });
-
     const apiEvent: ApiCalendarEvent = {
       id: googleEvent.id,
       calendarId,
@@ -95,6 +68,9 @@ async function createEvent(
       description: googleEvent.description || description || undefined,
     };
 
+    // Store in local cache
+    await upsertServerEvent(db!, apiEvent, accountId, calendarId);
+
     return c.json(apiEvent, 201);
   } catch (error) {
     if (error instanceof TokenExpiredError) {
@@ -107,11 +83,16 @@ async function createEvent(
   }
 }
 
-const querySchema = z.object({
-  from: z.string().datetime(),
-  to: z.string().datetime(),
-  calendarIds: z.union([z.string(), z.array(z.string())]).optional(),
-});
+const querySchema = z
+  .object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+    calendarIds: z.union([z.string(), z.array(z.string())]).optional(),
+  })
+  .refine((data) => data.from <= data.to, {
+    message: "'from' must be before or equal to 'to'",
+    path: ["from"],
+  });
 
 export const eventsRoute = new Hono()
   .use("*", authMiddleware)
@@ -175,18 +156,7 @@ export const eventsRoute = new Hono()
         });
 
     // Map to API format
-    const apiEvents: ApiCalendarEvent[] = events.map((event) => ({
-      id: event.googleEventId,
-      calendarId: event.calendarId,
-      title: event.title,
-      start: event.start.toISOString(),
-      end: event.end.toISOString(),
-      isAllDay: event.isAllDay ?? false,
-      color: event.color || "#4285f4",
-      provider: "google",
-      location: event.location || undefined,
-      description: event.description || undefined,
-    }));
+    const apiEvents = events.map(mapServerEventToApi);
 
     return c.json(apiEvents);
   })
@@ -305,7 +275,7 @@ export const eventsRoute = new Hono()
       }
 
       // Build Google API patch body
-      const googlePatch: Record<string, unknown> = {};
+      const googlePatch: GoogleEventPatch = {};
       if (patch.summary !== undefined) googlePatch.summary = patch.summary;
       if (patch.description !== undefined) googlePatch.description = patch.description;
       if (patch.location !== undefined) googlePatch.location = patch.location;
@@ -329,7 +299,7 @@ export const eventsRoute = new Hono()
         console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
         const accessToken = await getAccessToken(event.accountId);
         const service = new GoogleCalendarService(accessToken);
-        const updated = await service.patchEvent(event.calendarId, googleEventId, googlePatch as Parameters<GoogleCalendarService["patchEvent"]>[2]);
+        const updated = await service.patchEvent(event.calendarId, googleEventId, googlePatch);
 
         // Update local cache from Google's response (source of truth)
         const updatedStart = updated.start.dateTime

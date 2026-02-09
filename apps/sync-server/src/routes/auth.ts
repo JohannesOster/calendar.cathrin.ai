@@ -36,6 +36,12 @@ export const authRoute = new Hono()
       return c.json({ error: "Invalid or expired state" }, 400);
     }
 
+    // Consume state to prevent replay — the callback will re-create the
+    // record when it needs to store the JWT for desktop polling.
+    await db
+      .delete(oauthPendingTokens)
+      .where(eq(oauthPendingTokens.state, state));
+
     // Set state in cookie so we can retrieve it after OAuth callback
     c.header("Set-Cookie", `oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
 
@@ -227,11 +233,19 @@ export const authRoute = new Hono()
       const pendingState = stateMatch ? stateMatch[1] : null;
 
       if (pendingState) {
-        // Store the token for the desktop app to poll
+        // Re-create the pending token record (consumed at /auth/start) so
+        // the desktop client can poll for the JWT.
         await db
-          .update(oauthPendingTokens)
-          .set({ token: jwt })
-          .where(eq(oauthPendingTokens.state, pendingState));
+          .insert(oauthPendingTokens)
+          .values({
+            state: pendingState,
+            token: jwt,
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          })
+          .onConflictDoUpdate({
+            target: oauthPendingTokens.state,
+            set: { token: jwt },
+          });
 
         // Clear the cookie
         c.header("Set-Cookie", "oauth_state=; Path=/; HttpOnly; Max-Age=0");

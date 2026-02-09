@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { defaultCalendarId, connectedAccounts, setDefaultCalendar } from "./accounts";
-import { addLocalEvent, removeLocalEvent, setEvents, revalidateWeeksForDates } from "./events";
+import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
+import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch } from "../lib/api";
 import { SNAP_MINUTES } from "../constants/calendar";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";

@@ -7,9 +7,10 @@ import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { startCreation, isDragging, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
+import { startCreation, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
 import { deselectEvent, selectedEventId } from "../../stores/event-selection";
 import { spansMultipleDays } from "../../utils/allDayLayout";
+import { FLASH_DURATION_MS } from "../../constants/timings";
 
 interface DayColumnProps {
   date: Date;
@@ -55,7 +56,7 @@ export function DayColumn(props: DayColumnProps) {
       setShowFlash(true);
       flashTimeout = window.setTimeout(() => {
         setShowFlash(false);
-      }, 2000);
+      }, FLASH_DURATION_MS);
     } else {
       // A different date was flashed, cancel our flash
       setShowFlash(false);

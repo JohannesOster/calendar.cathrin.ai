@@ -4,6 +4,7 @@ import { serverEvents, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { getDateBoundsForWeeks } from "../lib/week-utils.js";
+import { upsertServerEvents } from "./event-storage.js";
 
 // Weeks fetched more than this ago are re-fetched from Google on client request
 const SERVER_STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
@@ -61,36 +62,7 @@ export async function ensureWeeksFetched(
     );
 
     // Store events
-    for (const event of events) {
-      await db
-        .insert(serverEvents)
-        .values({
-          accountId,
-          calendarId,
-          googleEventId: event.id,
-          title: event.title,
-          start: new Date(event.start),
-          end: new Date(event.end),
-          isAllDay: event.isAllDay,
-          color: event.color,
-          location: event.location,
-          description: event.description,
-          status: "confirmed",
-        })
-        .onConflictDoUpdate({
-          target: [serverEvents.accountId, serverEvents.googleEventId],
-          set: {
-            title: event.title,
-            start: new Date(event.start),
-            end: new Date(event.end),
-            isAllDay: event.isAllDay,
-            color: event.color,
-            location: event.location,
-            description: event.description,
-            updatedAt: new Date(),
-          },
-        });
-    }
+    await upsertServerEvents(db, events, accountId, calendarId);
 
     // Remove events in the fetched range that Google no longer returns
     const fetchedEventIds = new Set(events.map((e) => e.id));

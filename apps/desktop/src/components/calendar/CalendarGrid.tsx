@@ -32,6 +32,7 @@ import {
   getWeekId,
 } from "../../lib/date-utils";
 import { events, setEvents, updateEvent } from "../../stores/events";
+import { deleteEvent } from "../../stores/event-deletion";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateAllDayLayouts } from "../../utils/allDayLayout";
 import {
@@ -53,6 +54,8 @@ import {
   snapMinutes,
 } from "../../stores/event-creation";
 import { HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import { CHIP_MARGIN_LEFT, CHIP_MARGIN_RIGHT } from "../../constants/layout";
+import { FLASH_DURATION_MS } from "../../constants/timings";
 import { selectedEventId, selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isMoveDragging, moveDrag, cancelMoveDrag, finishMoveDrag,
@@ -79,7 +82,7 @@ const HOURS_PER_DAY = 24;
 const HOUR_HEIGHT = 48; // px - matches --grid-hour-height
 const MONTH_LABEL_HEIGHT = 36; // px - height of the month/year label row
 const HEADER_HEIGHT = 30; // px - matches --grid-header-height
-const TIME_COL_WIDTH_FALLBACK = 64; // px - fallback for --grid-time-col-width
+const TIME_COL_WIDTH_FALLBACK = 48; // px - fallback for --grid-time-col-width
 // VISIBLE_DAYS_COUNT is now a reactive signal imported from stores/view.ts
 const VISIBLE_BUFFER_DAYS = 5; // Extra days to render off-screen for smooth scrolling
 const INITIAL_SCROLL_OFFSET_HOURS = 2; // Hours before current time to show on initial load
@@ -169,7 +172,7 @@ function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
       setFlashKey((k) => k + 1);
       setShowFlash(true);
       if (flashTimeout) clearTimeout(flashTimeout);
-      flashTimeout = window.setTimeout(() => setShowFlash(false), 2000);
+      flashTimeout = window.setTimeout(() => setShowFlash(false), FLASH_DURATION_MS);
     } else {
       setShowFlash(false);
     }
@@ -561,8 +564,8 @@ export function CalendarGrid() {
 
       // Calculate pixel position from column info
       const chipLeft = snapToDevicePixel(firstDayLeft + layoutInfo.startCol * width);
-      const left = layoutInfo.startsBeforeView ? chipLeft : chipLeft + 1; // 1px left margin
-      const chipWidth = layoutInfo.span * width - 4 - (layoutInfo.startsBeforeView ? 0 : 1); // 4px right gap, 1px left margin
+      const left = layoutInfo.startsBeforeView ? chipLeft : chipLeft + CHIP_MARGIN_LEFT;
+      const chipWidth = layoutInfo.span * width - CHIP_MARGIN_RIGHT - (layoutInfo.startsBeforeView ? 0 : CHIP_MARGIN_LEFT);
 
       result.push({
         event,
@@ -1103,12 +1106,17 @@ export function CalendarGrid() {
         ) as HTMLElement | null;
         if (eventWrapper) {
           e.preventDefault();
-          if ((eventWrapper as any).triggerBurn) {
-            // Timed event — play burn animation, then delete
-            (eventWrapper as any).triggerBurn();
-          } else if ((eventWrapper as any).deleteEvent) {
+          const eventId = eventWrapper.dataset.eventId;
+          if (!eventId) return;
+          const event = events().find((ev) => ev.id === eventId);
+          if (!event) return;
+          if (event.isAllDay) {
             // All-day event — delete immediately
-            (eventWrapper as any).deleteEvent();
+            deleteEvent(eventId);
+          } else {
+            // Timed event — play burn animation via exposed method, then delete
+            const wrapper = eventWrapper as HTMLElement & { triggerBurn?: () => void };
+            wrapper.triggerBurn?.();
           }
         }
       }

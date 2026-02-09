@@ -75,13 +75,20 @@ export async function apiFetch<T>(
     );
   }
 
-  // Handle empty responses
+  // Handle empty responses (normal for DELETE/PATCH)
   const text = await response.text();
   if (!text) {
-    return {} as T;
+    return undefined as T;
   }
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(
+      `Invalid JSON response from ${path}`,
+      response.status,
+    );
+  }
 }
 
 /**
@@ -110,8 +117,15 @@ export async function publicFetch<T>(
 
   const text = await response.text();
   if (!text) {
-    return {} as T;
+    return undefined as T;
   }
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(
+      `Invalid JSON response from ${path}`,
+      response.status,
+    );
+  }
 }

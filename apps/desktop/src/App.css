@@ -282,7 +282,3 @@ body.dragging * {
   }
 }
 
-/* Paper burning animation - video-based fire effect */
-.event-burning {
-  pointer-events: none;
-}

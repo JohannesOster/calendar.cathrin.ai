@@ -1,19 +1,8 @@
 import type { CalendarEvent } from "../../../stores/events";
+import { formatCompactTime } from "../../../lib/format-utils";
 
 interface MonthEventChipProps {
   event: CalendarEvent;
-}
-
-function formatCompactTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHour = hours % 12 || 12;
-
-  if (minutes === 0) {
-    return `${displayHour}${period}`;
-  }
-  return `${displayHour}:${minutes.toString().padStart(2, "0")}${period}`;
 }
 
 export function MonthEventChip(props: MonthEventChipProps) {

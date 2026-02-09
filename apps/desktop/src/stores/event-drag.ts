@@ -5,7 +5,7 @@ import type { CalendarEvent } from "./events";
 // Types
 // =============================================================================
 
-export interface DragState {
+interface DragState {
   event: CalendarEvent;
   /** Original start before drag began */
   originalStart: Date;
@@ -15,7 +15,7 @@ export interface DragState {
   cursorOffsetMinutes: number;
 }
 
-export interface ResizeState {
+interface ResizeState {
   event: CalendarEvent;
   /** Original start (stays fixed during resize) */
   originalStart: Date;

@@ -1,9 +1,10 @@
-import { createSignal, createMemo, createEffect, onMount, onCleanup, For, Show } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, onCleanup, For } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { type DayInfo } from "./MonthDayCell";
 import { MonthWeekRow } from "./MonthWeekRow";
 import { visibleStartDate, setVisibleStartDate, centerDate, flashDate, setMonthVisibleWeekIds } from "../CalendarGrid";
 import { addDays, getWeekId, isSameDay } from "../../../lib/date-utils";
+import { WEEKDAY_NAMES } from "../../../constants/sidebar";
 
 // ============================================================================
 // Constants - Grid Dimensions
@@ -22,8 +23,6 @@ const CENTER_OFFSET = CONTAINER_HEIGHT / 2; // Anchor point in middle
 // Constants - Snap Track
 // ============================================================================
 const SNAP_TRACK_WEEKS = 260; // ~5 years in each direction (52 weeks/year)
-
-const WEEKDAY_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Anchor date - Sunday of current week (same as week view)
 const anchorDate = (() => {
@@ -312,7 +311,7 @@ export function MonthView() {
         class="grid grid-cols-7 border-b border-border bg-surface shrink-0"
         style={{ height: `${WEEKDAY_HEADER_HEIGHT}px` }}
       >
-        <For each={WEEKDAY_HEADERS}>
+        <For each={WEEKDAY_NAMES}>
           {(day) => (
             <div class="px-2 py-2 text-xs font-medium text-fg-muted text-center border-r border-border last:border-r-0">
               {day}

@@ -230,7 +230,9 @@ The app uses a multi-tier caching strategy with stale-while-revalidate pattern:
 This means changes in Google Calendar propagate to UI in ~3-8 minutes.
 
 **Key files:**
-- `apps/desktop/src/stores/events.ts` - Client cache, staleness, polling
+- `apps/desktop/src/stores/events.ts` - Client event list, cache, fetching
+- `apps/desktop/src/stores/event-polling.ts` - Polling, revalidation, staleness checks
+- `apps/desktop/src/stores/event-deletion.ts` - Deletion with undo
 - `apps/sync-server/src/services/background-sync.ts` - Server sync with Google
 - `apps/sync-server/src/services/reanchor.ts` - Extends fetched window over time
 
@@ -464,11 +466,13 @@ const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props
 ```
 
 ### Validation Boundaries
-- **Validate at:** User input, external API responses, file system reads
+- **Validate at:** User input, external API responses, file system reads, server responses on the client
+- Client `apiFetch`: handle empty responses (DELETE/PATCH return no body), wrap `JSON.parse` in try-catch, never return `{} as T`
+- Server Zod schemas: validate shape **and** semantics (e.g., `from <= to` for date ranges via `.refine()`)
 - **Don't validate:** Internal function calls, data you just created, store values
 
 ### File Organization
-- **No barrel files** (index.ts re-exports) - import from specific files
+- **No barrel files** (index.ts re-exports) — import from specific files. When splitting a module, update all consumer imports to point to the new file directly.
 - **Flat over nested** - don't create folders until 5+ related files
 - **Colocate tests** - `date-utils.ts` next to `date-utils.test.ts`
 
@@ -476,10 +480,15 @@ const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props
 - One route file per resource, mount with `app.route()`
 - Validate with Zod at route level: `zValidator('query', schema)`
 - Return errors explicitly, don't throw across layers
+- **Database operations that appear in 2+ routes/services → extract to `services/`** (e.g., `services/event-storage.ts` for upsert logic, `services/event-mapper.ts` for DB→API conversion)
+- **Prefer batch DB operations over loops** — use bulk insert/upsert instead of `for (const item of items) { await db.insert(...) }`
 
 ### Size Limits (extract if exceeded)
 - Components: ~200 lines
-- Stores: ~150 lines (extract logic to `lib/`)
+- Stores: ~150 lines — when exceeded, extract by concern:
+  - Side-effect logic (polling, sync) → separate store (e.g., `event-polling.ts`)
+  - Mutation logic with rollback → separate store (e.g., `event-deletion.ts`)
+  - Keep the main store as the reactive state + simple CRUD
 - Route handlers: ~50 lines (extract to `services/`)
 
 ### Naming
@@ -487,6 +496,35 @@ const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props
 - Booleans: `is`/`has`/`should` prefix
 - Signals: `[value, setValue]`
 - Constants: `UPPER_SNAKE_CASE`
+
+### Type Safety
+- **Never use `as any`** — find the real type or use a type guard
+- **Avoid non-null assertions (`!`)** — use early returns or nullish checks instead
+- **Minimize `as Type` casts** — if you need one, the types upstream are probably wrong. Fix the source.
+- **No `@ts-expect-error` / `@ts-ignore`** — fix the type issue properly
+
+### Async Rules
+- Every Promise must be either `await`ed or have a `.catch()` — no fire-and-forget
+- Void-returning async calls (background saves, analytics) still need `.catch(err => console.error(...))` at minimum
+
+### Constants & Magic Values
+- **If a value appears in 2+ files, extract it to `constants/`**
+- Layout dimensions (heights, margins, radii) → `constants/layout.ts`
+- Timing values (polling intervals, animation durations) → `constants/timings.ts`
+- localStorage keys → `constants/storage-keys.ts`
+- Locale strings (day names, labels) → `constants/sidebar.ts`
+- **CSS variables and TypeScript constants must stay in sync** — never define the same dimension in both `App.css` and TypeScript with different numbers
+
+### Dead Code
+- **Remove unused imports immediately** — don't leave them for later
+- **Remove unused exports** — if nothing imports it, delete it
+- **Audit dependencies periodically** — if a package isn't imported anywhere, remove it from `package.json`
+- **No commented-out code** — that's what git history is for
+
+### Monorepo Config Consistency
+- **TypeScript target**: all packages use `ES2020`
+- **Tauri security**: CSP must be enabled (never `null`)
+- **Shared types**: only export types that are actually imported by at least one consumer app
 
 ## Research & Documentation Lookup
 

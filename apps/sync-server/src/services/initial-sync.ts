@@ -2,13 +2,13 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   accounts,
-  serverEvents,
   calendarSyncState,
   fetchedWeeks,
 } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { getWeeksInRange } from "../lib/week-utils.js";
+import { upsertServerEvents } from "./event-storage.js";
 
 // Initial sync window: ±6 months
 const INITIAL_SYNC_MONTHS_BEFORE = 6;
@@ -74,36 +74,7 @@ export async function performInitialSync(accountId: string): Promise<void> {
         );
 
         // Store events in database
-        for (const event of events) {
-          await db
-            .insert(serverEvents)
-            .values({
-              accountId,
-              calendarId: calendar.id,
-              googleEventId: event.id,
-              title: event.title,
-              start: new Date(event.start),
-              end: new Date(event.end),
-              isAllDay: event.isAllDay,
-              color: event.color,
-              location: event.location,
-              description: event.description,
-              status: "confirmed",
-            })
-            .onConflictDoUpdate({
-              target: [serverEvents.accountId, serverEvents.googleEventId],
-              set: {
-                title: event.title,
-                start: new Date(event.start),
-                end: new Date(event.end),
-                isAllDay: event.isAllDay,
-                color: event.color,
-                location: event.location,
-                description: event.description,
-                updatedAt: new Date(),
-              },
-            });
-        }
+        await upsertServerEvents(db, events, accountId, calendar.id);
 
         totalEvents += events.length;
 

@@ -2,6 +2,7 @@ import { createSignal, createEffect, JSX, onMount, onCleanup } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { PanelLeftClose, PanelLeft } from "lucide-solid";
+import { STORAGE_KEYS } from "../../constants/storage-keys";
 
 interface AppShellProps {
   header: JSX.Element;
@@ -35,8 +36,8 @@ export function AppShell(props: AppShellProps) {
 
   // Initialize from localStorage and set up fullscreen detection on mount
   onMount(async () => {
-    const savedLeft = localStorage.getItem("leftSidebarOpen");
-    const savedRight = localStorage.getItem("rightSidebarOpen");
+    const savedLeft = localStorage.getItem(STORAGE_KEYS.LEFT_SIDEBAR_OPEN);
+    const savedRight = localStorage.getItem(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN);
     if (savedLeft !== null) setLeftSidebarOpen(savedLeft === "true");
     if (savedRight !== null) setRightSidebarOpen(savedRight === "true");
 
@@ -87,11 +88,11 @@ export function AppShell(props: AppShellProps) {
 
   // Persist sidebar state to localStorage
   createEffect(() => {
-    localStorage.setItem("leftSidebarOpen", String(leftSidebarOpen()));
+    localStorage.setItem(STORAGE_KEYS.LEFT_SIDEBAR_OPEN, String(leftSidebarOpen()));
   });
 
   createEffect(() => {
-    localStorage.setItem("rightSidebarOpen", String(rightSidebarOpen()));
+    localStorage.setItem(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN, String(rightSidebarOpen()));
   });
 
   return (
