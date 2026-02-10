@@ -1,5 +1,6 @@
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
+
 /**
  * Event data for the frontend, with dates parsed to JS Date objects
  */

@@ -1,4 +1,5 @@
 import { apiFetch } from "../lib/api";
+
 import { isAuthenticated, onAuthComplete } from "./auth";
 import { connectedAccounts, setConnectedAccounts, _registerAccountSyncFn, type CalendarAccount } from "./accounts";
 import { getCalendarVisibility, loadOrderingPreferences } from "./account-ordering";

@@ -193,10 +193,10 @@ body.dragging * {
 .calendar-event {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 25%,
+    var(--event-color) 40%,
     var(--color-surface)
   );
-  color: var(--event-color);
+  color: color-mix(in srgb, var(--event-color) 10%, var(--color-fg));
   border: 1px solid var(--color-border-light);
 }
 
@@ -213,7 +213,7 @@ body.dragging * {
 .calendar-event:hover {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 35%,
+    var(--event-color) 50%,
     var(--color-surface)
   );
 }
@@ -300,7 +300,7 @@ body.dragging * {
     var(--event-color) 20%,
     var(--color-surface)
   );
-  color: var(--event-color);
+  color: color-mix(in srgb, var(--event-color) 10%, var(--color-fg));
 }
 
 .all-day-chip:hover {

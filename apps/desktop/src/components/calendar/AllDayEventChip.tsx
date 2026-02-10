@@ -191,9 +191,9 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
           "border-radius": `${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS} 0 0 ${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS}`,
         }}
       />
-      <span class="truncate text-fg ml-0.5">{props.event.title}</span>
+      <span class="truncate ml-0.5">{props.event.title}</span>
       <Show when={hasTimes()}>
-        <span class="shrink-0 text-2xs text-fg opacity-50 ml-1">
+        <span class="shrink-0 text-2xs opacity-50 ml-1">
           {formatChipTimeRange(props.event.start, props.event.end)}
         </span>
       </Show>

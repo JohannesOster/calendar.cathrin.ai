@@ -40,14 +40,14 @@ export function snapMinutes(totalMinutes: number): number {
  */
 export function getDraftColor(): string {
   const calId = draftCalendarId() ?? resolveCalendarId();
-  if (!calId) return "#8A8A8A";
+  if (!calId) return "#98958e";
 
   for (const account of connectedAccounts()) {
     for (const cal of account.calendars) {
       if (cal.id === calId) return cal.color;
     }
   }
-  return "#8A8A8A";
+  return "#98958e";
 }
 
 // =============================================================================

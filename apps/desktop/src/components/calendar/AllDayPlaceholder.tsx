@@ -89,7 +89,7 @@ export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
             }}
           />
           <Show when={hasTitle()}>
-            <span class="truncate text-fg ml-0.5">{draftTitle()}</span>
+            <span class="truncate ml-0.5">{draftTitle()}</span>
           </Show>
         </div>
       )}
