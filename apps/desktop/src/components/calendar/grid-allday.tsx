@@ -15,7 +15,14 @@ import {
 import { isSameDay } from "../../lib/date-utils";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
-import { calculateAllDayLayouts } from "../../utils/allDayLayout";
+import {
+  calculateAllDayLayouts,
+  daysBetweenUTC,
+  daysBetweenViewAndEvent,
+  getLocalDateOnly,
+  getTimedEventLastDay,
+  MS_PER_DAY,
+} from "../../utils/allDayLayout";
 import {
   isCreating,
   draftIsAllDay,
@@ -337,32 +344,33 @@ export function createAllDayState(deps: AllDayStateDeps) {
 
     const width = deps.layout().width;
     const firstDayLeft = days[0].left;
+    const totalColumns = days.length;
+    const viewStart = days[0].date;
 
-    const getLocalMidnight = (d: Date) => {
-      const m = new Date(d);
-      m.setHours(0, 0, 0, 0);
-      return m;
-    };
+    // Use the same UTC-aware date helpers as calculateAllDayLayouts
+    let eventStartOffset: number;
+    let eventDurationDays: number;
 
-    const viewStartTime = getLocalMidnight(days[0].date).getTime();
-    const startDayTime = getLocalMidnight(drag.originalStart).getTime();
+    if (drag.event.isAllDay) {
+      // All-day: UTC dates, exclusive end (Google convention)
+      eventDurationDays = daysBetweenUTC(drag.originalStart, drag.originalEnd);
+      eventStartOffset = daysBetweenViewAndEvent(viewStart, drag.originalStart);
+    } else {
+      // Multi-day timed: local dates, inclusive end
+      const viewStartDay = getLocalDateOnly(viewStart);
+      const startDay = getLocalDateOnly(drag.originalStart);
+      const lastDay = getTimedEventLastDay(drag.originalEnd);
+      eventDurationDays = Math.round((lastDay - startDay) / MS_PER_DAY) + 1;
+      eventStartOffset = Math.round((startDay - viewStartDay) / MS_PER_DAY);
+    }
 
-    const endForRange =
-      drag.originalEnd.getHours() === 0 &&
-      drag.originalEnd.getMinutes() === 0 &&
-      drag.originalEnd.getSeconds() === 0
-        ? drag.originalEnd.getTime() - 1
-        : drag.originalEnd.getTime();
-    const endDayTime = getLocalMidnight(new Date(endForRange)).getTime();
-
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const startCol = Math.max(0, Math.round((startDayTime - viewStartTime) / msPerDay));
-    const endCol = Math.min(days.length - 1, Math.round((endDayTime - viewStartTime) / msPerDay));
+    const startCol = Math.max(0, eventStartOffset);
+    const endCol = Math.min(totalColumns - 1, eventStartOffset + eventDurationDays - 1);
     const span = endCol - startCol + 1;
 
     if (span <= 0) return null;
 
-    const startsBeforeView = startDayTime < viewStartTime;
+    const startsBeforeView = eventStartOffset < 0;
     const chipLeft = startsBeforeView
       ? firstDayLeft + startCol * width
       : firstDayLeft + startCol * width + CHIP_MARGIN_LEFT;

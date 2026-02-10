@@ -553,17 +553,16 @@ export function CalendarGrid() {
                   <Show when={allDay.unfoldOriginalGhost()}>
                     {(ghost) => (
                       <div
-                        class="absolute rounded pointer-events-none"
+                        class="absolute pointer-events-none"
                         style={{
                           left: "0",
                           transform: `translateX(${ghost().left}px)`,
                           width: `${ghost().width}px`,
                           top: `${ghost().row * ALL_DAY_ROW_HEIGHT + 4}px`,
                           height: "var(--grid-all-day-chip-height)",
-                          "background-color": `color-mix(in srgb, ${ghost().color} 10%, transparent)`,
-                          border: `1px dashed ${ghost().color}`,
+                          "background-color": ghost().color,
                           "border-radius": CHIP_BORDER_RADIUS,
-                          opacity: "0.6",
+                          opacity: "0.15",
                         }}
                       />
                     )}

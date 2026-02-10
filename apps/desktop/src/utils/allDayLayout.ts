@@ -11,13 +11,13 @@ export interface AllDayLayoutInfo {
   endsAfterView: boolean; // Event ends after visible range
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
  * Get the date components (year, month, day) in UTC
  * This is for event dates which come from Google as UTC midnight
  */
-function getUTCDateOnly(date: Date): number {
+export function getUTCDateOnly(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
@@ -25,7 +25,7 @@ function getUTCDateOnly(date: Date): number {
  * Get the date components (year, month, day) in LOCAL time
  * This is for view dates which represent local calendar days
  */
-function getLocalDateOnly(date: Date): number {
+export function getLocalDateOnly(date: Date): number {
   return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
@@ -33,7 +33,7 @@ function getLocalDateOnly(date: Date): number {
  * Get days between two UTC dates
  * Used for event duration (both dates are UTC midnight from Google)
  */
-function daysBetweenUTC(from: Date, to: Date): number {
+export function daysBetweenUTC(from: Date, to: Date): number {
   const fromUTC = getUTCDateOnly(from);
   const toUTC = getUTCDateOnly(to);
   return Math.round((toUTC - fromUTC) / MS_PER_DAY);
@@ -44,7 +44,7 @@ function daysBetweenUTC(from: Date, to: Date): number {
  * View dates are local midnight, event dates are UTC midnight
  * We compare them as abstract calendar days (year/month/day numbers)
  */
-function daysBetweenViewAndEvent(viewDate: Date, eventDate: Date): number {
+export function daysBetweenViewAndEvent(viewDate: Date, eventDate: Date): number {
   // View date: extract LOCAL date components
   const viewDay = getLocalDateOnly(viewDate);
   // Event date: extract UTC date components (Google sends UTC midnight for all-day)
@@ -54,7 +54,7 @@ function daysBetweenViewAndEvent(viewDate: Date, eventDate: Date): number {
 
 /** Get the last calendar day (local) a timed event occupies.
  *  End at exactly midnight doesn't count as occupying the next day. */
-function getTimedEventLastDay(end: Date): number {
+export function getTimedEventLastDay(end: Date): number {
   if (end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0) {
     return getLocalDateOnly(new Date(end.getTime() - 1));
   }
