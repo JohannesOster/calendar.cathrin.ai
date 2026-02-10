@@ -17,7 +17,7 @@ export function SearchInput() {
           placeholder="Search events"
           value={searchQuery()}
           onInput={(e) => setSearchQuery(e.currentTarget.value)}
-          class="w-full pl-8 pr-3 py-1.5 text-sm bg-surface-input rounded-md border-none outline-none placeholder:text-fg-muted text-fg focus:ring-2 focus:ring-accent focus:ring-opacity-50"
+          class="w-full pl-8 pr-3 py-1.5 text-sm bg-surface-input rounded-md border-none outline-none placeholder:text-fg-muted text-fg hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
     </div>

@@ -67,7 +67,7 @@ export function TimeSection(props: SectionProps) {
               onBlur={() => s.finishTimeEdit()}
               onKeyDown={s.handleTimeKeyDown}
               placeholder="0:00"
-              class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
+              class="text-sm text-fg bg-surface-input rounded px-1 py-0 border-none outline-none hover:bg-surface-hover focus:bg-surface-hover transition-colors w-[4rem] text-center"
             />
           </Show>
           <ArrowRight size={14} class="text-fg-muted shrink-0" />
@@ -102,7 +102,7 @@ export function TimeSection(props: SectionProps) {
               onBlur={() => s.finishTimeEdit()}
               onKeyDown={s.handleTimeKeyDown}
               placeholder="0:00"
-              class="text-sm text-fg bg-surface-input rounded px-1 py-0 border border-border outline-none focus:border-accent w-[4rem] text-center"
+              class="text-sm text-fg bg-surface-input rounded px-1 py-0 border-none outline-none hover:bg-surface-hover focus:bg-surface-hover transition-colors w-[4rem] text-center"
             />
           </Show>
           <Show when={formatDate(s.start()!) === formatDate(s.end()!)}>
@@ -198,7 +198,7 @@ export function TimeSection(props: SectionProps) {
           <Switch.Label class="text-xs text-fg-disabled cursor-pointer">All-day</Switch.Label>
           <Switch.Control
             class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
-              s.isAllDay() ? "bg-accent" : "bg-border-light"
+              s.isAllDay() ? "bg-fg" : "bg-border-light"
             }`}
           >
             <Switch.Thumb
@@ -238,7 +238,7 @@ export function DetailsSection(props: SectionProps) {
           value={s.location()}
           onInput={(e) => s.setLocation(e.currentTarget.value)}
           onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
+          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
       <div class="flex items-center gap-2 text-sm text-fg-disabled">
@@ -263,7 +263,7 @@ export function DescriptionSection(props: SectionProps) {
             value={s.description()}
             onInput={(e) => s.setDescription(e.currentTarget.value)}
             onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-            class="text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none resize-none overflow-hidden row-start-1 col-start-1"
+            class="text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none resize-none overflow-hidden row-start-1 col-start-1 rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
             rows={2}
             style={{ "grid-area": "1 / 1 / 2 / 2" }}
           />
@@ -311,7 +311,7 @@ export function CalendarSection(props: SectionProps) {
           </Select.Trigger>
         </Select.Control>
         <Select.Positioner>
-          <Select.Content class="bg-surface border border-border rounded-lg shadow-lg py-1 z-50 max-h-48 overflow-y-auto">
+          <Select.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
             <For each={s.allCalendars()}>
               {(cal) => (
                 <Select.Item
