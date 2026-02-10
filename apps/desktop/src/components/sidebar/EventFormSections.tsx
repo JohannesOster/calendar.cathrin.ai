@@ -282,7 +282,14 @@ export function CalendarSection(props: SectionProps) {
             style={{ "background-color": s.eventColor() }}
           />
           <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
-            <Select.ValueText placeholder="Select calendar" />
+            <span>
+              {(() => {
+                const id = s.calendarId();
+                if (!id) return "Select calendar";
+                const cal = s.allCalendars().find((c) => c.id === id);
+                return cal?.name ?? "Select calendar";
+              })()}
+            </span>
             <ChevronDown size={12} class="text-fg-muted shrink-0" />
           </Select.Trigger>
         </Select.Control>
