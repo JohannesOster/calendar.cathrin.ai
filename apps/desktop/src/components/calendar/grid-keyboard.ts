@@ -11,6 +11,7 @@ import {
   isMoveDragging, moveDrag, cancelMoveDrag,
   isResizeDragging, resizeDrag, cancelResizeDrag,
   isUnfolding, unfoldDrag, cancelUnfoldDrag,
+  isAllDayMoveDragging, allDayMoveDrag, cancelAllDayMoveDrag,
 } from "../../stores/event-drag";
 import { selectedEventId, deselectEvent } from "../../stores/event-selection";
 import { setFocusedEventId } from "./CalendarEvent";
@@ -70,6 +71,24 @@ export function setupKeyboardHandlers() {
           );
         }
         cancelUnfoldDrag();
+        e.preventDefault();
+        return;
+      }
+      // Cancel all-day move drag on Escape
+      if (isAllDayMoveDragging()) {
+        stopAutoScroll();
+        document.body.classList.remove("dragging");
+        const drag = allDayMoveDrag();
+        if (drag) {
+          setEvents((prev) =>
+            prev.map((ev) =>
+              ev.id === drag.event.id
+                ? { ...ev, start: drag.originalStart, end: drag.originalEnd }
+                : ev
+            )
+          );
+        }
+        cancelAllDayMoveDrag();
         e.preventDefault();
         return;
       }

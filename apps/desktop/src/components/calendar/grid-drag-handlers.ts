@@ -19,6 +19,7 @@ import {
   isMoveDragging, moveDrag, finishMoveDrag,
   isResizeDragging, resizeDrag, finishResizeDrag,
   isUnfolding, unfoldDrag, finishUnfoldDrag,
+  isAllDayMoveDragging, allDayMoveDrag, finishAllDayMoveDrag,
 } from "../../stores/event-drag";
 import { dragColumnDate, dragOriginMinutes } from "./DayColumn";
 import {
@@ -162,6 +163,47 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     );
   };
 
+  const recalcAllDayMovePosition = () => {
+    const drag = allDayMoveDrag();
+    if (!drag) return;
+
+    const cursorDate = getDateFromClientX(lastDragClientX);
+    if (!cursorDate) return;
+
+    const targetDay = new Date(cursorDate);
+    targetDay.setHours(0, 0, 0, 0);
+
+    const originalStartDay = new Date(drag.originalStart);
+    originalStartDay.setHours(0, 0, 0, 0);
+
+    // Where the event start should land = cursor day minus grab offset
+    const targetStartDay = new Date(targetDay);
+    targetStartDay.setDate(targetStartDay.getDate() - drag.grabDayOffset);
+
+    const dayShift = Math.round(
+      (targetStartDay.getTime() - originalStartDay.getTime()) / 86_400_000,
+    );
+    if (dayShift === 0) return;
+
+    const newStart = new Date(drag.originalStart);
+    newStart.setDate(newStart.getDate() + dayShift);
+    const newEnd = new Date(drag.originalEnd);
+    newEnd.setDate(newEnd.getDate() + dayShift);
+
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === drag.event.id
+          ? { ...e, start: newStart, end: newEnd }
+          : e
+      )
+    );
+  };
+
+  const recalcAllDayMoveWithScrollSync = () => {
+    deps.handleScroll();
+    recalcAllDayMovePosition();
+  };
+
   // Wrapper that syncs the scroll signal before recalculating — needed during
   // auto-scroll where container.scrollLeft is updated directly but the signal
   // (and thus layout().days) hasn't caught up via the async scroll event yet.
@@ -285,6 +327,29 @@ export function createDragHandlers(deps: DragHandlersDeps) {
       return;
     }
 
+    // --- All-day move drag ---
+    if (isAllDayMoveDragging()) {
+      if (!ref) return;
+
+      if (!document.body.classList.contains("dragging")) {
+        document.body.classList.add("dragging");
+      }
+
+      if (deps.snapEnabled()) {
+        ref.style.scrollSnapType = "none";
+        deps.setSnapEnabled(false);
+      }
+
+      const timeColWidth = getTimeColWidth();
+      const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + deps.visualAllDayHeight();
+      startAutoScroll(ref, stickyHeaderHeight, recalcAllDayMoveWithScrollSync, timeColWidth, deps.colWidth(), true);
+      updateAutoScrollCursor(e.clientY, e.clientX);
+
+      recalcAllDayMovePosition();
+      e.preventDefault();
+      return;
+    }
+
     // --- Create drag ---
     if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
     if (!ref) return;
@@ -369,6 +434,26 @@ export function createDragHandlers(deps: DragHandlersDeps) {
       document.body.classList.remove("dragging");
 
       const drag = finishUnfoldDrag();
+      if (drag) {
+        const event = events().find((e) => e.id === drag.event.id);
+        const changed = event &&
+          (event.start.getTime() !== drag.originalStart.getTime() ||
+           event.end.getTime() !== drag.originalEnd.getTime());
+        if (event && changed) {
+          updateEvent(drag.event.id, { start: event.start, end: event.end });
+        }
+      }
+
+      settleSnapAfterDrag();
+      return;
+    }
+
+    // --- All-day move drag ---
+    if (isAllDayMoveDragging()) {
+      stopAutoScroll();
+      document.body.classList.remove("dragging");
+
+      const drag = finishAllDayMoveDrag();
       if (drag) {
         const event = events().find((e) => e.id === drag.event.id);
         const changed = event &&

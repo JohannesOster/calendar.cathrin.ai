@@ -31,6 +31,14 @@ interface AllDayUnfoldState {
   edge: "start" | "end";
 }
 
+interface AllDayMoveState {
+  event: CalendarEvent;
+  originalStart: Date;
+  originalEnd: Date;
+  /** How many days into the event the cursor grabbed (0 = first day) */
+  grabDayOffset: number;
+}
+
 // =============================================================================
 // Signals
 // =============================================================================
@@ -38,6 +46,7 @@ interface AllDayUnfoldState {
 export const [moveDrag, setMoveDrag] = createSignal<DragState | null>(null);
 export const [resizeDrag, setResizeDrag] = createSignal<ResizeState | null>(null);
 export const [unfoldDrag, setUnfoldDrag] = createSignal<AllDayUnfoldState | null>(null);
+export const [allDayMoveDrag, setAllDayMoveDrag] = createSignal<AllDayMoveState | null>(null);
 
 // =============================================================================
 // Derived
@@ -67,14 +76,22 @@ export function unfoldDragEventId(): string | null {
   return unfoldDrag()?.event.id ?? null;
 }
 
-/** Any drag in progress (move, resize, or unfold) */
-export function isDragActive(): boolean {
-  return moveDrag() !== null || resizeDrag() !== null || unfoldDrag() !== null;
+export function isAllDayMoveDragging(): boolean {
+  return allDayMoveDrag() !== null;
 }
 
-/** Event ID being dragged (move, resize, or unfold) */
+export function allDayMoveDragEventId(): string | null {
+  return allDayMoveDrag()?.event.id ?? null;
+}
+
+/** Any drag in progress (move, resize, unfold, or all-day move) */
+export function isDragActive(): boolean {
+  return moveDrag() !== null || resizeDrag() !== null || unfoldDrag() !== null || allDayMoveDrag() !== null;
+}
+
+/** Event ID being dragged (move, resize, unfold, or all-day move) */
 export function dragActiveEventId(): string | null {
-  return moveDrag()?.event.id ?? resizeDrag()?.event.id ?? unfoldDrag()?.event.id ?? null;
+  return moveDrag()?.event.id ?? resizeDrag()?.event.id ?? unfoldDrag()?.event.id ?? allDayMoveDrag()?.event.id ?? null;
 }
 
 // =============================================================================
@@ -175,5 +192,38 @@ export function cancelUnfoldDrag(): void {
 export function finishUnfoldDrag(): AllDayUnfoldState | null {
   const state = unfoldDrag();
   setUnfoldDrag(null);
+  return state;
+}
+
+// =============================================================================
+// All-Day Move Actions
+// =============================================================================
+
+/**
+ * Start dragging an all-day/multi-day chip to move it.
+ */
+export function startAllDayMoveDrag(event: CalendarEvent, grabDayOffset: number): void {
+  setAllDayMoveDrag({
+    event,
+    originalStart: new Date(event.start),
+    originalEnd: new Date(event.end),
+    grabDayOffset,
+  });
+}
+
+/**
+ * Cancel the all-day move drag — revert to original position.
+ */
+export function cancelAllDayMoveDrag(): void {
+  setAllDayMoveDrag(null);
+}
+
+/**
+ * Finish the all-day move drag — keep the new position.
+ * Returns the drag state for the caller to persist the update.
+ */
+export function finishAllDayMoveDrag(): AllDayMoveState | null {
+  const state = allDayMoveDrag();
+  setAllDayMoveDrag(null);
   return state;
 }

@@ -4,12 +4,13 @@ import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
 import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
-import { startUnfoldDrag } from "../../stores/event-drag";
+import { startUnfoldDrag, startAllDayMoveDrag } from "../../stores/event-drag";
 
 /** Width in px of the edge hit zone for resize/unfold drag */
 const EDGE_HIT_ZONE = 6;
 /** Minimum px movement before treating as drag */
 const DRAG_THRESHOLD = 3;
+const MS_PER_DAY = 86_400_000;
 
 interface AllDayEventChipProps {
   event: CalendarEvent;
@@ -47,7 +48,6 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   };
 
   const handlePointerMove = (e: PointerEvent) => {
-    if (!hasTimes()) return;
     const edge = getEdge(e.clientX);
     if (chipRef) {
       chipRef.style.cursor = edge ? "col-resize" : "pointer";
@@ -63,44 +63,79 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   const handlePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
 
-    // Multi-day timed chip: check for edge drag
-    if (hasTimes()) {
-      const edge = getEdge(e.clientX);
-      if (edge) {
-        const startX = e.clientX;
-        let started = false;
+    // Edge drag: resize the day span (works for both all-day and multi-day timed)
+    const edge = getEdge(e.clientX);
+    if (edge) {
+      const startX = e.clientX;
+      let started = false;
 
-        const onMove = (me: PointerEvent) => {
-          if (!started && Math.abs(me.clientX - startX) >= DRAG_THRESHOLD) {
-            started = true;
-            startUnfoldDrag(props.event, edge);
-          }
-        };
+      const onMove = (me: PointerEvent) => {
+        if (!started && Math.abs(me.clientX - startX) >= DRAG_THRESHOLD) {
+          started = true;
+          startUnfoldDrag(props.event, edge);
+        }
+      };
 
-        const onUp = () => {
-          cleanup();
-          if (!started) {
-            chipRef?.focus();
-            selectEvent(props.event.id);
-          }
-        };
+      const onUp = () => {
+        cleanup();
+        if (!started) {
+          chipRef?.focus();
+          selectEvent(props.event.id);
+        }
+      };
 
-        const cleanup = () => {
-          document.removeEventListener("pointermove", onMove);
-          document.removeEventListener("pointerup", onUp);
-          cleanupDragDetection = null;
-        };
+      const cleanup = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        cleanupDragDetection = null;
+      };
 
-        document.addEventListener("pointermove", onMove);
-        document.addEventListener("pointerup", onUp);
-        cleanupDragDetection = cleanup;
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      cleanupDragDetection = cleanup;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
 
-    // Body click — select on pointerup (let click handler do it)
+    // Body drag: move the entire event
+    {
+      const startX = e.clientX;
+      let started = false;
+
+      const onMove = (me: PointerEvent) => {
+        if (!started && Math.abs(me.clientX - startX) >= DRAG_THRESHOLD) {
+          started = true;
+          const chipRect = chipRef!.getBoundingClientRect();
+          const fraction = (startX - chipRect.left) / chipRect.width;
+          const durationDays = Math.round(
+            (props.event.end.getTime() - props.event.start.getTime()) / MS_PER_DAY,
+          );
+          const grabDayOffset = Math.max(0, Math.min(Math.floor(fraction * durationDays), durationDays - 1));
+          startAllDayMoveDrag(props.event, grabDayOffset);
+        }
+      };
+
+      const onUp = () => {
+        cleanup();
+        if (!started) {
+          chipRef?.focus();
+          selectEvent(props.event.id);
+        }
+      };
+
+      const cleanup = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        cleanupDragDetection = null;
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      cleanupDragDetection = cleanup;
+      e.preventDefault();
+      e.stopPropagation();
+    }
   };
 
   // Auto-focus when mounting as the selected event — this happens after the
