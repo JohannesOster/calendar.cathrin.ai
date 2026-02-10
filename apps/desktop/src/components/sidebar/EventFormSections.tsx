@@ -149,15 +149,32 @@ export function TimeSection(props: SectionProps) {
                 s.flushSave();
               }
             } else {
-              // All-day -> timed: restore saved times or default to 12pm + 1h
+              // All-day -> timed: restore saved times or use sensible defaults
+              // All-day end dates are exclusive (Mon-Wed = end is Thu 00:00 UTC),
+              // so subtract one day to get the actual last day.
+              const rawEnd = s.end() ?? st;
+              const lastDay = new Date(rawEnd);
+              lastDay.setDate(lastDay.getDate() - 1);
+              // If lastDay landed before start (single-day all-day), clamp to start
+              if (lastDay < st) lastDay.setTime(st.getTime());
+
+              const isMultiDay = lastDay.toDateString() !== st.toDateString();
+
               let newStart: Date;
               let newEnd: Date;
               if (s.savedTimedStart && s.savedTimedEnd) {
                 newStart = new Date(st);
                 newStart.setHours(s.savedTimedStart.getHours(), s.savedTimedStart.getMinutes(), 0, 0);
-                newEnd = new Date(st);
+                newEnd = new Date(isMultiDay ? lastDay : st);
                 newEnd.setHours(s.savedTimedEnd.getHours(), s.savedTimedEnd.getMinutes(), 0, 0);
+              } else if (isMultiDay) {
+                // Multi-day: default to 9am on first day, 5pm on last day
+                newStart = new Date(st);
+                newStart.setHours(9, 0, 0, 0);
+                newEnd = new Date(lastDay);
+                newEnd.setHours(17, 0, 0, 0);
               } else {
+                // Single-day: default to 12pm + 1h
                 newStart = new Date(st);
                 newStart.setHours(12, 0, 0, 0);
                 newEnd = new Date(st);
