@@ -11,41 +11,41 @@
 }
 
 /* ============================================================================
-   Design Tokens — Monochrome Geometric (Dark Mode)
+   Design Tokens — Monochrome Geometric (Light Mode)
    "Your life is the color. We're just the frame."
    ============================================================================ */
 @theme {
-  /* Surfaces — warm charcoal */
-  --color-surface: #1c1b19;
-  --color-surface-alt: #232220;
-  --color-surface-hover: #2e2d2a;
-  --color-surface-active: #3a3935;
-  --color-surface-input: #262523;
-  --color-surface-weekend: #1e1d1b;
-  --color-surface-elevated: #2c2b28;
+  /* Surfaces — warm near-white */
+  --color-surface: #fcfcfc;
+  --color-surface-alt: #f4f3f2;
+  --color-surface-hover: #eae9e8;
+  --color-surface-active: #dfdedd;
+  --color-surface-input: #f0efee;
+  --color-surface-weekend: #f7f6f5;
+  --color-surface-elevated: #ffffff;
 
-  /* Text — warm cream */
-  --color-fg: #e8e5e0;
-  --color-fg-muted: #9c9892;
-  --color-fg-faint: #6a6660;
-  --color-fg-disabled: #4a4844;
+  /* Text — warm charcoal */
+  --color-fg: #2b2829;
+  --color-fg-muted: #787576;
+  --color-fg-faint: #a5a2a3;
+  --color-fg-disabled: #cccacb;
 
   /* Borders */
-  --color-border: #33312d;
-  --color-border-light: #2a2926;
+  --color-border: #e2e0e1;
+  --color-border-light: #eceaeb;
 
   /* Accent — monochrome (foreground serves as accent) */
-  --color-accent: #e8e5e0;
-  --color-accent-hover: #d4d1cc;
-  --color-accent-active: #c0bdb8;
-  --color-accent-light: rgba(232, 229, 224, 0.08);
+  --color-accent: #2b2829;
+  --color-accent-hover: #424041;
+  --color-accent-active: #585657;
+  --color-accent-light: rgba(43, 40, 41, 0.06);
 
   /* Today — monochrome inverted */
-  --color-today: #e8e5e0;
+  --color-today: #2b2829;
 
   /* Scrollbar */
-  --color-scrollbar: #33312d;
-  --color-scrollbar-hover: #4a4844;
+  --color-scrollbar: #d4d2d3;
+  --color-scrollbar-hover: #b8b6b7;
 
   /* Radius system — geometric, tighter */
   --radius-sm: 2px;
@@ -89,20 +89,20 @@ body {
   --grid-all-day-row-height: 28px;
 
   /* Event color palette — OKLCH-normalized for perceptual uniformity.
-     All colors share L=0.73 C=0.11 (slate: C=0.06), varying only in hue.
-     Every color has identical visual weight on the dark surface.
-     Contrast vs #1C1B19: 6.8–7.5:1 (all pass WCAG AA). */
-  --event-graphite:   #98958e;  /* oklch(0.67 0.01  80) — near-neutral warm */
-  --event-coral:      #e58c84;  /* oklch(0.73 0.11  25) — red-orange */
-  --event-terracotta: #df9367;  /* oklch(0.73 0.11  50) — earthy brown */
-  --event-amber:      #cca051;  /* oklch(0.73 0.11  80) — golden yellow */
-  --event-sage:       #7aba7c;  /* oklch(0.73 0.11 145) — soft green */
-  --event-teal:       #47beaa;  /* oklch(0.73 0.11 180) — cyan-green */
-  --event-sky:        #4db6dc;  /* oklch(0.73 0.11 225) — blue */
-  --event-slate:      #8babcd;  /* oklch(0.73 0.06 250) — muted blue-gray */
-  --event-lavender:   #a79ce8;  /* oklch(0.73 0.11 290) — purple-blue */
-  --event-plum:       #c691d3;  /* oklch(0.73 0.11 320) — purple-pink */
-  --event-rose:       #de8aab;  /* oklch(0.73 0.11 355) — dusty pink */
+     All colors share L=0.58 C=0.12 (slate: C=0.06), varying only in hue.
+     Tuned for light surfaces: tinted chips are soft pastels, solid/focused
+     state provides ≥4.5:1 contrast against white text. */
+  --event-graphite:   #76736d;  /* oklch(0.53 0.01  80) — near-neutral warm */
+  --event-coral:      #c4564d;  /* oklch(0.58 0.12  25) — red-orange */
+  --event-terracotta: #b96533;  /* oklch(0.58 0.12  50) — earthy brown */
+  --event-amber:      #9d7520;  /* oklch(0.58 0.12  80) — golden yellow */
+  --event-sage:       #3d8f40;  /* oklch(0.58 0.12 145) — soft green */
+  --event-teal:       #008f7b;  /* oklch(0.58 0.12 180) — cyan-green */
+  --event-sky:        #0089b4;  /* oklch(0.58 0.12 225) — blue */
+  --event-slate:      #5880a6;  /* oklch(0.58 0.06 250) — muted blue-gray */
+  --event-lavender:   #7568c8;  /* oklch(0.58 0.12 290) — purple-blue */
+  --event-plum:       #a057af;  /* oklch(0.58 0.12 320) — purple-pink */
+  --event-rose:       #bf4e78;  /* oklch(0.58 0.12 355) — dusty pink */
 }
 
 /* Custom scrollbar styling */
@@ -138,7 +138,7 @@ body {
   display: none; /* Chrome/Safari/Opera */
 }
 
-/* Focus ring styling — monochrome (cream outline) */
+/* Focus ring styling — monochrome (charcoal outline) */
 *:focus-visible {
   outline: 2px solid var(--color-fg);
   outline-offset: 2px;
@@ -189,14 +189,14 @@ body.dragging * {
 
 /* Calendar event states — flat (border, no shadow)
    Background: srgb mix (not oklch — oklch rotates hues toward the warm surface).
-   Text: event color directly (all palette colors pass WCAG AA on the tinted bg). */
+   Text: event color for readability against the light tinted background. */
 .calendar-event {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 40%,
+    var(--event-color) 14%,
     var(--color-surface)
   );
-  color: color-mix(in srgb, var(--event-color) 10%, var(--color-fg));
+  color: var(--event-color);
   border: 1px solid var(--color-border-light);
 }
 
@@ -213,7 +213,7 @@ body.dragging * {
 .calendar-event:hover {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 50%,
+    var(--event-color) 22%,
     var(--color-surface)
   );
 }
@@ -241,7 +241,7 @@ body.dragging * {
   background-color: color-mix(
     in srgb,
     var(--event-color),
-    var(--color-surface) 30%
+    #000 20%
   );
 }
 
@@ -255,7 +255,7 @@ body.dragging * {
 /* Dragging state - reduced opacity and elevated shadow (physical metaphor) */
 .calendar-event--dragging {
   opacity: 0.85;
-  box-shadow: 0 4px 12px rgba(28, 27, 25, 0.5);
+  box-shadow: 0 4px 12px rgba(43, 40, 41, 0.15);
   cursor: grabbing !important;
   pointer-events: none;
   transition: none;
@@ -297,16 +297,16 @@ body.dragging * {
 .all-day-chip {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 20%,
+    var(--event-color) 12%,
     var(--color-surface)
   );
-  color: color-mix(in srgb, var(--event-color) 10%, var(--color-fg));
+  color: var(--event-color);
 }
 
 .all-day-chip:hover {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 30%,
+    var(--event-color) 20%,
     var(--color-surface)
   );
 }
@@ -327,7 +327,7 @@ body.dragging * {
   background-color: color-mix(
     in srgb,
     var(--event-color),
-    var(--color-surface) 30%
+    #000 20%
   );
 }
 
@@ -339,7 +339,7 @@ body.dragging * {
 .month-event-chip {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 18%,
+    var(--event-color) 12%,
     var(--color-surface)
   );
   color: var(--event-color);
@@ -348,7 +348,7 @@ body.dragging * {
 
 /* Today column tint — subtle neutral warmth (no color) */
 .today-column-tint {
-  background-color: rgba(232, 229, 224, 0.03);
+  background-color: rgba(43, 40, 41, 0.025);
 }
 
 /* Undo toast: override zag-js absolute positioning so toasts stack in flex layout */
