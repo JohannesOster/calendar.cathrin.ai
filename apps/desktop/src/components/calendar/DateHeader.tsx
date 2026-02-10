@@ -55,17 +55,17 @@ export function DateHeader(props: DateHeaderProps) {
       <span
         class="text-xs"
         classList={{
-          "text-fg": props.isToday,
+          "text-today": props.isToday,
           "text-fg-muted": !props.isToday,
         }}
       >
         {dayName()}
       </span>
       <span
-        class="text-xs w-4 h-4 flex items-center justify-center rounded-md"
+        class="text-xs h-5 flex items-center justify-center rounded-md ml-1"
         classList={{
-          "bg-fg text-surface font-light ml-1": props.isToday,
-          "text-fg-muted ml-px": !props.isToday,
+          "bg-today text-surface font-light -ml-px px-1.5": props.isToday,
+          "text-fg-muted": !props.isToday,
         }}
       >
         {dayNumber()}

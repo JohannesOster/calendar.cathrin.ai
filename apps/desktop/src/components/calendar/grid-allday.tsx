@@ -422,16 +422,29 @@ export function createAllDayState(deps: AllDayStateDeps) {
   });
 
   // All-day section height
+  // Track previous height so we can hold it stable during layout transitions
+  let prevAllDayHeight = calculateAllDaySectionHeight(-1, false);
+
   const allDayHeight = createMemo(() => {
+    // During layout transitions, scrollLeft signal and frozen layout are briefly
+    // out of sync — visibleDayRange uses the old scrollLeft while event positions
+    // use the new frozen layout. This mismatch can cause wrong events to pass the
+    // visible filter, spiking maxRow for ~1 frame. Hold the previous height until
+    // the transition completes and everything is consistent again.
+    if (deps.isRestoringScrollPosition()) return prevAllDayHeight;
+
     const layouts = visibleAllDayLayouts();
     const isCreatingAllDay = isCreating() && draftIsAllDay();
 
-    if (layouts.length === 0 && !isCreatingAllDay)
-      return calculateAllDaySectionHeight(-1, allDayExpanded());
+    if (layouts.length === 0 && !isCreatingAllDay) {
+      prevAllDayHeight = calculateAllDaySectionHeight(-1, allDayExpanded());
+      return prevAllDayHeight;
+    }
 
     const eventsMaxRow = layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
     const maxRow = isCreatingAllDay ? Math.max(eventsMaxRow, allDayPlaceholderRow()) : eventsMaxRow;
-    return calculateAllDaySectionHeight(maxRow, allDayExpanded());
+    prevAllDayHeight = calculateAllDaySectionHeight(maxRow, allDayExpanded());
+    return prevAllDayHeight;
   });
 
   // Visual height (animated)

@@ -4,6 +4,7 @@ import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch } from "../lib/api";
+import { CATHRIN_PALETTE } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
@@ -40,14 +41,14 @@ export function snapMinutes(totalMinutes: number): number {
  */
 export function getDraftColor(): string {
   const calId = draftCalendarId() ?? resolveCalendarId();
-  if (!calId) return "#98958e";
+  if (!calId) return CATHRIN_PALETTE.graphite;
 
   for (const account of connectedAccounts()) {
     for (const cal of account.calendars) {
       if (cal.id === calId) return cal.color;
     }
   }
-  return "#98958e";
+  return CATHRIN_PALETTE.graphite;
 }
 
 // =============================================================================

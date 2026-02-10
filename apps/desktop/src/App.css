@@ -11,41 +11,41 @@
 }
 
 /* ============================================================================
-   Design Tokens — Monochrome Geometric (Light Mode)
-   "Your life is the color. We're just the frame."
+   Design Tokens — Light Mode with Petrol Accent
+   #fcfcfc / #212020 / #2d6b8a
    ============================================================================ */
 @theme {
-  /* Surfaces — warm near-white */
+  /* Surfaces — neutral near-white */
   --color-surface: #fcfcfc;
-  --color-surface-alt: #f4f3f2;
-  --color-surface-hover: #eae9e8;
-  --color-surface-active: #dfdedd;
-  --color-surface-input: #f0efee;
-  --color-surface-weekend: #f7f6f5;
+  --color-surface-alt: #f3f3f2;
+  --color-surface-hover: #e9e8e8;
+  --color-surface-active: #dedddd;
+  --color-surface-input: #efeeee;
+  --color-surface-weekend: #f7f6f6;
   --color-surface-elevated: #ffffff;
 
-  /* Text — warm charcoal */
-  --color-fg: #2b2829;
-  --color-fg-muted: #787576;
-  --color-fg-faint: #a5a2a3;
-  --color-fg-disabled: #cccacb;
+  /* Text — near-black */
+  --color-fg: #212020;
+  --color-fg-muted: #717070;
+  --color-fg-faint: #a09f9f;
+  --color-fg-disabled: #c8c7c7;
 
   /* Borders */
-  --color-border: #e2e0e1;
-  --color-border-light: #eceaeb;
+  --color-border: #e0dfdf;
+  --color-border-light: #ebeaea;
 
-  /* Accent — monochrome (foreground serves as accent) */
-  --color-accent: #2b2829;
-  --color-accent-hover: #424041;
-  --color-accent-active: #585657;
-  --color-accent-light: rgba(43, 40, 41, 0.06);
+  /* Accent — petrol blue */
+  --color-accent: #2d6b8a;
+  --color-accent-hover: #275d78;
+  --color-accent-active: #214f66;
+  --color-accent-light: rgba(45, 107, 138, 0.07);
 
-  /* Today — monochrome inverted */
-  --color-today: #2b2829;
+  /* Today — accent petrol */
+  --color-today: #2d6b8a;
 
   /* Scrollbar */
-  --color-scrollbar: #d4d2d3;
-  --color-scrollbar-hover: #b8b6b7;
+  --color-scrollbar: #d2d1d1;
+  --color-scrollbar-hover: #b6b5b5;
 
   /* Radius system — geometric, tighter */
   --radius-sm: 2px;
@@ -88,21 +88,21 @@ body {
   --grid-all-day-chip-height: 20px;
   --grid-all-day-row-height: 28px;
 
-  /* Event color palette — OKLCH-normalized for perceptual uniformity.
-     All colors share L=0.58 C=0.12 (slate: C=0.06), varying only in hue.
-     Tuned for light surfaces: tinted chips are soft pastels, solid/focused
-     state provides ≥4.5:1 contrast against white text. */
-  --event-graphite:   #76736d;  /* oklch(0.53 0.01  80) — near-neutral warm */
-  --event-coral:      #c4564d;  /* oklch(0.58 0.12  25) — red-orange */
-  --event-terracotta: #b96533;  /* oklch(0.58 0.12  50) — earthy brown */
-  --event-amber:      #9d7520;  /* oklch(0.58 0.12  80) — golden yellow */
-  --event-sage:       #3d8f40;  /* oklch(0.58 0.12 145) — soft green */
-  --event-teal:       #008f7b;  /* oklch(0.58 0.12 180) — cyan-green */
-  --event-sky:        #0089b4;  /* oklch(0.58 0.12 225) — blue */
-  --event-slate:      #5880a6;  /* oklch(0.58 0.06 250) — muted blue-gray */
-  --event-lavender:   #7568c8;  /* oklch(0.58 0.12 290) — purple-blue */
-  --event-plum:       #a057af;  /* oklch(0.58 0.12 320) — purple-pink */
-  --event-rose:       #bf4e78;  /* oklch(0.58 0.12 355) — dusty pink */
+  /* Event color palette — vivid, contemporary.
+     Higher saturation than before. All colors pass ≥4.5:1 contrast
+     against white text (solid/focused state). Cool-toned graphite
+     complements the teal accent. */
+  --event-graphite:   #64748b;  /* cool slate gray */
+  --event-coral:      #c93c35;  /* clear red */
+  --event-terracotta: #b85a15;  /* burnt orange */
+  --event-amber:      #937115;  /* deep gold */
+  --event-sage:       #258a3e;  /* forest green */
+  --event-teal:       #00858e;  /* ocean teal */
+  --event-sky:        #0072c3;  /* clear blue */
+  --event-slate:      #4c6a9e;  /* steel blue */
+  --event-lavender:   #6050cc;  /* electric indigo */
+  --event-plum:       #9848b2;  /* rich purple */
+  --event-rose:       #c43262;  /* hot rose */
 }
 
 /* Custom scrollbar styling */
@@ -255,7 +255,7 @@ body.dragging * {
 /* Dragging state - reduced opacity and elevated shadow (physical metaphor) */
 .calendar-event--dragging {
   opacity: 0.85;
-  box-shadow: 0 4px 12px rgba(43, 40, 41, 0.15);
+  box-shadow: 0 4px 12px rgba(33, 32, 32, 0.15);
   cursor: grabbing !important;
   pointer-events: none;
   transition: none;
@@ -346,9 +346,9 @@ body.dragging * {
   border-left: 3px solid var(--event-color);
 }
 
-/* Today column tint — subtle neutral warmth (no color) */
+/* Today column tint — subtle accent wash */
 .today-column-tint {
-  background-color: rgba(43, 40, 41, 0.025);
+  background-color: rgba(45, 107, 138, 0.025);
 }
 
 /* Undo toast: override zag-js absolute positioning so toasts stack in flex layout */

@@ -1,4 +1,5 @@
 import { apiFetch } from "../lib/api";
+import { mapProviderColor } from "../lib/color-mapping";
 
 import { isAuthenticated, onAuthComplete } from "./auth";
 import { connectedAccounts, setConnectedAccounts, _registerAccountSyncFn, type CalendarAccount } from "./accounts";
@@ -33,7 +34,7 @@ export async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
       result.calendars.map((c) => ({
         id: c.id,
         name: c.name,
-        color: c.color,
+        color: mapProviderColor(c.color),
         // Use local visibility preference (client-side setting)
         visible: getCalendarVisibility(c.id),
       })),

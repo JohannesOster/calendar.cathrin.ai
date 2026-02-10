@@ -1,4 +1,5 @@
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import { mapProviderColor } from "../lib/color-mapping";
 
 
 /**
@@ -33,7 +34,7 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     start: new Date(event.start),
     end: new Date(event.end),
     isAllDay: event.isAllDay,
-    color: event.color,
+    color: mapProviderColor(event.color),
     location: event.location,
     description: event.description,
   };

@@ -22,6 +22,7 @@ import {
   shadowEnd,
   setShadowEnd,
 } from "../../stores/event-creation";
+import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
 import { updateEvent, setEvents } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
@@ -144,7 +145,7 @@ export function useEventFormState() {
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
     const event = selectedEvent();
-    return event?.color ?? "#98958e";
+    return event?.color ?? CATHRIN_PALETTE.graphite;
   });
 
   function beginTimeEdit(which: "start" | "end"): void {

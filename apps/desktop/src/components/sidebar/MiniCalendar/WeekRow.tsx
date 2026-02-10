@@ -75,7 +75,7 @@ export function WeekRow(props: WeekRowProps) {
                   "text-fg": dayInfo.isCurrentMonth && !isTodayDate,
                   "text-fg-disabled": !dayInfo.isCurrentMonth && !isVisible(),
                   "text-fg-muted": !dayInfo.isCurrentMonth && isVisible() && !isTodayDate,
-                  "bg-fg text-surface hover:bg-fg": isTodayDate,
+                  "bg-today text-surface hover:bg-today": isTodayDate,
                   "hover:bg-surface-hover": !isTodayDate,
                 }}
                 onClick={() => props.onDayClick(dayInfo)}

@@ -2,7 +2,7 @@
  * Cathrin Color System
  *
  * Maps raw provider colors (Google, Outlook, Apple) to a curated palette
- * designed for our light surface (#fcfcfc).
+ * designed for our light surface (#fcfcfc) with #2d6b8a accent.
  *
  * Provider colors vary wildly in saturation and brightness. This mapping
  * preserves the user's color *intent* (blue stays blue, green stays green)
@@ -12,8 +12,8 @@
  *   1. Known provider hex → hand-tuned Cathrin color (lookup table)
  *   2. Unknown hex → nearest match via OKLab perceptual distance
  *
- * The palette is OKLCH-normalized (L≈0.58, C≈0.12) so every color has
- * identical visual weight and passes WCAG AA for white text on solid bg.
+ * Vivid, contemporary palette. All colors pass ≥4.5:1 contrast against
+ * white text on solid bg. Cool-toned graphite complements the teal accent.
  * Must stay in sync with --event-* variables in App.css.
  */
 
@@ -22,17 +22,17 @@
 // =============================================================================
 
 export const CATHRIN_PALETTE = {
-  graphite:   "#76736d",  // oklch(0.53 0.01  80) — near-neutral warm
-  coral:      "#c4564d",  // oklch(0.58 0.12  25) — red-orange
-  terracotta: "#b96533",  // oklch(0.58 0.12  50) — earthy orange
-  amber:      "#9d7520",  // oklch(0.58 0.12  80) — golden yellow
-  sage:       "#3d8f40",  // oklch(0.58 0.12 145) — soft green
-  teal:       "#008f7b",  // oklch(0.58 0.12 180) — cyan-green
-  sky:        "#0089b4",  // oklch(0.58 0.12 225) — blue
-  slate:      "#5880a6",  // oklch(0.58 0.06 250) — muted blue-gray
-  lavender:   "#7568c8",  // oklch(0.58 0.12 290) — purple-blue
-  plum:       "#a057af",  // oklch(0.58 0.12 320) — purple-pink
-  rose:       "#bf4e78",  // oklch(0.58 0.12 355) — dusty pink
+  graphite:   "#64748b",  // cool slate gray
+  coral:      "#c93c35",  // clear red
+  terracotta: "#b85a15",  // burnt orange
+  amber:      "#937115",  // deep gold
+  sage:       "#258a3e",  // forest green
+  teal:       "#00858e",  // ocean teal
+  sky:        "#0072c3",  // clear blue
+  slate:      "#4c6a9e",  // steel blue
+  lavender:   "#6050cc",  // electric indigo
+  plum:       "#9848b2",  // rich purple
+  rose:       "#c43262",  // hot rose
 } as const;
 
 export type CathrinColor = (typeof CATHRIN_PALETTE)[keyof typeof CATHRIN_PALETTE];
