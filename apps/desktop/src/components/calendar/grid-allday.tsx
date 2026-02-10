@@ -4,6 +4,7 @@ import {
   createMemo,
   on,
   onCleanup,
+  untrack,
   batch,
   For,
   type Accessor,
@@ -33,6 +34,7 @@ import {
   resizeDragEventId,
   unfoldDrag,
   unfoldDragEventId,
+  allDayMoveDrag,
 } from "../../stores/event-drag";
 import { selectedEvent } from "../../stores/event-selection";
 import {
@@ -167,8 +169,8 @@ export function createAllDayState(deps: AllDayStateDeps) {
     );
   });
 
-  // All-day event layouts
-  const allDayEventLayouts = createMemo((): AllDayEventLayout[] => {
+  // Raw all-day event layouts (rows may shift during drag)
+  const rawAllDayEventLayouts = createMemo((): AllDayEventLayout[] => {
     const days = deps.layout().days;
     if (days.length === 0) return [];
 
@@ -215,6 +217,36 @@ export function createAllDayState(deps: AllDayStateDeps) {
     }
 
     return result;
+  });
+
+  // Freeze row assignments during all-day drag to prevent vertical reordering
+  const [frozenRowMap, setFrozenRowMap] = createSignal<Map<string, number> | null>(null);
+
+  let wasDraggingAllDay = false;
+  createEffect(() => {
+    const isDragging = unfoldDrag() !== null || allDayMoveDrag() !== null;
+    if (isDragging && !wasDraggingAllDay) {
+      const rows = new Map<string, number>();
+      for (const layout of untrack(() => rawAllDayEventLayouts())) {
+        rows.set(layout.event.id, layout.row);
+      }
+      setFrozenRowMap(rows);
+    } else if (!isDragging && wasDraggingAllDay) {
+      setFrozenRowMap(null);
+    }
+    wasDraggingAllDay = isDragging;
+  });
+
+  // Final layouts: applies frozen rows during drag so chips don't jump vertically
+  const allDayEventLayouts = createMemo((): AllDayEventLayout[] => {
+    const layouts = rawAllDayEventLayouts();
+    const frozen = frozenRowMap();
+    if (!frozen) return layouts;
+
+    return layouts.map((l) => {
+      const frozenRow = frozen.get(l.event.id);
+      return frozenRow !== undefined ? { ...l, row: frozenRow } : l;
+    });
   });
 
   // Event counts per day column (for collapsed "X events" label)
