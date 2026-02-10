@@ -4,7 +4,7 @@ import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
 import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
-import { startUnfoldDrag, startAllDayMoveDrag } from "../../stores/event-drag";
+import { startUnfoldDrag, startAllDayMoveDrag, dragActiveEventId } from "../../stores/event-drag";
 
 /** Width in px of the edge hit zone for resize/unfold drag */
 const EDGE_HIT_ZONE = 6;
@@ -35,6 +35,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   };
 
   const isSelected = () => selectedEventId() === props.event.id;
+  const isDragging = () => dragActiveEventId() === props.event.id;
 
   const hasTimes = () => !props.event.isAllDay;
 
@@ -175,6 +176,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         height: "var(--grid-all-day-chip-height)",
         "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
+        "z-index": isDragging() ? "10" : undefined,
         transition: "background-color 75ms",
       }}
       data-event-id={props.event.id}
