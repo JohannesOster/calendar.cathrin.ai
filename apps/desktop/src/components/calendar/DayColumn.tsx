@@ -101,7 +101,8 @@ export function DayColumn(props: DayColumnProps) {
         event.end > colStart &&
         visible.has(event.calendarId) &&
         !event.isAllDay &&
-        (!spansMultipleDays(event) || event.id === resizeId || event.id === unfoldId)
+        event.id !== unfoldId &&
+        (!spansMultipleDays(event) || event.id === resizeId)
     );
   });
 

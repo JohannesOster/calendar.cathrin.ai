@@ -162,42 +162,44 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     );
   };
 
+  // Wrapper that syncs the scroll signal before recalculating — needed during
+  // auto-scroll where container.scrollLeft is updated directly but the signal
+  // (and thus layout().days) hasn't caught up via the async scroll event yet.
+  const recalcUnfoldWithScrollSync = () => {
+    deps.handleScroll();
+    recalcUnfoldPosition();
+  };
+
   const recalcUnfoldPosition = () => {
     const drag = unfoldDrag();
     if (!drag) return;
 
-    const cursorMinutes = getMinutesFromClientY(lastDragClientY);
     const cursorDate = getDateFromClientX(lastDragClientX);
+    if (!cursorDate) return;
 
-    const anchorTime = drag.edge === "end" ? drag.originalStart : drag.originalEnd;
-    const anchorDay = new Date(anchorTime);
-    anchorDay.setHours(0, 0, 0, 0);
-    const anchorMinutes = anchorTime.getHours() * 60 + anchorTime.getMinutes();
-
-    const anchorDateTime = new Date(anchorDay);
-    anchorDateTime.setMinutes(anchorMinutes);
-
-    const targetDay = cursorDate ? new Date(cursorDate) : new Date(anchorDay);
+    const targetDay = new Date(cursorDate);
     targetDay.setHours(0, 0, 0, 0);
-    const cursorDateTime = new Date(targetDay);
-    cursorDateTime.setMinutes(cursorMinutes);
 
-    let newStart: Date;
-    let newEnd: Date;
+    // Anchor: the edge NOT being dragged (fixed date + time)
+    const anchor = drag.edge === "end"
+      ? new Date(drag.originalStart)
+      : new Date(drag.originalEnd);
 
-    if (cursorDateTime.getTime() >= anchorDateTime.getTime()) {
-      newStart = anchorDateTime;
-      newEnd = cursorDateTime;
-      if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
-        newEnd = new Date(newStart.getTime() + SNAP_MINUTES * 60000);
-      }
-    } else {
-      newStart = cursorDateTime;
-      newEnd = anchorDateTime;
-      if (newEnd.getTime() - newStart.getTime() < SNAP_MINUTES * 60000) {
-        newStart = new Date(newEnd.getTime() - SNAP_MINUTES * 60000);
-      }
-    }
+    // Moving: cursor date + original time of the grabbed edge
+    const moving = new Date(targetDay);
+    const movingTime = drag.edge === "end" ? drag.originalEnd : drag.originalStart;
+    moving.setHours(
+      movingTime.getHours(),
+      movingTime.getMinutes(),
+      movingTime.getSeconds(),
+      movingTime.getMilliseconds(),
+    );
+
+    // Assign chronologically — enables flipping when dragged past the other edge
+    const newStart = anchor.getTime() <= moving.getTime() ? anchor : moving;
+    const newEnd = anchor.getTime() <= moving.getTime() ? moving : anchor;
+
+    if (newEnd.getTime() <= newStart.getTime()) return;
 
     setEvents((prev) =>
       prev.map((e) =>
@@ -275,7 +277,7 @@ export function createDragHandlers(deps: DragHandlersDeps) {
 
       const timeColWidth = getTimeColWidth();
       const stickyHeaderHeight = MONTH_LABEL_HEIGHT + HEADER_HEIGHT + deps.visualAllDayHeight();
-      startAutoScroll(ref, stickyHeaderHeight, recalcUnfoldPosition, timeColWidth, deps.colWidth());
+      startAutoScroll(ref, stickyHeaderHeight, recalcUnfoldWithScrollSync, timeColWidth, deps.colWidth(), true);
       updateAutoScrollCursor(e.clientY, e.clientX);
 
       recalcUnfoldPosition();

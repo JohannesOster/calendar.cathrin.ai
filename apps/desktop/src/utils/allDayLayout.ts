@@ -131,7 +131,8 @@ export function calculateAllDayLayouts(
   viewStart: Date,
   viewEnd: Date,
   totalColumns: number = 7,
-  excludeEventId?: string | null
+  excludeEventId?: string | null,
+  forceIncludeId?: string | null,
 ): Map<string, AllDayLayoutInfo> {
   const layouts = new Map<string, AllDayLayoutInfo>();
 
@@ -141,6 +142,8 @@ export function calculateAllDayLayouts(
 
   const allDayEvents = events.filter((e) => {
     if (excludeEventId && e.id === excludeEventId) return false;
+    // Force-include keeps the event in the all-day row during drag even if single-day
+    if (forceIncludeId && e.id === forceIncludeId) return true;
     if (e.isAllDay) return eventOverlapsView(e, viewStart, viewEnd);
     if (!spansMultipleDays(e)) return false;
     // Timed multi-day: use local dates for overlap check

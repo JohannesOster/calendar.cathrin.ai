@@ -28,7 +28,7 @@ import {
   CONTAINER_WIDTH,
   CENTER_OFFSET,
 } from "../../constants/calendar";
-import { CHIP_BORDER_RADIUS } from "../../constants/layout";
+import { CHIP_BORDER_RADIUS, ALL_DAY_ROW_HEIGHT } from "../../constants/layout";
 import {
   currentView,
   visibleDaysCount,
@@ -549,8 +549,8 @@ export function CalendarGrid() {
                   {/* All-day creation placeholder */}
                   <AllDayPlaceholder days={gridLayout.visibleDays()} colWidth={gridLayout.layout().width} row={allDay.allDayPlaceholderRow()} />
 
-                  {/* Ghost chip during unfold drag */}
-                  <Show when={allDay.unfoldGhostLayout()}>
+                  {/* Ghost chip showing original position during unfold drag */}
+                  <Show when={allDay.unfoldOriginalGhost()}>
                     {(ghost) => (
                       <div
                         class="absolute rounded pointer-events-none"
@@ -558,7 +558,7 @@ export function CalendarGrid() {
                           left: "0",
                           transform: `translateX(${ghost().left}px)`,
                           width: `${ghost().width}px`,
-                          top: "4px",
+                          top: `${ghost().row * ALL_DAY_ROW_HEIGHT + 4}px`,
                           height: "var(--grid-all-day-chip-height)",
                           "background-color": `color-mix(in srgb, ${ghost().color} 10%, transparent)`,
                           border: `1px dashed ${ghost().color}`,

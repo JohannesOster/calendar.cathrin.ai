@@ -27,6 +27,7 @@ let rightEdge = 0;
 let onTickCb: (() => void) | null = null;
 let hSnapWidth = 0; // column width for horizontal snapping (0 = smooth)
 let hBuffer = 0; // accumulated horizontal pixels toward next snap
+let verticalEnabled = true; // set to false for horizontal-only drags (e.g. all-day row)
 
 function tick() {
   if (!container) return;
@@ -34,27 +35,29 @@ function tick() {
   let changed = false;
 
   // --- Vertical auto-scroll ---
-  let deltaY = 0;
+  if (verticalEnabled) {
+    let deltaY = 0;
 
-  // Distance into the top edge zone (positive = inside zone)
-  const distFromTop = topEdge + AUTO_SCROLL_EDGE_PX - cursorY;
-  // Distance into the bottom edge zone (positive = inside zone)
-  const distFromBottom = cursorY - (bottomEdge - AUTO_SCROLL_EDGE_PX);
+    // Distance into the top edge zone (positive = inside zone)
+    const distFromTop = topEdge + AUTO_SCROLL_EDGE_PX - cursorY;
+    // Distance into the bottom edge zone (positive = inside zone)
+    const distFromBottom = cursorY - (bottomEdge - AUTO_SCROLL_EDGE_PX);
 
-  if (distFromTop > 0) {
-    // Scroll up — speed proportional to how deep into the zone the cursor is
-    const ratio = Math.min(distFromTop / AUTO_SCROLL_EDGE_PX, 1);
-    deltaY = -Math.round(AUTO_SCROLL_MAX_SPEED * ratio);
-  } else if (distFromBottom > 0) {
-    // Scroll down
-    const ratio = Math.min(distFromBottom / AUTO_SCROLL_EDGE_PX, 1);
-    deltaY = Math.round(AUTO_SCROLL_MAX_SPEED * ratio);
-  }
+    if (distFromTop > 0) {
+      // Scroll up — speed proportional to how deep into the zone the cursor is
+      const ratio = Math.min(distFromTop / AUTO_SCROLL_EDGE_PX, 1);
+      deltaY = -Math.round(AUTO_SCROLL_MAX_SPEED * ratio);
+    } else if (distFromBottom > 0) {
+      // Scroll down
+      const ratio = Math.min(distFromBottom / AUTO_SCROLL_EDGE_PX, 1);
+      deltaY = Math.round(AUTO_SCROLL_MAX_SPEED * ratio);
+    }
 
-  if (deltaY !== 0) {
-    const before = container.scrollTop;
-    container.scrollTop += deltaY;
-    if (container.scrollTop !== before) changed = true;
+    if (deltaY !== 0) {
+      const before = container.scrollTop;
+      container.scrollTop += deltaY;
+      if (container.scrollTop !== before) changed = true;
+    }
   }
 
   // --- Horizontal auto-scroll (column-snapping) ---
@@ -104,6 +107,7 @@ function tick() {
  * @param stickyHeight - Height of sticky header area (top edge starts below it)
  * @param stickyLeftWidth - Width of sticky time column (left edge starts after it)
  * @param columnWidth - Width of a day column for horizontal snap-stepping (0 = smooth)
+ * @param horizontalOnly - When true, only horizontal auto-scroll is active (for all-day row drags)
  */
 export function startAutoScroll(
   scrollContainer: HTMLElement,
@@ -111,10 +115,12 @@ export function startAutoScroll(
   onTick: () => void,
   stickyLeftWidth: number = 0,
   columnWidth: number = 0,
+  horizontalOnly: boolean = false,
 ): void {
   container = scrollContainer;
   onTickCb = onTick;
   hSnapWidth = columnWidth;
+  verticalEnabled = !horizontalOnly;
   updateAutoScrollBounds(stickyHeight, stickyLeftWidth);
 
   // Only start one loop
@@ -155,4 +161,5 @@ export function stopAutoScroll(): void {
   cursorY = 0;
   cursorX = 0;
   hBuffer = 0;
+  verticalEnabled = true;
 }

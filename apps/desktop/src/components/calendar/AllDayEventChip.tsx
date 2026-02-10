@@ -1,10 +1,10 @@
-import { Show, onMount, onCleanup, createMemo } from "solid-js";
+import { Show, onMount, onCleanup } from "solid-js";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
 import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
-import { startUnfoldDrag, unfoldDragEventId } from "../../stores/event-drag";
+import { startUnfoldDrag } from "../../stores/event-drag";
 
 /** Width in px of the edge hit zone for resize/unfold drag */
 const EDGE_HIT_ZONE = 6;
@@ -59,8 +59,6 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       chipRef.style.cursor = "pointer";
     }
   };
-
-  const isBeingUnfolded = createMemo(() => unfoldDragEventId() === props.event.id);
 
   const handlePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -129,7 +127,6 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
       classList={{
         "all-day-chip--selected": isSelected(),
-        "opacity-0 pointer-events-none": isBeingUnfolded(),
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
       onPointerDown={handlePointerDown}
@@ -143,9 +140,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         height: "var(--grid-all-day-chip-height)",
         "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
-        transition: isBeingUnfolded()
-          ? "opacity 150ms ease-out, background-color 75ms"
-          : "background-color 75ms",
+        transition: "background-color 75ms",
       }}
       data-event-id={props.event.id}
       tabIndex={0}

@@ -24,8 +24,8 @@ import {
 } from "../../stores/event-creation";
 import {
   resizeDragEventId,
-  unfoldDragEventId,
   unfoldDrag,
+  unfoldDragEventId,
 } from "../../stores/event-drag";
 import { selectedEvent } from "../../stores/event-selection";
 import {
@@ -174,13 +174,15 @@ export function createAllDayState(deps: AllDayStateDeps) {
     const visibleIds = visibleCalendarIds();
     const visibleEvents = events().filter((e) => visibleIds.has(e.calendarId));
 
-    const excludeId = resizeDragEventId() ?? unfoldDragEventId();
+    const excludeId = resizeDragEventId();
+    const forceIncludeId = unfoldDragEventId();
     const layouts = calculateAllDayLayouts(
       visibleEvents,
       viewStart,
       viewEnd,
       totalColumns,
       excludeId,
+      forceIncludeId,
     );
 
     const result: AllDayEventLayout[] = [];
@@ -325,21 +327,8 @@ export function createAllDayState(deps: AllDayStateDeps) {
     }
   });
 
-  // All-day section height
-  const allDayHeight = createMemo(() => {
-    const layouts = visibleAllDayLayouts();
-    const isCreatingAllDay = isCreating() && draftIsAllDay();
-
-    if (layouts.length === 0 && !isCreatingAllDay)
-      return calculateAllDaySectionHeight(-1, allDayExpanded());
-
-    const eventsMaxRow = layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
-    const maxRow = isCreatingAllDay ? Math.max(eventsMaxRow, allDayPlaceholderRow()) : eventsMaxRow;
-    return calculateAllDaySectionHeight(maxRow, allDayExpanded());
-  });
-
-  // Unfold ghost chip layout
-  const unfoldGhostLayout = createMemo(() => {
+  // Ghost chip layout showing original position during unfold drag
+  const unfoldOriginalGhost = createMemo(() => {
     const drag = unfoldDrag();
     if (!drag) return null;
 
@@ -358,13 +347,12 @@ export function createAllDayState(deps: AllDayStateDeps) {
     const viewStartTime = getLocalMidnight(days[0].date).getTime();
     const startDayTime = getLocalMidnight(drag.originalStart).getTime();
 
-    const endTime = drag.originalEnd.getTime();
     const endForRange =
       drag.originalEnd.getHours() === 0 &&
       drag.originalEnd.getMinutes() === 0 &&
       drag.originalEnd.getSeconds() === 0
-        ? endTime - 1
-        : endTime;
+        ? drag.originalEnd.getTime() - 1
+        : drag.originalEnd.getTime();
     const endDayTime = getLocalMidnight(new Date(endForRange)).getTime();
 
     const msPerDay = 24 * 60 * 60 * 1000;
@@ -374,14 +362,36 @@ export function createAllDayState(deps: AllDayStateDeps) {
 
     if (span <= 0) return null;
 
-    const chipLeft = firstDayLeft + startCol * width + CHIP_MARGIN_LEFT;
-    const chipWidth = span * width - CHIP_MARGIN_RIGHT - CHIP_MARGIN_LEFT;
+    const startsBeforeView = startDayTime < viewStartTime;
+    const chipLeft = startsBeforeView
+      ? firstDayLeft + startCol * width
+      : firstDayLeft + startCol * width + CHIP_MARGIN_LEFT;
+    const chipWidth = span * width - CHIP_MARGIN_RIGHT - (startsBeforeView ? 0 : CHIP_MARGIN_LEFT);
+
+    // Find the row of the live event in current layouts
+    const layouts = allDayEventLayouts();
+    const liveLayout = layouts.find((l) => l.event.id === drag.event.id);
+    const row = liveLayout?.row ?? 0;
 
     return {
       left: chipLeft,
       width: chipWidth,
       color: drag.event.color,
+      row,
     };
+  });
+
+  // All-day section height
+  const allDayHeight = createMemo(() => {
+    const layouts = visibleAllDayLayouts();
+    const isCreatingAllDay = isCreating() && draftIsAllDay();
+
+    if (layouts.length === 0 && !isCreatingAllDay)
+      return calculateAllDaySectionHeight(-1, allDayExpanded());
+
+    const eventsMaxRow = layouts.length === 0 ? -1 : Math.max(...layouts.map((l) => l.row));
+    const maxRow = isCreatingAllDay ? Math.max(eventsMaxRow, allDayPlaceholderRow()) : eventsMaxRow;
+    return calculateAllDaySectionHeight(maxRow, allDayExpanded());
   });
 
   // Visual height (animated)
@@ -443,7 +453,7 @@ export function createAllDayState(deps: AllDayStateDeps) {
     allDayHeight,
     visualAllDayHeight,
     contentHeight,
-    unfoldGhostLayout,
+    unfoldOriginalGhost,
     allDayPlaceholderRow,
     shouldShowToggle,
     visibleCalendarIds,
