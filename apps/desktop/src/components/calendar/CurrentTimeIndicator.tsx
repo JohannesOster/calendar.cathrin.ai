@@ -1,11 +1,10 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
+import { HOUR_HEIGHT_PX } from "../../constants/calendar";
 
 interface CurrentTimeIndicatorProps {
   totalDays: number;
   visibleDaysCount: number;
 }
-
-const HOUR_HEIGHT = 52; // matches --grid-hour-height
 
 function formatCurrentTime(date: Date): string {
   const hours = date.getHours();
@@ -20,7 +19,7 @@ function getTimePosition(date: Date): number {
   const hours = date.getHours();
   const minutes = date.getMinutes();
   const totalMinutes = hours * 60 + minutes;
-  return (totalMinutes / 60) * HOUR_HEIGHT;
+  return (totalMinutes / 60) * HOUR_HEIGHT_PX;
 }
 
 /**
