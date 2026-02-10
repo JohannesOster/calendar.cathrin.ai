@@ -84,21 +84,25 @@ body {
   --grid-col-width: 120px;
   --grid-header-height: 34px;
   --grid-hour-height: 52px;
-  --grid-time-col-width: 52px;
+  --grid-time-col-width: 64px;
   --grid-all-day-chip-height: 20px;
   --grid-all-day-row-height: 28px;
 
-  /* Event color palette — warm, muted, cohesive
-     Default is graphite (monochrome) — color is a deliberate choice */
-  --event-graphite: #8a8a8a;
-  --event-coral: #e09080;
-  --event-amber: #d4a843;
-  --event-sage: #85a880;
-  --event-slate: #8899a8;
-  --event-lavender: #a895c0;
-  --event-terracotta: #c08060;
-  --event-teal: #70a8a0;
-  --event-rose: #c08898;
+  /* Event color palette — OKLCH-normalized for perceptual uniformity.
+     All colors share L=0.73 C=0.11 (slate: C=0.06), varying only in hue.
+     Every color has identical visual weight on the dark surface.
+     Contrast vs #1C1B19: 6.8–7.5:1 (all pass WCAG AA). */
+  --event-graphite:   #98958e;  /* oklch(0.67 0.01  80) — near-neutral warm */
+  --event-coral:      #e58c84;  /* oklch(0.73 0.11  25) — red-orange */
+  --event-terracotta: #df9367;  /* oklch(0.73 0.11  50) — earthy brown */
+  --event-amber:      #cca051;  /* oklch(0.73 0.11  80) — golden yellow */
+  --event-sage:       #7aba7c;  /* oklch(0.73 0.11 145) — soft green */
+  --event-teal:       #47beaa;  /* oklch(0.73 0.11 180) — cyan-green */
+  --event-sky:        #4db6dc;  /* oklch(0.73 0.11 225) — blue */
+  --event-slate:      #8babcd;  /* oklch(0.73 0.06 250) — muted blue-gray */
+  --event-lavender:   #a79ce8;  /* oklch(0.73 0.11 290) — purple-blue */
+  --event-plum:       #c691d3;  /* oklch(0.73 0.11 320) — purple-pink */
+  --event-rose:       #de8aab;  /* oklch(0.73 0.11 355) — dusty pink */
 }
 
 /* Custom scrollbar styling */
@@ -183,14 +187,16 @@ body.dragging * {
   animation: flash-highlight 2s ease-out forwards;
 }
 
-/* Calendar event states — flat (border, no shadow) */
+/* Calendar event states — flat (border, no shadow)
+   Background: srgb mix (not oklch — oklch rotates hues toward the warm surface).
+   Text: event color directly (all palette colors pass WCAG AA on the tinted bg). */
 .calendar-event {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 20%,
+    var(--event-color) 25%,
     var(--color-surface)
   );
-  color: var(--color-fg);
+  color: var(--event-color);
   border: 1px solid var(--color-border-light);
 }
 
@@ -207,7 +213,7 @@ body.dragging * {
 .calendar-event:hover {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 30%,
+    var(--event-color) 35%,
     var(--color-surface)
   );
 }
@@ -291,15 +297,16 @@ body.dragging * {
 .all-day-chip {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 15%,
+    var(--event-color) 20%,
     var(--color-surface)
   );
+  color: var(--event-color);
 }
 
 .all-day-chip:hover {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 25%,
+    var(--event-color) 30%,
     var(--color-surface)
   );
 }
@@ -326,6 +333,17 @@ body.dragging * {
 
 .all-day-chip--selected:hover {
   background-color: var(--event-color);
+}
+
+/* Month view timed event chips */
+.month-event-chip {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 18%,
+    var(--color-surface)
+  );
+  color: var(--event-color);
+  border-left: 3px solid var(--event-color);
 }
 
 /* Today column tint — subtle neutral warmth (no color) */

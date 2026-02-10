@@ -109,7 +109,7 @@ export const MONTH_LABEL_HEIGHT = 36;
 export const HEADER_HEIGHT = 34;
 
 /** Fallback width for the time column (px) - matches --grid-time-col-width */
-export const TIME_COL_WIDTH_FALLBACK = 52;
+export const TIME_COL_WIDTH_FALLBACK = 64;
 
 /** Total height of the 24-hour time grid (px) */
 export const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT_PX;
