@@ -44,7 +44,7 @@ import {
   HOURS_PER_DAY,
 } from "../../constants/calendar";
 import { CHIP_MARGIN_LEFT, CHIP_MARGIN_RIGHT } from "../../constants/layout";
-import { FLASH_DURATION_MS } from "../../constants/timings";
+import { FLASH_DURATION_MS, DURATION_SLOW_MS } from "../../constants/timings";
 import {
   flashDate,
   getDateKey,
@@ -447,7 +447,7 @@ export function createAllDayState(deps: AllDayStateDeps) {
     setExpandOffset(animDelta);
 
     const startTime = performance.now();
-    const duration = 200;
+    const duration = DURATION_SLOW_MS;
 
     if (expandAnimRaf) cancelAnimationFrame(expandAnimRaf);
 

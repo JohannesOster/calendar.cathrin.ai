@@ -79,6 +79,15 @@ body {
 }
 
 :root {
+  /* Transition duration tokens
+     fast:   75ms — micro-interactions (event chip hover, color shift)
+     normal: 150ms — standard transitions (buttons, opacity, fades)
+     slow:   200ms — layout changes (sidebar slide, expand/collapse)
+     Tailwind equivalents: duration-75, default (150ms), duration-200 */
+  --duration-fast: 75ms;
+  --duration-normal: 150ms;
+  --duration-slow: 200ms;
+
   /* Grid dimensions */
   --grid-col-width: 120px;
   --grid-header-height: 34px;
@@ -252,7 +261,7 @@ body.dragging * {
   cursor: ns-resize;
   border-radius: 0 0 4px 4px;
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity var(--duration-normal) ease;
 }
 
 .calendar-event__resize-handle::after {
@@ -337,11 +346,11 @@ body.dragging * {
 }
 
 .animate-toast-enter {
-  animation: toast-enter 200ms ease-out forwards;
+  animation: toast-enter var(--duration-slow) ease-out forwards;
 }
 
 .animate-toast-exit {
-  animation: toast-exit 150ms ease-in forwards;
+  animation: toast-exit var(--duration-normal) ease-in forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

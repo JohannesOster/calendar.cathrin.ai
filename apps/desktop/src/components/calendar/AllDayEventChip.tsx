@@ -177,7 +177,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         "--event-color": props.event.color,
         "border-radius": getBorderRadius(),
         "z-index": isDragging() ? "10" : undefined,
-        transition: "background-color 75ms",
+        transition: "background-color var(--duration-fast)",
       }}
       data-event-id={props.event.id}
       tabIndex={0}
