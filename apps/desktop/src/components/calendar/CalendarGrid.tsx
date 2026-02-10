@@ -404,7 +404,7 @@ export function CalendarGrid() {
                     overflow: "hidden",
                   }}
                 >
-                  <Show when={!isRestoringScrollPosition()}>
+                  <div style={{ visibility: isRestoringScrollPosition() ? "hidden" : "visible" }}>
                     <Show
                       when={allDay.shouldShowToggle()}
                       fallback={
@@ -432,7 +432,7 @@ export function CalendarGrid() {
                         )}
                       </button>
                     </Show>
-                  </Show>
+                  </div>
                 </div>
 
                 {/* Clipping wrapper */}
@@ -649,9 +649,11 @@ export function CalendarGrid() {
                         height: `${allDay.contentHeight()}px`,
                         "z-index": "-1",
                         "scroll-snap-align":
-                          visibleDaysCount() === 7 && !isWeekStart(date)
+                          isRestoringScrollPosition()
                             ? "none"
-                            : "start",
+                            : visibleDaysCount() === 7 && !isWeekStart(date)
+                              ? "none"
+                              : "start",
                         "scroll-snap-stop":
                           isWeekStart(date) && visibleDaysCount() >= 7
                             ? "always"

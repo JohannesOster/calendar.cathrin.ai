@@ -35,8 +35,8 @@ export function DaysStepperButton() {
       portalled={false}
       autoFocus={false}
     >
-      <div class="relative flex items-center gap-1">
-        {/* Count badge - shown when not a preset (1 = Day, 7 = Week).
+      <div class="relative flex items-center">
+        {/* Count badge - absolutely positioned so the ± trigger stays fixed.
              Uses CSS display toggle instead of <Show> to keep the visibleDaysCount
              subscription alive. Toggling <Show> at the 1↔2 boundary disposes/creates
              subscriptions in the same reactive cycle as the popover text node update,
@@ -103,8 +103,11 @@ function CountBadge(props: { showCountBadge: () => boolean }) {
   return (
     <button
       onClick={() => popover().setOpen(!popover().open)}
-      class="h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-fg bg-surface-hover hover:bg-border transition-colors text-xs font-medium"
-      style={{ display: props.showCountBadge() ? "flex" : "none" }}
+      class="absolute h-5 min-w-[1.25rem] px-1 flex items-center justify-center rounded text-fg bg-surface-hover hover:bg-border transition-colors text-xs font-medium"
+      style={{
+        right: "calc(100% + 4px)",
+        display: props.showCountBadge() ? "flex" : "none",
+      }}
       aria-label={`${visibleDaysCount()} days visible`}
     >
       {visibleDaysCount()}

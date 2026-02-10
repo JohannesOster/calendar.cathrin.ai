@@ -181,6 +181,12 @@ export function createGridLayout(deps: GridLayoutDeps) {
       deps.setFrozenLayout(computeLayout(newColWidth, finalScrollLeft));
 
       requestAnimationFrame(() => {
+        const ref3 = deps.getScrollContainerRef();
+        if (!ref3) return;
+        // Re-assert scroll position: WebKit's snap engine can shift scrollLeft
+        // during the paint between rAF1 and rAF2, even with scroll-snap-type: none,
+        // when snap-align values on children change (e.g., 7→6 day transition).
+        ref3.scrollLeft = finalScrollLeft;
         deps.setIsRestoringScrollPosition(false);
         deps.handleScroll();
 
