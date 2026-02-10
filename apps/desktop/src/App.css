@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --text-2xs: 0.625rem; /* 10px — secondary labels, time displays */
   --text-xs: 0.8125rem; /* 13px */
 }
 
@@ -238,6 +239,7 @@ body.dragging * {
   box-shadow: 0 4px 12px rgba(28, 27, 25, 0.5);
   cursor: grabbing !important;
   pointer-events: none;
+  transition: none;
 }
 
 /* Resize handle - bottom edge of timed events */

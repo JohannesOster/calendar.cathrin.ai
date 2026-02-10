@@ -108,7 +108,7 @@ export function MonthDayCell(props: MonthDayCellProps) {
       <div class="flex justify-end shrink-0">
         <button
           onClick={() => navigateToWeekView(props.dayInfo.date)}
-          class="w-5 h-5 flex items-center justify-center text-xs rounded-[3px] cursor-pointer transition-colors"
+          class="w-5 h-5 flex items-center justify-center text-xs rounded-md cursor-pointer transition-colors"
           classList={{
             "bg-fg text-surface hover:bg-accent-hover": isTodayDate(),
             "text-fg font-medium hover:bg-surface-hover": isFirstOfMonth() && !isTodayDate(),

@@ -174,7 +174,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     {/* Shadow/ghost at original position during inline time editing */}
     <Show when={shadowVisible()}>
       <div
-        class="absolute rounded-[4px] pointer-events-none"
+        class="absolute rounded-md pointer-events-none"
         style={{
           top: `${getShadowTop()}px`,
           height: `${getShadowHeight()}px`,
@@ -190,7 +190,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     <Show when={isVisible()}>
       <div
         data-event-placeholder
-        class="absolute rounded-[4px] overflow-hidden"
+        class="absolute rounded-md overflow-hidden"
         classList={{ "calendar-event": hasTitle() && isFirstSegment() }}
         style={{
           top: `${getTop()}px`,
@@ -242,7 +242,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
                   </div>
                 </Show>
                 <Show when={hasTitle() && draftStart() && draftEnd()}>
-                  <div class="text-[10px] font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
+                  <div class="text-2xs font-light mt-0.5 whitespace-nowrap" style={{ opacity: "0.8" }}>
                     {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatTime(draftStart()!) : `${formatTime(draftStart()!)} – ${formatTime(draftEnd()!)}`}
                   </div>
                 </Show>

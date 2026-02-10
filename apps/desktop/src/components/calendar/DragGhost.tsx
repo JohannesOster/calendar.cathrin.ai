@@ -103,7 +103,7 @@ export function DragGhost(props: DragGhostProps) {
   return (
     <Show when={isVisible()}>
       <div
-        class="absolute rounded-[4px] pointer-events-none"
+        class="absolute rounded-md pointer-events-none"
         style={{
           top: `${getTop()}px`,
           height: `${getHeight()}px`,

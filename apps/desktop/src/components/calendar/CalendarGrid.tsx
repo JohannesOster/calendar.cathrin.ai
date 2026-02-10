@@ -409,7 +409,7 @@ export function CalendarGrid() {
                       when={allDay.shouldShowToggle()}
                       fallback={
                         <Show when={allDay.allDayEventLayouts().length > 0 || (isCreating() && draftIsAllDay())}>
-                          <span class="text-[10px] text-fg-muted font-light">
+                          <span class="text-2xs text-fg-muted font-light">
                             All day
                           </span>
                         </Show>

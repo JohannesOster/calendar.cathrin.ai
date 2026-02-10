@@ -62,7 +62,7 @@ export function DateHeader(props: DateHeaderProps) {
         {dayName()}
       </span>
       <span
-        class="text-xs w-4 h-4 flex items-center justify-center rounded-[3px]"
+        class="text-xs w-4 h-4 flex items-center justify-center rounded-md"
         classList={{
           "bg-fg text-surface font-light ml-1": props.isToday,
           "text-fg-muted ml-px": !props.isToday,

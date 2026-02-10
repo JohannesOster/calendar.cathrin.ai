@@ -219,7 +219,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-[4px] transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
@@ -261,7 +261,7 @@ export function CalendarEvent(props: CalendarEventProps) {
               >
                 {props.event.title}
               </div>
-              <div class="text-[10px] font-light mt-0.5 opacity-80 whitespace-nowrap">
+              <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
                 {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatCompactTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
               </div>
             </Show>

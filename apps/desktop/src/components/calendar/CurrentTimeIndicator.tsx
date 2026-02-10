@@ -45,7 +45,7 @@ export function CurrentTimeBadge() {
       }}
     >
       {/* Time badge */}
-      <div class="absolute right-0 -translate-y-1/2 bg-today text-surface text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
+      <div class="absolute right-0 -translate-y-1/2 bg-today text-surface text-2xs font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
         {formatCurrentTime(now())}
       </div>
     </div>

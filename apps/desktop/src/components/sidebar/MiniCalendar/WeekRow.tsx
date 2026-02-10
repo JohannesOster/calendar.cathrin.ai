@@ -70,7 +70,7 @@ export function WeekRow(props: WeekRowProps) {
 
             return (
               <button
-                class="h-6 flex items-center justify-center text-xs transition-colors rounded-[4px]"
+                class="h-6 flex items-center justify-center text-xs transition-colors rounded-md"
                 classList={{
                   "text-fg": dayInfo.isCurrentMonth && !isTodayDate,
                   "text-fg-disabled": !dayInfo.isCurrentMonth && !isVisible(),
