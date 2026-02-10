@@ -70,12 +70,12 @@ export function WeekRow(props: WeekRowProps) {
 
             return (
               <button
-                class="h-6 flex items-center justify-center text-xs transition-colors rounded"
+                class="h-6 flex items-center justify-center text-xs transition-colors rounded-[4px]"
                 classList={{
                   "text-fg": dayInfo.isCurrentMonth && !isTodayDate,
                   "text-fg-disabled": !dayInfo.isCurrentMonth && !isVisible(),
                   "text-fg-muted": !dayInfo.isCurrentMonth && isVisible() && !isTodayDate,
-                  "bg-accent text-white hover:bg-accent": isTodayDate,
+                  "bg-fg text-surface hover:bg-fg": isTodayDate,
                   "hover:bg-surface-hover": !isTodayDate,
                 }}
                 onClick={() => props.onDayClick(dayInfo)}

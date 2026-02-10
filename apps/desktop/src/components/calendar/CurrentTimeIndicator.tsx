@@ -5,7 +5,7 @@ interface CurrentTimeIndicatorProps {
   visibleDaysCount: number;
 }
 
-const HOUR_HEIGHT = 48; // matches --grid-hour-height
+const HOUR_HEIGHT = 52; // matches --grid-hour-height
 
 function formatCurrentTime(date: Date): string {
   const hours = date.getHours();
@@ -45,7 +45,7 @@ export function CurrentTimeBadge() {
       }}
     >
       {/* Time badge */}
-      <div class="absolute right-0 -translate-y-1/2 bg-today text-white text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
+      <div class="absolute right-0 -translate-y-1/2 bg-today text-surface text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none whitespace-nowrap">
         {formatCurrentTime(now())}
       </div>
     </div>

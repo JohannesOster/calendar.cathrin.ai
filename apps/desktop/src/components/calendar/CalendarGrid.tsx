@@ -383,7 +383,7 @@ export function CalendarGrid() {
                   "z-index": "10",
                   height: `${allDay.visualAllDayHeight()}px`,
                   "margin-bottom": `${-(allDay.visualAllDayHeight() - ALL_DAY_BASE_HEIGHT)}px`,
-                  "box-shadow": allDay.allDayExpanded() ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+                  "border-bottom": allDay.allDayExpanded() ? "1px solid var(--color-border)" : "none",
                   width: "100%",
                   transform: "translateZ(0)",
                   contain: "layout",

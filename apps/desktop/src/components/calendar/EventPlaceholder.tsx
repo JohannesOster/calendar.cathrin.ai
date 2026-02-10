@@ -174,7 +174,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     {/* Shadow/ghost at original position during inline time editing */}
     <Show when={shadowVisible()}>
       <div
-        class="absolute rounded-lg pointer-events-none"
+        class="absolute rounded-[4px] pointer-events-none"
         style={{
           top: `${getShadowTop()}px`,
           height: `${getShadowHeight()}px`,
@@ -190,7 +190,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     <Show when={isVisible()}>
       <div
         data-event-placeholder
-        class="absolute rounded-lg overflow-hidden"
+        class="absolute rounded-[4px] overflow-hidden"
         classList={{ "calendar-event": hasTitle() && isFirstSegment() }}
         style={{
           top: `${getTop()}px`,

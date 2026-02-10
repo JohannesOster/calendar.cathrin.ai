@@ -528,7 +528,7 @@ export function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
   return (
     <For each={showFlash() ? [flashKey()] : []}>
       {() => (
-        <div class="absolute inset-0 bg-accent pointer-events-none animate-flash-highlight" />
+        <div class="absolute inset-0 bg-fg pointer-events-none animate-flash-highlight" />
       )}
     </For>
   );

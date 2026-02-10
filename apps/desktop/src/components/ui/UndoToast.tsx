@@ -61,7 +61,7 @@ export function UndoToastProvider() {
     >
       {(toast) => (
         <Toast.Root
-          class="bg-surface-active border border-border-light text-fg rounded-xl shadow-lg px-4 py-3 min-w-[280px] max-w-[400px] animate-toast-enter data-[state=closed]:animate-toast-exit"
+          class="bg-surface-active border border-border text-fg rounded-lg px-4 py-3 min-w-[280px] max-w-[400px] animate-toast-enter data-[state=closed]:animate-toast-exit"
         >
           <div class="flex items-start gap-2">
             <Info size={16} class="text-fg-muted shrink-0 mt-0.5" />

@@ -1,5 +1,6 @@
 import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js";
 import { flashDate } from "../../stores/calendar-navigation";
+import { isToday } from "../../lib/date-utils";
 import { CalendarEvent } from "./CalendarEvent";
 import { EventPlaceholder } from "./EventPlaceholder";
 import { DragGhost } from "./DragGhost";
@@ -212,7 +213,8 @@ export function DayColumn(props: DayColumnProps) {
       class="relative [contain:strict]"
       style={{ height: `${TOTAL_GRID_HEIGHT_PX}px` }}
       classList={{
-        "bg-surface-weekend": isWeekend(),
+        "bg-surface-weekend": isWeekend() && !isToday(props.date),
+        "today-column-tint": isToday(props.date),
       }}
       onMouseDown={handleMouseDown}
       onDblClick={handleDblClick}
@@ -244,7 +246,7 @@ export function DayColumn(props: DayColumnProps) {
       {/* Flash highlight overlay - For with key forces re-mount to restart CSS animation */}
       <For each={showFlash() ? [flashKey()] : []}>
         {() => (
-          <div class="absolute inset-0 bg-accent pointer-events-none animate-flash-highlight" />
+          <div class="absolute inset-0 bg-fg pointer-events-none animate-flash-highlight" />
         )}
       </For>
     </div>

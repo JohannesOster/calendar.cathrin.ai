@@ -10,7 +10,7 @@ export function MonthEventChip(props: MonthEventChipProps) {
 
   return (
     <div
-      class="flex items-center gap-1 px-1 py-0.5 rounded text-xs truncate cursor-pointer hover:brightness-95 transition-[filter]"
+      class="flex items-center gap-1 px-1 py-0.5 rounded-[4px] text-xs truncate cursor-pointer hover:brightness-95 transition-[filter]"
       style={{
         "border-left": `3px solid ${props.event.color}`,
         "background-color": `${props.event.color}15`,

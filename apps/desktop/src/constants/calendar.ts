@@ -8,7 +8,7 @@
 // =============================================================================
 
 /** Height in pixels for one hour on the calendar grid */
-export const HOUR_HEIGHT_PX = 48;
+export const HOUR_HEIGHT_PX = 52;
 
 /** Total grid height: 24 hours × HOUR_HEIGHT_PX */
 export const TOTAL_GRID_HEIGHT_PX = 24 * HOUR_HEIGHT_PX;
@@ -106,10 +106,10 @@ export const HOURS_PER_DAY = 24;
 export const MONTH_LABEL_HEIGHT = 36;
 
 /** Height of the day header row (px) - matches --grid-header-height */
-export const HEADER_HEIGHT = 30;
+export const HEADER_HEIGHT = 34;
 
 /** Fallback width for the time column (px) - matches --grid-time-col-width */
-export const TIME_COL_WIDTH_FALLBACK = 48;
+export const TIME_COL_WIDTH_FALLBACK = 52;
 
 /** Total height of the 24-hour time grid (px) */
 export const TOTAL_HEIGHT = HOURS_PER_DAY * HOUR_HEIGHT_PX;

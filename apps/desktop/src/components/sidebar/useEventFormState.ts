@@ -144,7 +144,7 @@ export function useEventFormState() {
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
     const event = selectedEvent();
-    return event?.color ?? "#4285f4";
+    return event?.color ?? "#8A8A8A";
   });
 
   function beginTimeEdit(which: "start" | "end"): void {

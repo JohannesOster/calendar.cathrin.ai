@@ -114,7 +114,7 @@ export function MiniCalendar() {
           <Show when={!isCurrentMonthView()}>
             <button
               onClick={goToToday}
-              class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
+              class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg"
               title="Go to today"
             >
               <RotateCcw size={SIDEBAR.ICON_MD} />
@@ -122,13 +122,13 @@ export function MiniCalendar() {
           </Show>
           <button
             onClick={prevMonth}
-            class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
+            class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg"
           >
             <ChevronLeft size={SIDEBAR.ICON_MD} />
           </button>
           <button
             onClick={nextMonth}
-            class="p-1 rounded-md hover:bg-surface-hover text-fg-muted hover:text-fg"
+            class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg"
           >
             <ChevronRight size={SIDEBAR.ICON_MD} />
           </button>
