@@ -131,13 +131,14 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
   if (patch.description !== undefined) apiPatch.description = patch.description;
   if (patch.location !== undefined) apiPatch.location = patch.location;
   if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+  const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {
-    apiPatch.start = patch.isAllDay
+    apiPatch.start = isAllDay
       ? formatDateOnly(patch.start)
       : patch.start.toISOString();
   }
   if (patch.end !== undefined) {
-    apiPatch.end = patch.isAllDay
+    apiPatch.end = isAllDay
       ? formatDateOnly(patch.end)
       : patch.end.toISOString();
   }

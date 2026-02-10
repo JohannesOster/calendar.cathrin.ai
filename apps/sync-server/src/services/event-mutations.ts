@@ -87,7 +87,7 @@ export async function updateEventViaGoogle(
   if (patch.description !== undefined) googlePatch.description = patch.description;
   if (patch.location !== undefined) googlePatch.location = patch.location;
 
-  const useDate = patch.isAllDay === true;
+  const useDate = patch.isAllDay ?? existingEvent.isAllDay;
   if (patch.start !== undefined) {
     googlePatch.start = useDate
       ? { date: patch.start.slice(0, 10), dateTime: null }
