@@ -834,12 +834,12 @@ function ReminderCombobox(props: { state: EventFormState }) {
       }}
       positioning={{ placement: "bottom-start", sameWidth: true }}
     >
-      <Combobox.Control class="flex items-center gap-2 rounded hover:bg-surface-hover transition-colors px-1.5 py-1 -mx-1.5">
+      <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 -mx-2">
         <Bell size={14} class="text-fg-muted shrink-0" />
         <Combobox.Input
           placeholder="Reminders"
           aria-label="Reminders"
-          class="flex-1 text-sm text-fg placeholder-fg-muted bg-transparent outline-none border-none cursor-text"
+          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors cursor-text"
         />
       </Combobox.Control>
       <Combobox.Positioner>
