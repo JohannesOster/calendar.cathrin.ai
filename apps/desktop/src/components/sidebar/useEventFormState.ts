@@ -82,6 +82,8 @@ export function useEventFormState() {
   let pendingPatch: EventPatch = {};
   /** Original values captured before the first pre-mutation of each field. */
   let pendingRollback: EventPatch = {};
+  /** Debounce timer for reminder add/remove so rapid changes batch into one PATCH. */
+  let reminderFlushTimer: ReturnType<typeof setTimeout> | null = null;
   /** Last selected event ID — survives signal disposal for onCleanup. */
   let activeEditEventId: string | null = null;
 
@@ -108,13 +110,17 @@ export function useEventFormState() {
   // below is the guaranteed fallback using activeEditEventId.
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
+      if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
       flushSave(prevId);
     }
   }));
 
   // Flush on unmount — uses activeEditEventId since selectedEventId() is
   // already null by the time <Show> disposes this component.
-  onCleanup(() => flushSave());
+  onCleanup(() => {
+    if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+    flushSave();
+  });
 
   // Populate edit signals when a *different* event is selected.
   // Track selectedEventId (a primitive) instead of selectedEvent (an object
@@ -127,6 +133,7 @@ export function useEventFormState() {
     if (!id) return;
     // Flush pending saves for the previous event before switching
     if (prevId && prevId !== id) {
+      if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
       flushSave(prevId);
     }
     activeEditEventId = id;
@@ -263,17 +270,24 @@ export function useEventFormState() {
   };
 
   const reminders = () => mode() === "create" ? draftReminders() : editReminders();
+  function flushRemindersDebounced(): void {
+    if (reminderFlushTimer) clearTimeout(reminderFlushTimer);
+    reminderFlushTimer = setTimeout(() => {
+      reminderFlushTimer = null;
+      flushSave();
+    }, 300);
+  }
   const addReminder = (minutes: number) => {
     const current = reminders();
     if (current.length >= 5 || current.some((r) => r.minutes === minutes)) return;
     const updated = [...current, { method: "popup" as const, minutes }];
     if (mode() === "create") { setDraftReminders(updated); }
-    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushSave(); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushRemindersDebounced(); }
   };
   const removeReminder = (minutes: number) => {
     const updated = reminders().filter((r) => r.minutes !== minutes);
     if (mode() === "create") { setDraftReminders(updated); }
-    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushSave(); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushRemindersDebounced(); }
   };
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
@@ -496,7 +510,7 @@ export function useEventFormState() {
   const visibilityCollection = createMemo(() =>
     createListCollection({
       items: [
-        { value: "default", label: "Default visibility" },
+        { value: "default", label: "Calendar default" },
         { value: "public", label: "Public" },
         { value: "private", label: "Private" },
       ],

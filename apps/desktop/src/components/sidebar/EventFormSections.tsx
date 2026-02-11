@@ -12,6 +12,9 @@ import {
   Copy,
   Calendar,
   LoaderCircle,
+  Eye,
+  CircleDot,
+  Circle,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select, createListCollection } from "@ark-ui/solid/select";
@@ -399,8 +402,14 @@ export function CalendarSection(props: SectionProps) {
           <Select.Control class="flex-1">
             <Select.Trigger
               aria-label="Free/Busy status"
-              class="flex items-center gap-1 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+              class="flex items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
             >
+              <Show
+                when={s.transparency() === "opaque"}
+                fallback={<Circle size={14} class="shrink-0" />}
+              >
+                <CircleDot size={14} class="shrink-0" />
+              </Show>
               <span>{s.transparency() === "opaque" ? "Busy" : "Free"}</span>
               <ChevronDown size={14} class="text-fg-muted shrink-0" />
             </Select.Trigger>
@@ -433,16 +442,14 @@ export function CalendarSection(props: SectionProps) {
           positioning={{ placement: "bottom-start" }}
         >
           <Select.Control class="flex-1">
-            <Select.Trigger class="flex items-center gap-1 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg">
-              <Show when={s.visibility() === "private"}>
-                <Lock size={14} class="shrink-0" />
-              </Show>
-              <Show when={s.visibility() === "public"}>
-                <Globe size={14} class="shrink-0" />
-              </Show>
+            <Select.Trigger
+              aria-label="Event visibility"
+              class="flex items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+            >
+              <Eye size={14} class="shrink-0" />
               <span>
                 {s.visibility() === "default"
-                  ? "Default visibility"
+                  ? "Calendar default"
                   : s.visibility() === "public"
                     ? "Public"
                     : "Private"}
@@ -458,15 +465,6 @@ export function CalendarSection(props: SectionProps) {
                     item={item}
                     class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
                   >
-                    <Show when={item.value === "public"}>
-                      <Globe size={14} class="shrink-0" />
-                    </Show>
-                    <Show when={item.value === "private"}>
-                      <Lock size={14} class="shrink-0" />
-                    </Show>
-                    <Show when={item.value === "default"}>
-                      <span class="w-3.5" />
-                    </Show>
                     <Select.ItemText>{item.label}</Select.ItemText>
                   </Select.Item>
                 )}
@@ -750,31 +748,28 @@ function ColorSelect(props: { state: EventFormState }) {
         <ChevronDown size={12} class="text-fg-muted shrink-0" />
       </Popover.Trigger>
       <Popover.Positioner>
-        <Popover.Content class="bg-surface border border-border rounded p-2 z-50 max-w-[208px]">
-          <div class="flex items-center gap-3 flex-wrap">
-            {/* Calendar default — dashed outline to distinguish */}
-            <Popover.CloseTrigger
-              class="w-5 h-5 rounded-full cursor-pointer shrink-0 transition-transform hover:scale-125 bg-transparent outline-none"
-              style={{
-                border: `1.5px dashed ${s.calendarColor()}`,
-                "box-shadow": isSelected(null)
-                  ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${s.calendarColor()}`
-                  : undefined,
-              }}
-              title="Calendar default"
-              onClick={() => s.setColorId(null)}
+        <Popover.Content class="bg-surface border border-border rounded z-50 max-w-[180px]">
+          {/* Header — calendar default */}
+          <Popover.CloseTrigger
+            class="flex items-center gap-2 w-full px-3 py-2 cursor-pointer bg-transparent border-none outline-none hover:bg-surface-hover transition-colors rounded-t"
+            onClick={() => s.setColorId(null)}
+          >
+            <div
+              class="w-3.5 h-3.5 rounded-full shrink-0"
+              style={ringStyle(s.calendarColor(), isSelected(null))}
             />
-            {/* Other palette colors */}
+            <span class="text-xs text-fg-muted">Calendar default</span>
+          </Popover.CloseTrigger>
+          {/* Body — palette swatches */}
+          <div class="flex items-center gap-x-3 gap-y-3 flex-wrap px-3 pt-3 pb-4 border-t border-border">
             <For each={otherSwatches()}>
               {(swatch) => (
                 <Popover.CloseTrigger
-                  class="w-5 h-5 rounded-full cursor-pointer shrink-0 transition-transform hover:scale-125 bg-transparent border-none outline-none"
+                  class="w-3.5 h-3.5 rounded-full cursor-pointer shrink-0 transition-transform hover:scale-125 bg-transparent border-none outline-none"
                   style={ringStyle(
                     CATHRIN_PALETTE[swatch.key],
                     isSelected(swatch.key),
-                    "full",
                   )}
-                  title={swatch.label}
                   onClick={() => s.setColorId(swatch.key)}
                 />
               )}
@@ -850,12 +845,12 @@ function ReminderCombobox(props: { state: EventFormState }) {
       }}
       positioning={{ placement: "bottom-start", sameWidth: true }}
     >
-      <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2">
+      <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <Bell size={14} class="text-fg-muted shrink-0" />
         <Combobox.Input
           placeholder="Reminders"
           aria-label="Reminders"
-          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors cursor-text"
+          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none cursor-text"
         />
       </Combobox.Control>
       <Combobox.Positioner>
