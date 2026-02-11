@@ -505,6 +505,17 @@ export function useEventFormState() {
     })
   );
 
+  const transparencyCollection = createMemo(() =>
+    createListCollection({
+      items: [
+        { value: "opaque", label: "Busy" },
+        { value: "transparent", label: "Free" },
+      ],
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
   return {
     mode,
     title,
@@ -549,6 +560,7 @@ export function useEventFormState() {
     canMoveCalendar,
     calendarCollection,
     visibilityCollection,
+    transparencyCollection,
     get savedTimedStart() { return savedTimedStart; },
     set savedTimedStart(v: Date | null) { savedTimedStart = v; },
     get savedTimedEnd() { return savedTimedEnd; },
