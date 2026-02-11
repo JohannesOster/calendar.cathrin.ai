@@ -13,6 +13,7 @@ import {
   Calendar,
   LoaderCircle,
   Eye,
+  EyeOff,
   CircleDot,
   Circle,
 } from "lucide-solid";
@@ -387,36 +388,96 @@ export function CalendarSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-3 border-t border-border">
-      <div class="flex items-center">
-        <Select.Root
-          collection={s.transparencyCollection()}
-          value={[s.transparency()]}
-          onValueChange={(details) => {
-            const val = details.value[0];
-            if (val === "opaque" || val === "transparent") {
-              s.setTransparency(val);
-            }
-          }}
-          positioning={{ placement: "bottom-start" }}
-        >
-          <Select.Control class="flex-1">
-            <Select.Trigger
-              aria-label="Free/Busy status"
-              class="flex items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
-            >
-              <Show
-                when={s.transparency() === "opaque"}
-                fallback={<Circle size={14} class="shrink-0" />}
+      <div class="flex items-center gap-2">
+        <div class="w-2/5 shrink-0">
+          <Select.Root
+            collection={s.transparencyCollection()}
+            value={[s.transparency()]}
+            onValueChange={(details) => {
+              const val = details.value[0];
+              if (val === "opaque" || val === "transparent") {
+                s.setTransparency(val);
+              }
+            }}
+            positioning={{ placement: "bottom-start" }}
+          >
+            <Select.Control>
+              <Select.Trigger
+                aria-label="Free/Busy status"
+                class="flex w-full items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
               >
-                <CircleDot size={14} class="shrink-0" />
-              </Show>
-              <span>{s.transparency() === "opaque" ? "Busy" : "Free"}</span>
-              <ChevronDown size={14} class="text-fg-muted shrink-0" />
-            </Select.Trigger>
-          </Select.Control>
+                <Show
+                  when={s.transparency() === "opaque"}
+                  fallback={<Circle size={14} class="shrink-0" />}
+                >
+                  <CircleDot size={14} class="shrink-0" />
+                </Show>
+                <span class="flex-1 text-left">{s.transparency() === "opaque" ? "Busy" : "Free"}</span>
+                <ChevronDown size={14} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+            </Select.Control>
+            <Select.Positioner>
+              <Select.Content class="bg-surface border border-border rounded py-1 z-50">
+                <For each={s.transparencyCollection().items}>
+                  {(item) => (
+                    <Select.Item
+                      item={item}
+                      class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                    >
+                      <Select.ItemText>{item.label}</Select.ItemText>
+                    </Select.Item>
+                  )}
+                </For>
+              </Select.Content>
+            </Select.Positioner>
+            <Select.HiddenSelect />
+          </Select.Root>
+        </div>
+        <div class="w-px h-4 bg-border shrink-0" />
+        <div class="w-3/5">
+          <Select.Root
+            collection={s.visibilityCollection()}
+            value={[s.visibility()]}
+            onValueChange={(details) => {
+              const val = details.value[0];
+              if (val === "default" || val === "public" || val === "private") {
+                s.setVisibility(val);
+              }
+            }}
+            positioning={{ placement: "bottom-start" }}
+          >
+            <Select.Control>
+              <Select.Trigger
+                aria-label="Event visibility"
+                class="flex w-full items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+              >
+                <Show
+                  when={s.visibility() === "private"}
+                  fallback={<Eye size={14} class="shrink-0" />}
+                >
+                  <EyeOff size={14} class="shrink-0" />
+                </Show>
+                <span class="flex-1 text-left">
+                  {s.visibility() === "default"
+                    ? "Default"
+                    : s.visibility() === "public"
+                      ? "Public"
+                      : "Private"}
+                </span>
+                <ChevronDown size={14} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+            </Select.Control>
           <Select.Positioner>
-            <Select.Content class="bg-surface border border-border rounded py-1 z-50">
-              <For each={s.transparencyCollection().items}>
+            <Select.Content class="bg-surface border border-border rounded z-50">
+              {/* Default — separated like color selector's "Calendar default" */}
+              <Select.Item
+                item={s.visibilityCollection().items[0]}
+                class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+              >
+                <Select.ItemText>Default</Select.ItemText>
+              </Select.Item>
+              <div class="border-t border-border" />
+              <For each={s.visibilityCollection().items.slice(1)}>
                 {(item) => (
                   <Select.Item
                     item={item}
@@ -430,49 +491,7 @@ export function CalendarSection(props: SectionProps) {
           </Select.Positioner>
           <Select.HiddenSelect />
         </Select.Root>
-        <Select.Root
-          collection={s.visibilityCollection()}
-          value={[s.visibility()]}
-          onValueChange={(details) => {
-            const val = details.value[0];
-            if (val === "default" || val === "public" || val === "private") {
-              s.setVisibility(val);
-            }
-          }}
-          positioning={{ placement: "bottom-start" }}
-        >
-          <Select.Control class="flex-1">
-            <Select.Trigger
-              aria-label="Event visibility"
-              class="flex items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
-            >
-              <Eye size={14} class="shrink-0" />
-              <span>
-                {s.visibility() === "default"
-                  ? "Calendar default"
-                  : s.visibility() === "public"
-                    ? "Public"
-                    : "Private"}
-              </span>
-              <ChevronDown size={14} class="text-fg-muted shrink-0" />
-            </Select.Trigger>
-          </Select.Control>
-          <Select.Positioner>
-            <Select.Content class="bg-surface border border-border rounded py-1 z-50">
-              <For each={s.visibilityCollection().items}>
-                {(item) => (
-                  <Select.Item
-                    item={item}
-                    class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
-                  >
-                    <Select.ItemText>{item.label}</Select.ItemText>
-                  </Select.Item>
-                )}
-              </For>
-            </Select.Content>
-          </Select.Positioner>
-          <Select.HiddenSelect />
-        </Select.Root>
+        </div>
       </div>
     </div>
   );

@@ -510,7 +510,7 @@ export function useEventFormState() {
   const visibilityCollection = createMemo(() =>
     createListCollection({
       items: [
-        { value: "default", label: "Calendar default" },
+        { value: "default", label: "Default" },
         { value: "public", label: "Public" },
         { value: "private", label: "Private" },
       ],
