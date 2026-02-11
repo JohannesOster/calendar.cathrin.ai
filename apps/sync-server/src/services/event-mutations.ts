@@ -260,6 +260,10 @@ export async function deleteEventViaGoogle(
  * Move an event to a different calendar via Google Calendar API.
  * Updates calendarId and color in the local cache.
  * Returns the updated ApiCalendarEvent.
+ *
+ * IMPORTANT: Once Google processes the move, the DB MUST be updated —
+ * otherwise background sync will delete the event from the old calendar's
+ * cache and it becomes invisible until the new calendar is re-fetched.
  */
 export async function moveEventViaGoogle(
   accountId: string,
@@ -273,16 +277,23 @@ export async function moveEventViaGoogle(
   const service = new GoogleCalendarService(accessToken);
   await service.moveEvent(sourceCalendarId, googleEventId, destinationCalendarId);
 
+  // Google succeeded — update DB. If this fails, the event will vanish from
+  // the UI until the next full sync picks it up from the new calendar.
   const color = destinationColor || "#4285f4";
 
-  await db!
-    .update(serverEvents)
-    .set({
-      calendarId: destinationCalendarId,
-      color,
-      updatedAt: new Date(),
-    })
-    .where(eq(serverEvents.id, eventDbId));
+  try {
+    await db!
+      .update(serverEvents)
+      .set({
+        calendarId: destinationCalendarId,
+        color,
+        updatedAt: new Date(),
+      })
+      .where(eq(serverEvents.id, eventDbId));
+  } catch (dbError) {
+    console.error(`[events] CRITICAL: Google moved event ${googleEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
+    throw dbError;
+  }
 
   const updated = await db!.query.serverEvents.findFirst({
     where: eq(serverEvents.id, eventDbId),
