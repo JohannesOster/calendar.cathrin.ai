@@ -297,7 +297,7 @@ export function DetailsSection(props: SectionProps) {
                 {(cal) => (
                   <Select.Item
                     item={cal}
-                    class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                    class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
                   >
                     <div
                       class="w-2.5 h-2.5 rounded-full shrink-0"
@@ -331,7 +331,7 @@ export function DescriptionSection(props: SectionProps) {
           e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 160) + "px";
         }}
         onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-        class="w-full text-xs text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+        class="w-full text-sm text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         rows={2}
       />
     </div>
