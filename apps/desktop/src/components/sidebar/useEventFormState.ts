@@ -35,7 +35,7 @@ import {
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, setEvents, events } from "../../stores/events";
+import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
@@ -198,7 +198,30 @@ export function useEventFormState() {
     setEditIsAllDay(v);
   };
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
-  const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
+  const setCalId = (v: string | null) => {
+    if (mode() === "create") {
+      setDraftCalendarId(v);
+      return;
+    }
+    // Edit mode: trigger a move operation (separate from autosave)
+    const eventId = selectedEventId();
+    const currentCalId = editCalendarId();
+    if (!eventId || !v || v === currentCalId) return;
+
+    // Find target calendar color
+    let targetColor = CATHRIN_PALETTE.graphite;
+    for (const acc of connectedAccounts()) {
+      const cal = acc.calendars.find((c) => c.id === v);
+      if (cal) { targetColor = cal.color; break; }
+    }
+
+    setEditCalendarId(v);
+    moveEvent(eventId, v, targetColor).catch((err) => {
+      console.error("[move] Failed to move event:", err);
+      // Rollback the local signal on failure (store already rolls back events signal)
+      setEditCalendarId(currentCalId);
+    });
+  };
 
   const transparency = () => mode() === "create" ? draftTransparency() : editTransparency();
   const setTransparency = (v: "opaque" | "transparent") => {
@@ -438,9 +461,33 @@ export function useEventFormState() {
       );
   });
 
+  // In edit mode: only calendars from the same account as the event
+  const editCalendars = createMemo(() => {
+    if (mode() !== "edit") return allCalendars();
+    const calId = editCalendarId();
+    if (!calId) return allCalendars();
+    // Find which account owns the event's calendar
+    const ownerAccount = connectedAccounts().find((a) =>
+      a.calendars.some((c) => c.id === calId)
+    );
+    if (!ownerAccount) return allCalendars();
+    return ownerAccount.calendars
+      .filter((c) => c.visible)
+      .map((c) => ({ ...c, accountEmail: ownerAccount.email }));
+  });
+
+  // Whether the calendar picker should be interactive in edit mode
+  const canMoveCalendar = createMemo(() => {
+    if (mode() !== "edit") return true; // create mode always allows picking
+    const event = selectedEvent();
+    if (!event) return false;
+    if (event.isReadOnly) return false;
+    return editCalendars().length > 1;
+  });
+
   const calendarCollection = createMemo(() =>
     createListCollection({
-      items: allCalendars(),
+      items: mode() === "edit" ? editCalendars() : allCalendars(),
       itemToValue: (item) => item.id,
       itemToString: (item) => item.name,
     })
@@ -499,6 +546,7 @@ export function useEventFormState() {
     removeConferencing,
     flushSave,
     allCalendars,
+    canMoveCalendar,
     calendarCollection,
     visibilityCollection,
     get savedTimedStart() { return savedTimedStart; },

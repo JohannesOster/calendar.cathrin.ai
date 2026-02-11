@@ -200,5 +200,52 @@ export async function updateEvent(
   }
 }
 
+// =============================================================================
+// Move Event (Calendar Reassignment)
+// =============================================================================
+
+/**
+ * Move an event to a different calendar. Optimistic update with rollback.
+ * Uses a dedicated /move endpoint, not the PATCH path.
+ */
+export async function moveEvent(
+  eventId: string,
+  targetCalendarId: string,
+  targetCalendarColor: string,
+): Promise<void> {
+  const event = events().find((e) => e.id === eventId);
+  if (!event) return;
+
+  const originalCalendarId = event.calendarId;
+  const originalColor = event.color;
+
+  // Optimistic update
+  setEvents((prev) =>
+    prev.map((e) =>
+      e.id === eventId
+        ? { ...e, calendarId: targetCalendarId, color: targetCalendarColor }
+        : e
+    )
+  );
+
+  try {
+    await apiFetch(`/api/events/${encodeURIComponent(eventId)}/move`, {
+      method: "POST",
+      body: JSON.stringify({ targetCalendarId }),
+    });
+    _revalidateWeeksForDates?.(event.start);
+  } catch (error) {
+    console.error(`[events] Failed to move event ${eventId}:`, error);
+    // Rollback
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId
+          ? { ...e, calendarId: originalCalendarId, color: originalColor }
+          : e
+      )
+    );
+  }
+}
+
 // Re-export week utilities for convenience
 export { getWeekId, getWeekBounds, getWeeksInRange };

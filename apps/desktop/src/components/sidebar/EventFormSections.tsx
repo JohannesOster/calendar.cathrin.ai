@@ -249,7 +249,7 @@ export function DetailsSection(props: SectionProps) {
         />
       </div>
       <Show
-        when={s.mode() === "create"}
+        when={s.mode() === "create" || s.canMoveCalendar()}
         fallback={
           <div class="flex items-center gap-2">
             <div
