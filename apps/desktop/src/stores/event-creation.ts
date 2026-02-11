@@ -221,6 +221,7 @@ export function commitCreation(): boolean {
     color,
     location,
     description,
+    isReadOnly: false,
   });
 
   // Reset creation state

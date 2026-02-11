@@ -35,6 +35,8 @@ export interface ApiCalendarEvent {
   provider: Provider;
   location?: string;
   description?: string;
+  isReadOnly: boolean;
+  readOnlyReason?: string;
 }
 
 /**
@@ -47,6 +49,7 @@ export interface ApiCalendar {
   color: string;
   visible: boolean;
   provider: Provider;
+  accessRole?: string;
 }
 
 /**

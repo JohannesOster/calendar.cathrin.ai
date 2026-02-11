@@ -57,6 +57,7 @@ export async function createEventViaGoogle(
     provider: "google",
     location: googleEvent.location || location || undefined,
     description: googleEvent.description || description || undefined,
+    isReadOnly: false,
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -139,6 +140,8 @@ export async function updateEventViaGoogle(
     provider: "google",
     location: updated.location || undefined,
     description: updated.description || undefined,
+    isReadOnly: existingEvent.isReadOnly ?? false,
+    readOnlyReason: existingEvent.readOnlyReason || undefined,
   };
 }
 

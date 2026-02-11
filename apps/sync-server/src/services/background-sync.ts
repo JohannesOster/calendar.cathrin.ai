@@ -1,4 +1,4 @@
-import { eq, or } from "drizzle-orm";
+import { eq, or, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
@@ -281,22 +281,38 @@ async function syncAccount(
   let totalUpdated = 0;
   let totalDeleted = 0;
 
-  // Get calendar colors for events
+  // Get calendar colors and access roles for events
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
   const calendarList = await service.fetchCalendarList();
   const colorMap = new Map(calendarList.map((c) => [c.id, c.color]));
+  const accessRoleMap = new Map(calendarList.map((c) => [c.id, c.accessRole]));
+
+  // Update stored accessRole for each calendar (may have changed)
+  for (const cal of calendarList) {
+    await db
+      .update(calendarSyncState)
+      .set({ accessRole: cal.accessRole ?? null })
+      .where(
+        and(
+          eq(calendarSyncState.accountId, accountId),
+          eq(calendarSyncState.calendarId, cal.id)
+        )
+      );
+  }
 
   for (const calendar of calendars) {
     try {
       const color = colorMap.get(calendar.calendarId) || "#4285f4";
+      const accessRole = accessRoleMap.get(calendar.calendarId);
 
       if (calendar.syncToken) {
         // Do incremental sync
         const result = await syncCalendarIncremental(
           accountId,
           calendar.calendarId,
-          color
+          color,
+          accessRole
         );
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
@@ -316,7 +332,8 @@ async function syncAccount(
           calendar.calendarId,
           color,
           timeMin,
-          timeMax
+          timeMax,
+          accessRole
         );
         totalUpdated += result.synced;
       }
@@ -348,6 +365,7 @@ async function initializeCalendarSyncState(accountId: string): Promise<void> {
       .values({
         accountId,
         calendarId: calendar.id,
+        accessRole: calendar.accessRole ?? null,
         lastSyncAt: new Date(),
       })
       .onConflictDoNothing();

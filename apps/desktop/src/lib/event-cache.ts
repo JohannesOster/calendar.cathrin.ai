@@ -236,6 +236,7 @@ export async function loadEventsFromDisk(
       end: new Date(event.end),
       isAllDay: event.is_all_day,
       color: event.color,
+      isReadOnly: false,
     }));
   } catch (error) {
     console.warn("[event-cache] Failed to load from cache:", error);

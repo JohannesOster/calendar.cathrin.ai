@@ -49,6 +49,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   };
 
   const handlePointerMove = (e: PointerEvent) => {
+    if (props.event.isReadOnly) return;
     const edge = getEdge(e.clientX);
     if (chipRef) {
       chipRef.style.cursor = edge ? "col-resize" : "pointer";
@@ -56,6 +57,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   };
 
   const handlePointerLeave = () => {
+    if (props.event.isReadOnly) return;
     if (chipRef) {
       chipRef.style.cursor = "pointer";
     }
@@ -63,6 +65,14 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   const handlePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
+
+    // Read-only events: click-to-select only, no drag
+    if (props.event.isReadOnly) {
+      e.preventDefault();
+      chipRef?.focus();
+      selectEvent(props.event.id);
+      return;
+    }
 
     // Edge drag: resize the day span (works for both all-day and multi-day timed)
     const edge = getEdge(e.clientX);
@@ -153,16 +163,17 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   const ariaLabel = () => {
     const type = hasTimes() ? "multi-day timed event" : "all-day event";
     const base = `${props.event.title}, ${type}, ${formatDateRange(props.event.start, props.event.end)}`;
-    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}`;
-    return base;
+    const suffix = props.event.isReadOnly ? ", view only" : "";
+    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}${suffix}`;
+    return `${base}${suffix}`;
   };
 
   return (
     <div
       ref={chipRef}
-      class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
+      class={`all-day-chip absolute flex items-center px-1.5 text-xs truncate transition-[background-color] ${props.event.isReadOnly ? "cursor-default" : "cursor-pointer"}`}
       classList={{
-        "all-day-chip--selected": isSelected(),
+        "all-day-chip--selected": isSelected() || isDragging(),
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
       onPointerDown={handlePointerDown}

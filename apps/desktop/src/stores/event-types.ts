@@ -15,6 +15,8 @@ export interface CalendarEvent {
   color: string;
   location?: string;
   description?: string;
+  isReadOnly: boolean;
+  readOnlyReason?: string;
 }
 
 export type EventPatch = {
@@ -37,5 +39,7 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     color: mapProviderColor(event.color),
     location: event.location,
     description: event.description,
+    isReadOnly: event.isReadOnly,
+    readOnlyReason: event.readOnlyReason,
   };
 }

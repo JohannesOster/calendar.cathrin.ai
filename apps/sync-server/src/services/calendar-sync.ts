@@ -1,6 +1,6 @@
 import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents, fetchedWeeks } from "../db/schema.js";
+import { serverEvents, fetchedWeeks, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { getDateBoundsForWeeks } from "../lib/week-utils.js";
@@ -17,7 +17,8 @@ export async function ensureWeeksFetched(
   accountId: string,
   calendarId: string,
   calendarColor: string,
-  weeksNeeded: string[]
+  weeksNeeded: string[],
+  calendarAccessRole?: string
 ): Promise<void> {
   if (!db) return;
 
@@ -54,7 +55,8 @@ export async function ensureWeeksFetched(
       calendarId,
       start.toISOString(),
       end.toISOString(),
-      calendarColor
+      calendarColor,
+      calendarAccessRole
     );
 
     console.log(
@@ -117,6 +119,7 @@ export type CalendarInfo = {
   accountId: string;
   calendarId: string;
   color: string;
+  accessRole?: string;
 };
 
 /**
@@ -227,6 +230,20 @@ export async function getCalendarsToCheck(
           color: "#4285f4",
         });
       }
+    }
+  }
+
+  // Enrich with accessRole from calendarSyncState
+  if (calendarsToCheck.length > 0) {
+    const syncStates = await db.query.calendarSyncState.findMany({
+      where: inArray(calendarSyncState.accountId, accountIds),
+      columns: { accountId: true, calendarId: true, accessRole: true },
+    });
+    const roleMap = new Map(
+      syncStates.map((s) => [`${s.accountId}:${s.calendarId}`, s.accessRole])
+    );
+    for (const cal of calendarsToCheck) {
+      cal.accessRole = roleMap.get(`${cal.accountId}:${cal.calendarId}`) ?? undefined;
     }
   }
 

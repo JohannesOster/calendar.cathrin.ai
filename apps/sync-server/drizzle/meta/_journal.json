@@ -43,6 +43,13 @@
       "when": 1770624968145,
       "tag": "0005_smiling_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1770825166460,
+      "tag": "0006_graceful_rhodey",
+      "breakpoints": true
     }
   ]
 }

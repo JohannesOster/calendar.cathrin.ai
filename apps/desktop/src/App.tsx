@@ -4,9 +4,10 @@ import { AppShell, setRightSidebarOpen } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
+import { EventDetailPanel } from "./components/sidebar/EventDetailPanel";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { isDragActive } from "./stores/event-drag";
-import { selectedEventId } from "./stores/event-selection";
+import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
@@ -166,7 +167,9 @@ function App() {
         leftSidebar={<LeftSidebar />}
         rightSidebar={
           <Show when={isCreating() || selectedEventId()}>
-            <EventForm />
+            <Show when={selectedEvent()?.isReadOnly} fallback={<EventForm />}>
+              <EventDetailPanel event={selectedEvent()!} />
+            </Show>
           </Show>
         }
       >

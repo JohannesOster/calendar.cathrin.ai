@@ -183,7 +183,6 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     const dayShift = Math.round(
       (targetStartDay.getTime() - originalStartDay.getTime()) / 86_400_000,
     );
-    if (dayShift === 0) return;
 
     const newStart = new Date(drag.originalStart);
     newStart.setDate(newStart.getDate() + dayShift);

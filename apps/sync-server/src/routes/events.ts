@@ -59,7 +59,7 @@ export const eventsRoute = new Hono()
 
     await Promise.all(
       calendarsToCheck.map((cal) =>
-        ensureWeeksFetched(cal.accountId, cal.calendarId, cal.color, weeksNeeded)
+        ensureWeeksFetched(cal.accountId, cal.calendarId, cal.color, weeksNeeded, cal.accessRole)
       )
     );
 
