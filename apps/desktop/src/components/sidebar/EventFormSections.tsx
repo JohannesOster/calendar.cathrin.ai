@@ -479,11 +479,11 @@ export function RemindersSection(props: SectionProps) {
               >
                 {formatReminderChip(r.minutes)}
                 <button
-                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer p-1.5"
                   onClick={() => s.removeReminder(r.minutes)}
                   aria-label={`Remove ${formatReminderChip(r.minutes)} reminder`}
                 >
-                  <X size={10} />
+                  <X size={12} />
                 </button>
               </span>
             )}
@@ -491,7 +491,7 @@ export function RemindersSection(props: SectionProps) {
           <Show when={s.reminders().length < 5}>
             <ReminderPopover state={s}>
               <Popover.Trigger
-                class="w-5 h-5 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
+                class="w-6 h-6 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
                 aria-label="Add another reminder"
               >
                 <Plus size={12} />
@@ -723,11 +723,11 @@ function ColorPickerPopover(props: { state: EventFormState }) {
               onBlur={hideTooltip}
             >
               <div
-                class="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                class="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
                 style={{ "background-color": s.calendarColor() }}
               >
                 <Show when={s.colorId() === null}>
-                  <Check size={10} class="text-white" />
+                  <Check size={12} class="text-white" />
                 </Show>
               </div>
               <span class="text-xs text-fg-muted">Calendar default</span>
@@ -744,7 +744,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
                     role="radio"
                     aria-checked={s.colorId() === swatch.key}
                     aria-label={swatch.label}
-                    class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
+                    class="w-6 h-6 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
                     style={{ "background-color": CATHRIN_PALETTE[swatch.key] }}
                     onClick={() => s.setColorId(swatch.key)}
                     onMouseEnter={(e: MouseEvent) => showTooltip(swatch.label, e.currentTarget as HTMLElement)}
@@ -753,7 +753,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
                     onBlur={hideTooltip}
                   >
                     <Show when={s.colorId() === swatch.key}>
-                      <Check size={10} class="text-white" />
+                      <Check size={12} class="text-white" />
                     </Show>
                   </Popover.CloseTrigger>
                 )}
@@ -781,7 +781,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
         <button
           type="button"
           aria-label="Reset to calendar default"
-          class="p-0.5 rounded hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg cursor-pointer bg-transparent border-none outline-none shrink-0"
+          class="p-1.5 rounded hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg cursor-pointer bg-transparent border-none outline-none shrink-0"
           onClick={() => s.setColorId(null)}
         >
           <X size={12} />
