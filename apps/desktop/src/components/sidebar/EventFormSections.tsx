@@ -674,7 +674,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
               role="radio"
               aria-checked={s.colorId() === null}
               aria-label="Calendar default"
-              class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125 ring-1 ring-border-light ring-offset-1 ring-offset-surface"
+              class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
               style={{ "background-color": s.calendarColor() }}
               onClick={() => s.setColorId(null)}
             >
