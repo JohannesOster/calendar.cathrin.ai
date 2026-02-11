@@ -445,10 +445,10 @@ const REMINDER_PRESETS = [
   { minutes: 1440, label: "1 day" },
 ];
 
-function formatReminderChip(minutes: number): string {
-  if (minutes >= 1440) return `${minutes / 1440} day before`;
-  if (minutes >= 60) return `${minutes / 60}hr before`;
-  return `${minutes}min before`;
+function formatReminderValue(minutes: number): string {
+  if (minutes >= 1440) return `${minutes / 1440} day`;
+  if (minutes >= 60) return `${minutes / 60}hr`;
+  return `${minutes}min`;
 }
 
 function parseReminderInput(input: string): number | null {
@@ -479,13 +479,13 @@ export function RemindersSection(props: SectionProps) {
             {(r) => (
               <span
                 class="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 bg-surface-hover text-fg"
-                aria-label={`${formatReminderChip(r.minutes)}, press delete to remove`}
+                aria-label={`${formatReminderValue(r.minutes)} before, press delete to remove`}
               >
-                {formatReminderChip(r.minutes)}
+                {formatReminderValue(r.minutes)} <span class="text-fg-muted">before</span>
                 <button
                   class="text-fg-muted hover:text-fg transition-colors cursor-pointer p-1.5"
                   onClick={() => s.removeReminder(r.minutes)}
-                  aria-label={`Remove ${formatReminderChip(r.minutes)} reminder`}
+                  aria-label={`Remove ${formatReminderValue(r.minutes)} before reminder`}
                 >
                   <X size={12} />
                 </button>
