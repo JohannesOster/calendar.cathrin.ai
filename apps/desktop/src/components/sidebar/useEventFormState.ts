@@ -16,6 +16,16 @@ import {
   setDraftLocation,
   draftDescription,
   setDraftDescription,
+  draftTransparency,
+  setDraftTransparency,
+  draftVisibility,
+  setDraftVisibility,
+  draftReminders,
+  setDraftReminders,
+  draftColorId,
+  setDraftColorId,
+  draftConferencing,
+  setDraftConferencing,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -23,9 +33,12 @@ import {
   setShadowEnd,
 } from "../../stores/event-creation";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
+import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, setEvents } from "../../stores/events";
+import { updateEvent, setEvents, events } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
+import { apiFetch } from "../../lib/api";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { toTimeText, parseTimeInput } from "../../lib/format-utils";
 
@@ -48,23 +61,37 @@ export function useEventFormState() {
   const [editDescription, setEditDescription] = createSignal("");
   const [editIsAllDay, setEditIsAllDay] = createSignal(false);
   const [editCalendarId, setEditCalendarId] = createSignal<string | null>(null);
+  const [editTransparency, setEditTransparency] = createSignal<"opaque" | "transparent">("opaque");
+  const [editVisibility, setEditVisibility] = createSignal<"default" | "public" | "private">("default");
+  const [editReminders, setEditReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
+  const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
+  const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
+  const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
   // ===========================================================================
   // Autosave infrastructure (edit mode only)
+  //
+  // The EventForm lives inside <Show when={selectedEventId()}>. When the
+  // signal becomes null, Show disposes children (and their effects) BEFORE
+  // those effects can react. So the deselection effect below may never fire.
+  // We track the active event ID in a plain variable so onCleanup can always
+  // flush pending changes even after the signal is null.
   // ===========================================================================
   let pendingPatch: EventPatch = {};
   /** Original values captured before the first pre-mutation of each field. */
   let pendingRollback: EventPatch = {};
+  /** Last selected event ID — survives signal disposal for onCleanup. */
+  let activeEditEventId: string | null = null;
 
   /** Accumulate a field change. Flushed on blur via flushSave(). */
   function scheduleSave(patch: EventPatch): void {
     Object.assign(pendingPatch, patch);
   }
 
-  function flushSave(): void {
-    const eventId = selectedEventId();
+  function flushSave(overrideEventId?: string): void {
+    const eventId = overrideEventId ?? activeEditEventId ?? selectedEventId();
     if (!eventId || Object.keys(pendingPatch).length === 0) return;
 
     const patchToSend = { ...pendingPatch };
@@ -76,20 +103,35 @@ export function useEventFormState() {
     );
   }
 
-  // Flush pending save when deselecting (sidebar closes)
+  // Flush pending save when deselecting (sidebar closes).
+  // Note: this effect may be disposed by <Show> before it runs. onCleanup
+  // below is the guaranteed fallback using activeEditEventId.
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
-      flushSave();
+      flushSave(prevId);
     }
   }));
 
-  // Flush on unmount
+  // Flush on unmount — uses activeEditEventId since selectedEventId() is
+  // already null by the time <Show> disposes this component.
   onCleanup(() => flushSave());
 
-  // Populate edit signals whenever the selected event changes
-  createEffect(on(selectedEvent, (event) => {
+  // Populate edit signals when a *different* event is selected.
+  // Track selectedEventId (a primitive) instead of selectedEvent (an object
+  // whose reference changes on every setEvents call). This prevents the effect
+  // from re-running during live chip updates (e.g. title keystroke → setEvents
+  // → new selectedEvent ref → effect would clear pendingPatch mid-edit).
+  // events() is read inside the callback which runs in untrack(), so it does
+  // not become a dependency.
+  createEffect(on(selectedEventId, (id, prevId) => {
+    if (!id) return;
+    // Flush pending saves for the previous event before switching
+    if (prevId && prevId !== id) {
+      flushSave(prevId);
+    }
+    activeEditEventId = id;
+    const event = events().find((e) => e.id === id);
     if (!event) return;
-    // Clear any pending saves for the previous event
     pendingPatch = {};
     pendingRollback = {};
 
@@ -100,6 +142,12 @@ export function useEventFormState() {
     setEditDescription(event.description ?? "");
     setEditIsAllDay(event.isAllDay);
     setEditCalendarId(event.calendarId);
+    setEditTransparency(event.transparency ?? "opaque");
+    setEditVisibility(event.visibility ?? "default");
+    setEditReminders(event.reminders ?? []);
+    setEditColorId(event.colorId ?? null);
+    setEditConferencing(event.conferencing ?? null);
+    setConferencingLoading(false);
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -152,10 +200,129 @@ export function useEventFormState() {
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
   const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
 
+  const transparency = () => mode() === "create" ? draftTransparency() : editTransparency();
+  const setTransparency = (v: "opaque" | "transparent") => {
+    if (mode() === "create") { setDraftTransparency(v); }
+    else { setEditTransparency(v); scheduleSave({ transparency: v }); flushSave(); }
+  };
+  const visibility = () => mode() === "create" ? draftVisibility() : editVisibility();
+  const setVisibility = (v: "default" | "public" | "private") => {
+    if (mode() === "create") { setDraftVisibility(v); }
+    else { setEditVisibility(v); scheduleSave({ visibility: v }); flushSave(); }
+  };
+
+  const colorId = (): CathrinColorKey | null => mode() === "create" ? (draftColorId() as CathrinColorKey | null) : editColorId();
+  const setColorId = (v: CathrinColorKey | null) => {
+    if (mode() === "create") { setDraftColorId(v); }
+    else {
+      setEditColorId(v);
+      // Live-update the chip color on the calendar grid
+      const eventId = selectedEventId();
+      if (eventId) {
+        let newColor: string;
+        if (v && CATHRIN_PALETTE[v]) {
+          newColor = CATHRIN_PALETTE[v];
+        } else {
+          // Reset to calendar default: look up from accounts
+          const calId = editCalendarId();
+          newColor = CATHRIN_PALETTE.graphite;
+          if (calId) {
+            for (const acc of connectedAccounts()) {
+              const cal = acc.calendars.find((c) => c.id === calId);
+              if (cal) { newColor = cal.color; break; }
+            }
+          }
+        }
+        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, color: newColor, colorId: v ?? undefined } : e));
+      }
+      scheduleSave({ colorId: v }); flushSave();
+    }
+  };
+
+  const reminders = () => mode() === "create" ? draftReminders() : editReminders();
+  const addReminder = (minutes: number) => {
+    const current = reminders();
+    if (current.length >= 5 || current.some((r) => r.minutes === minutes)) return;
+    const updated = [...current, { method: "popup" as const, minutes }];
+    if (mode() === "create") { setDraftReminders(updated); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushSave(); }
+  };
+  const removeReminder = (minutes: number) => {
+    const updated = reminders().filter((r) => r.minutes !== minutes);
+    if (mode() === "create") { setDraftReminders(updated); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushSave(); }
+  };
+
+  const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
+
+  /** Add a Google Meet link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
+  function addMeetConferencing(): void {
+    if (mode() === "create") {
+      // Mark pending — resolved server-side during commitCreation
+      setDraftConferencing({ uri: "", label: "Google Meet" });
+    } else {
+      const eventId = selectedEventId();
+      if (!eventId) return;
+      setConferencingLoading(true);
+      // PATCH the event with a Meet request
+      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(eventId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ conferencing: { type: "meet" } }),
+      })
+        .then((updated) => {
+          const conf = updated.conferencing ?? null;
+          setEditConferencing(conf);
+          // Update the events signal so the chip reflects changes
+          setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, conferencing: conf } : e));
+        })
+        .catch((err) => {
+          console.error("[conferencing] Failed to add Meet link:", err);
+        })
+        .finally(() => setConferencingLoading(false));
+    }
+  }
+
+  /** Set a manual conferencing URL */
+  function setManualConferencing(uri: string): void {
+    const conf = { uri };
+    if (mode() === "create") {
+      setDraftConferencing(conf);
+    } else {
+      setEditConferencing(conf);
+      scheduleSave({ conferencing: conf });
+      flushSave();
+    }
+  }
+
+  /** Remove conferencing */
+  function removeConferencing(): void {
+    if (mode() === "create") {
+      setDraftConferencing(null);
+    } else {
+      setEditConferencing(null);
+      const eventId = selectedEventId();
+      if (eventId) {
+        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, conferencing: null } : e));
+      }
+      scheduleSave({ conferencing: null });
+      flushSave();
+    }
+  }
+
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
-    const event = selectedEvent();
-    return event?.color ?? CATHRIN_PALETTE.graphite;
+    // In edit mode, respect the local colorId override
+    const overrideKey = editColorId();
+    if (overrideKey && CATHRIN_PALETTE[overrideKey]) return CATHRIN_PALETTE[overrideKey];
+    // No override: use calendar color (not event.color which may have stale override)
+    const calId = editCalendarId();
+    if (calId) {
+      for (const acc of connectedAccounts()) {
+        const cal = acc.calendars.find((c) => c.id === calId);
+        if (cal) return cal.color;
+      }
+    }
+    return selectedEvent()?.color ?? CATHRIN_PALETTE.graphite;
   });
 
   function beginTimeEdit(which: "start" | "end"): void {
@@ -274,6 +441,18 @@ export function useEventFormState() {
     })
   );
 
+  const visibilityCollection = createMemo(() =>
+    createListCollection({
+      items: [
+        { value: "default", label: "Default visibility" },
+        { value: "public", label: "Public" },
+        { value: "private", label: "Private" },
+      ],
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
   return {
     mode,
     title,
@@ -298,9 +477,24 @@ export function useEventFormState() {
     handleTimeInput,
     finishTimeEdit,
     handleTimeKeyDown,
+    transparency,
+    setTransparency,
+    visibility,
+    setVisibility,
+    colorId,
+    setColorId,
+    reminders,
+    addReminder,
+    removeReminder,
+    conferencing,
+    conferencingLoading,
+    addMeetConferencing,
+    setManualConferencing,
+    removeConferencing,
     flushSave,
     allCalendars,
     calendarCollection,
+    visibilityCollection,
     get savedTimedStart() { return savedTimedStart; },
     set savedTimedStart(v: Date | null) { savedTimedStart = v; },
     get savedTimedEnd() { return savedTimedEnd; },

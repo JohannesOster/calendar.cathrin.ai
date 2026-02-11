@@ -153,8 +153,8 @@ export function CalendarGrid() {
   // and would overwrite localStorage with defaults before onMount reads them.
   initCurrentView();
   initVisibleDaysCount();
-  createVisibleDaysPersistence();
   createCurrentViewPersistence();
+  createVisibleDaysPersistence();
 
   // --- Month/Year Label ---
   const monthYearLabel = createMemo(() => {

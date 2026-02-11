@@ -4,7 +4,8 @@ import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch } from "../lib/api";
-import { CATHRIN_PALETTE } from "../lib/color-mapping";
+import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
+import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
@@ -20,6 +21,11 @@ export const [draftCalendarId, setDraftCalendarId] = createSignal<string | null>
 export const [draftLocation, setDraftLocation] = createSignal("");
 export const [draftDescription, setDraftDescription] = createSignal("");
 export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
+export const [draftTransparency, setDraftTransparency] = createSignal<"opaque" | "transparent">("opaque");
+export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "public" | "private">("default");
+export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
+export const [draftColorId, setDraftColorId] = createSignal<string | null>(null);
+export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -40,6 +46,10 @@ export function snapMinutes(totalMinutes: number): number {
  * Get the calendar color for the current draft event
  */
 export function getDraftColor(): string {
+  // If a per-event color override is set, use it
+  const colorKey = draftColorId() as CathrinColorKey | null;
+  if (colorKey && CATHRIN_PALETTE[colorKey]) return CATHRIN_PALETTE[colorKey];
+
   const calId = draftCalendarId() ?? resolveCalendarId();
   if (!calId) return CATHRIN_PALETTE.graphite;
 
@@ -154,6 +164,11 @@ export function cancelCreation(): void {
   setDraftLocation("");
   setDraftDescription("");
   setDraftIsAllDay(false);
+  setDraftTransparency("opaque");
+  setDraftVisibility("default");
+  setDraftReminders([]);
+  setDraftColorId(null);
+  setDraftConferencing(null);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -180,9 +195,14 @@ export function commitCreation(): boolean {
   const isAllDay = draftIsAllDay();
   const location = draftLocation().trim() || undefined;
   const description = draftDescription().trim() || undefined;
+  const transparency = draftTransparency();
+  const visibility = draftVisibility();
+  const reminders = draftReminders();
+  const conferencing = draftConferencing();
 
   if (!title || !start || !end || !calId) return false;
 
+  const colorKey = draftColorId() as CathrinColorKey | null;
   const color = getDraftColor();
   const tempId = `temp-${crypto.randomUUID()}`;
 
@@ -222,6 +242,11 @@ export function commitCreation(): boolean {
     location,
     description,
     isReadOnly: false,
+    transparency,
+    visibility,
+    reminders: reminders.length > 0 ? reminders : undefined,
+    colorId: colorKey ?? undefined,
+    conferencing,
   });
 
   // Reset creation state
@@ -238,6 +263,15 @@ export function commitCreation(): boolean {
       isAllDay,
       location,
       description,
+      transparency,
+      visibility,
+      ...(reminders.length > 0 && { reminders }),
+      ...(colorKey && { colorId: cathrinKeyToGoogleColorId(colorKey) }),
+      ...(conferencing && {
+        conferencing: conferencing.uri
+          ? { type: "manual" as const, uri: conferencing.uri }
+          : { type: "meet" as const },
+      }),
     }),
   })
     .then((serverEvent) => {
@@ -251,6 +285,7 @@ export function commitCreation(): boolean {
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
                 end: new Date(serverEvent.end),
+                conferencing: serverEvent.conferencing ?? e.conferencing,
               }
             : e
         )

@@ -25,7 +25,12 @@ export async function createEventViaGoogle(
   isAllDay?: boolean,
   calendarColor?: string | null,
   location?: string,
-  description?: string
+  description?: string,
+  transparency?: string,
+  visibility?: string,
+  reminders?: { method: string; minutes: number }[],
+  colorId?: string,
+  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -36,7 +41,30 @@ export async function createEventViaGoogle(
     end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end },
     location,
     description,
+    transparency,
+    visibility,
+    ...(reminders !== undefined && {
+      reminders: reminders && reminders.length > 0
+        ? { useDefault: false, overrides: reminders }
+        : { useDefault: true },
+    }),
+    colorId,
+    ...(conferencing?.type === "meet" && {
+      conferenceData: {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    }),
   });
+
+  // Extract conferencing from Google response
+  const videoEntryPoint = googleEvent.conferenceData?.entryPoints
+    ?.find(ep => ep.entryPointType === "video");
+  const conferencingResult = videoEntryPoint
+    ? { uri: videoEntryPoint.uri, label: googleEvent.conferenceData?.conferenceSolution?.name }
+    : conferencing?.type === "manual" ? { uri: conferencing.uri } : undefined;
 
   const color = calendarColor || "#4285f4";
   const eventStart = isAllDay
@@ -58,6 +86,11 @@ export async function createEventViaGoogle(
     location: googleEvent.location || location || undefined,
     description: googleEvent.description || description || undefined,
     isReadOnly: false,
+    transparency: googleEvent.transparency || transparency || undefined,
+    visibility: googleEvent.visibility || visibility || undefined,
+    reminders: googleEvent.reminders?.overrides || reminders || undefined,
+    colorId: googleEvent.colorId || colorId || undefined,
+    conferencing: conferencingResult,
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -80,6 +113,11 @@ export async function updateEventViaGoogle(
     start?: string;
     end?: string;
     isAllDay?: boolean;
+    transparency?: string;
+    visibility?: string;
+    reminders?: { method: string; minutes: number }[] | null;
+    colorId?: string | null;
+    conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -87,6 +125,28 @@ export async function updateEventViaGoogle(
   if (patch.summary !== undefined) googlePatch.summary = patch.summary;
   if (patch.description !== undefined) googlePatch.description = patch.description;
   if (patch.location !== undefined) googlePatch.location = patch.location;
+  if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
+  if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
+  if (patch.reminders !== undefined) {
+    googlePatch.reminders = patch.reminders && patch.reminders.length > 0
+      ? { useDefault: false, overrides: patch.reminders }
+      : { useDefault: true };
+  }
+  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? undefined;
+  if (patch.conferencing !== undefined) {
+    if (patch.conferencing === null) {
+      // Remove conferencing
+      googlePatch.conferenceData = null;
+    } else if (patch.conferencing.type === "meet") {
+      googlePatch.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      };
+    }
+    // Manual URLs don't go through Google's conferenceData — stored locally only
+  }
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
   if (patch.start !== undefined) {
@@ -125,9 +185,36 @@ export async function updateEventViaGoogle(
       isAllDay: !!updated.start.date,
       location: updated.location || null,
       description: updated.description || null,
+      transparency: updated.transparency || existingEvent.transparency || null,
+      visibility: updated.visibility || existingEvent.visibility || null,
+      reminders: updated.reminders?.overrides || existingEvent.reminders || null,
+      colorId: updated.colorId || null,
+      ...(patch.conferencing !== undefined && {
+        conferencing: (() => {
+          if (patch.conferencing === null) return null;
+          const ep = updated.conferenceData?.entryPoints?.find(e => e.entryPointType === "video");
+          if (ep) return { uri: ep.uri, label: updated.conferenceData?.conferenceSolution?.name };
+          if (patch.conferencing?.type === "manual") return { uri: patch.conferencing.uri };
+          return existingEvent.conferencing;
+        })(),
+      }),
       updatedAt: new Date(),
     })
     .where(eq(serverEvents.id, existingEvent.id));
+
+  // Resolve conferencing for response
+  const updatedVideoEntryPoint = updated.conferenceData?.entryPoints
+    ?.find(ep => ep.entryPointType === "video");
+  let conferencingResult: { uri: string; label?: string } | undefined;
+  if (patch.conferencing === null) {
+    conferencingResult = undefined;
+  } else if (updatedVideoEntryPoint) {
+    conferencingResult = { uri: updatedVideoEntryPoint.uri, label: updated.conferenceData?.conferenceSolution?.name };
+  } else if (patch.conferencing?.type === "manual") {
+    conferencingResult = { uri: patch.conferencing.uri };
+  } else {
+    conferencingResult = (existingEvent.conferencing as { uri: string; label?: string }) || undefined;
+  }
 
   return {
     id: updated.id,
@@ -142,6 +229,11 @@ export async function updateEventViaGoogle(
     description: updated.description || undefined,
     isReadOnly: existingEvent.isReadOnly ?? false,
     readOnlyReason: existingEvent.readOnlyReason || undefined,
+    transparency: updated.transparency || existingEvent.transparency || undefined,
+    visibility: updated.visibility || existingEvent.visibility || undefined,
+    reminders: (updated.reminders?.overrides || existingEvent.reminders as { method: string; minutes: number }[]) || undefined,
+    colorId: updated.colorId || undefined,
+    conferencing: conferencingResult,
   };
 }
 

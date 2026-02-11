@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { apiFetch } from "../lib/api";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 import type { CalendarEvent, EventPatch } from "./event-types";
+import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 
 // =============================================================================
 // Signals
@@ -124,6 +125,11 @@ export async function updateEvent(
     ...(rollback?.start !== undefined && { start: rollback.start }),
     ...(rollback?.end !== undefined && { end: rollback.end }),
     ...(rollback?.isAllDay !== undefined && { isAllDay: rollback.isAllDay }),
+    ...(rollback?.transparency !== undefined && { transparency: rollback.transparency }),
+    ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
+    ...(rollback?.reminders !== undefined && { reminders: rollback.reminders }),
+    ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
+    ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
   };
 
   // Apply optimistic update
@@ -138,6 +144,11 @@ export async function updateEvent(
             ...(patch.start !== undefined && { start: patch.start }),
             ...(patch.end !== undefined && { end: patch.end }),
             ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
+            ...(patch.transparency !== undefined && { transparency: patch.transparency }),
+            ...(patch.visibility !== undefined && { visibility: patch.visibility }),
+            ...(patch.reminders !== undefined && { reminders: patch.reminders ?? undefined }),
+            ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
+            ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
           }
         : e
     )
@@ -149,6 +160,19 @@ export async function updateEvent(
   if (patch.description !== undefined) apiPatch.description = patch.description;
   if (patch.location !== undefined) apiPatch.location = patch.location;
   if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+  if (patch.transparency !== undefined) apiPatch.transparency = patch.transparency;
+  if (patch.visibility !== undefined) apiPatch.visibility = patch.visibility;
+  if (patch.reminders !== undefined) (apiPatch as Record<string, unknown>).reminders = patch.reminders;
+  if (patch.colorId !== undefined) {
+    (apiPatch as Record<string, unknown>).colorId = patch.colorId ? cathrinKeyToGoogleColorId(patch.colorId) : null;
+  }
+  if (patch.conferencing !== undefined) {
+    if (patch.conferencing === null) {
+      (apiPatch as Record<string, unknown>).conferencing = null;
+    } else if (patch.conferencing.uri) {
+      (apiPatch as Record<string, unknown>).conferencing = { type: "manual", uri: patch.conferencing.uri };
+    }
+  }
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {
     apiPatch.start = isAllDay

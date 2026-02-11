@@ -47,8 +47,36 @@
     {
       "idx": 6,
       "version": "7",
+      "when": 1770825136749,
+      "tag": "0006_clear_preak",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
       "when": 1770825166460,
       "tag": "0006_graceful_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770825471961,
+      "tag": "0007_omniscient_mandrill",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1770825841955,
+      "tag": "0008_worried_stingray",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1770826337546,
+      "tag": "0009_mushy_iron_man",
       "breakpoints": true
     }
   ]

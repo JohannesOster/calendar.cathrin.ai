@@ -37,6 +37,11 @@ export interface ApiCalendarEvent {
   description?: string;
   isReadOnly: boolean;
   readOnlyReason?: string;
+  transparency?: string;
+  visibility?: string;
+  reminders?: { method: string; minutes: number }[];
+  colorId?: string;
+  conferencing?: { uri: string; label?: string } | null;
 }
 
 /**

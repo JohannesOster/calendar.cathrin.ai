@@ -1,6 +1,6 @@
 {
-  "id": "ec29edf2-822c-4a25-bf2b-8c3d1a444ae3",
-  "prevId": "5f6ea01f-42e4-466e-9d1d-9ed72b0a5f39",
+  "id": "merged-0008-snapshot",
+  "prevId": "0e7172d3-b01e-46c2-9a67-1530f262912b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -201,6 +201,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "access_role": {
+          "name": "access_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -486,6 +492,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reminders": {
+          "name": "reminders",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -511,6 +523,19 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "is_read_only": {
+          "name": "is_read_only",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "read_only_reason": {
+          "name": "read_only_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

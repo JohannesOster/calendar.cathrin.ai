@@ -94,6 +94,11 @@ export const serverEvents = pgTable(
     color: text("color"),
     location: text("location"),
     description: text("description"),
+    transparency: text("transparency"), // opaque (busy) or transparent (free)
+    visibility: text("visibility"), // default, public, private
+    reminders: jsonb("reminders"), // Array of { method, minutes }
+    colorId: text("color_id"), // Google colorId "1"-"11" for per-event color override
+    conferencing: jsonb("conferencing"), // { uri, label } or null
     status: text("status"), // confirmed, tentative, cancelled
     isReadOnly: boolean("is_read_only").default(false),
     readOnlyReason: text("read_only_reason"),

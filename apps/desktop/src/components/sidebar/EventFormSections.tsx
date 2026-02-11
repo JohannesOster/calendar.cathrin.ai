@@ -1,17 +1,27 @@
-import { Show, For } from "solid-js";
+import { Show, For, createSignal } from "solid-js";
 import {
   Clock,
   ArrowRight,
   Users,
   Video,
   MapPin,
-  FileText,
   AlignLeft,
   Bell,
   ChevronDown,
+  Globe,
+  Lock,
+  Check,
+  Copy,
+  Loader2,
+  Palette,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
+import { Popover } from "@ark-ui/solid/popover";
+import { Plus, X } from "lucide-solid";
+import { invoke } from "@tauri-apps/api/core";
+import { CATHRIN_PALETTE } from "../../lib/color-mapping";
+import type { CathrinColorKey } from "../../lib/color-mapping";
 import {
   setDraftStart,
   setDraftEnd,
@@ -123,7 +133,7 @@ export function TimeSection(props: SectionProps) {
         </div>
       </Show>
       {/* All-day toggle + stubs */}
-      <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
+      <div class="ml-[22px] flex items-center gap-3 text-xs">
         <Switch.Root
           checked={s.isAllDay()}
           onCheckedChange={() => {
@@ -209,8 +219,8 @@ export function TimeSection(props: SectionProps) {
           </Switch.Control>
           <Switch.HiddenInput />
         </Switch.Root>
-        <span>Time zone</span>
-        <span>Repeat</span>
+        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Time zone</button>
+        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Repeat</button>
       </div>
     </div>
   );
@@ -221,14 +231,11 @@ export function DetailsSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-2 border-t border-border space-y-2">
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
         <Users size={14} class="shrink-0" />
         <span>Participants</span>
-      </div>
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
-        <Video size={14} class="shrink-0" />
-        <span>Conferencing</span>
-      </div>
+      </button>
+      <ConferencingField state={s} />
       <div class="flex items-center gap-2 text-sm">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
@@ -240,10 +247,6 @@ export function DetailsSection(props: SectionProps) {
           onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
-      </div>
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
-        <FileText size={14} class="shrink-0" />
-        <span>Docs and links</span>
       </div>
     </div>
   );
@@ -330,20 +333,380 @@ export function CalendarSection(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
-      <div class="ml-[20px] text-xs text-fg-disabled">Busy</div>
-      <div class="ml-[20px] text-xs text-fg-disabled">Default visibility</div>
+      <div class="flex items-center gap-2">
+        <Palette size={14} class="text-fg-muted shrink-0" />
+        <ColorPickerPopover state={s} />
+        <Show when={s.colorId()}>
+          <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
+        </Show>
+      </div>
+      <div class="ml-[20px]" role="status" aria-live="polite">
+        <button
+          aria-pressed={s.transparency() === "opaque"}
+          class={`text-xs cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors ${
+            s.transparency() === "opaque" ? "text-fg" : "text-fg-muted"
+          }`}
+          onClick={() => s.setTransparency(s.transparency() === "opaque" ? "transparent" : "opaque")}
+        >
+          {s.transparency() === "opaque" ? "Busy" : "Free"}
+        </button>
+      </div>
+      <Select.Root
+        collection={s.visibilityCollection()}
+        value={[s.visibility()]}
+        onValueChange={(details) => {
+          const val = details.value[0];
+          if (val === "default" || val === "public" || val === "private") {
+            s.setVisibility(val);
+          }
+        }}
+        positioning={{ placement: "bottom-start", sameWidth: true }}
+      >
+        <Select.Control class="ml-[20px]">
+          <Select.Trigger class="flex items-center gap-1 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg">
+            <Show when={s.visibility() === "private"}>
+              <Lock size={10} class="shrink-0" />
+            </Show>
+            <Show when={s.visibility() === "public"}>
+              <Globe size={10} class="shrink-0" />
+            </Show>
+            <span>
+              {s.visibility() === "default" ? "Default visibility" : s.visibility() === "public" ? "Public" : "Private"}
+            </span>
+            <ChevronDown size={10} class="text-fg-muted shrink-0" />
+          </Select.Trigger>
+        </Select.Control>
+        <Select.Positioner>
+          <Select.Content class="bg-surface border border-border rounded py-1 z-50">
+            <For each={s.visibilityCollection().items}>
+              {(item) => (
+                <Select.Item
+                  item={item}
+                  class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                >
+                  <Show when={item.value === "public"}>
+                    <Globe size={10} class="shrink-0" />
+                  </Show>
+                  <Show when={item.value === "private"}>
+                    <Lock size={10} class="shrink-0" />
+                  </Show>
+                  <Show when={item.value === "default"}>
+                    <span class="w-[10px]" />
+                  </Show>
+                  <Select.ItemText>{item.label}</Select.ItemText>
+                </Select.Item>
+              )}
+            </For>
+          </Select.Content>
+        </Select.Positioner>
+        <Select.HiddenSelect />
+      </Select.Root>
     </div>
   );
 }
 
-export function RemindersSection() {
+const REMINDER_PRESETS = [
+  { minutes: 5, label: "5 min" },
+  { minutes: 10, label: "10 min" },
+  { minutes: 15, label: "15 min" },
+  { minutes: 30, label: "30 min" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 1440, label: "1 day" },
+];
+
+function formatReminderChip(minutes: number): string {
+  if (minutes >= 1440) return `${minutes / 1440} day before`;
+  if (minutes >= 60) return `${minutes / 60}hr before`;
+  return `${minutes}min before`;
+}
+
+export function RemindersSection(props: SectionProps) {
+  const s = props.state;
+
   return (
     <div class="px-3 py-2 border-t border-border space-y-1">
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
-        <Bell size={14} class="shrink-0" />
-        <span>Reminders</span>
-      </div>
-      <div class="ml-[22px] text-xs text-fg-disabled">30min before</div>
+      <Show
+        when={s.reminders().length > 0}
+        fallback={
+          <ReminderPopover state={s}>
+            <Popover.Trigger class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
+              <Bell size={14} class="shrink-0" />
+              <span>Add reminder</span>
+            </Popover.Trigger>
+          </ReminderPopover>
+        }
+      >
+        <div class="flex items-center gap-2 text-sm text-fg">
+          <Bell size={14} class="text-fg-muted shrink-0" />
+          <span>Reminders</span>
+        </div>
+        <div class="ml-[22px] flex flex-wrap gap-1">
+          <For each={s.reminders()}>
+            {(r) => (
+              <span
+                class="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 bg-surface-hover text-fg"
+                aria-label={`${formatReminderChip(r.minutes)}, press delete to remove`}
+              >
+                {formatReminderChip(r.minutes)}
+                <button
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                  onClick={() => s.removeReminder(r.minutes)}
+                  aria-label={`Remove ${formatReminderChip(r.minutes)} reminder`}
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )}
+          </For>
+          <Show when={s.reminders().length < 5}>
+            <ReminderPopover state={s}>
+              <Popover.Trigger
+                class="w-5 h-5 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
+                aria-label="Add another reminder"
+              >
+                <Plus size={12} />
+              </Popover.Trigger>
+            </ReminderPopover>
+          </Show>
+        </div>
+      </Show>
     </div>
+  );
+}
+
+/** Extract a short display label from a conferencing URI */
+function conferencingLabel(conf: { uri: string; label?: string }): string {
+  if (conf.label) return conf.label;
+  if (!conf.uri) return "Conferencing";
+  try {
+    const url = new URL(conf.uri);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host.includes("meet.google.com")) return "Google Meet";
+    if (host.includes("zoom.us")) return "Zoom";
+    if (host.includes("teams.microsoft.com")) return "Microsoft Teams";
+    return host;
+  } catch {
+    return conf.uri;
+  }
+}
+
+function ConferencingField(props: { state: EventFormState }) {
+  const s = props.state;
+  const [showUrlInput, setShowUrlInput] = createSignal(false);
+  const [urlValue, setUrlValue] = createSignal("");
+
+  function handleAddClick(): void {
+    // Auto-generate Meet link (all calendars are Google for now)
+    s.addMeetConferencing();
+  }
+
+  function handleUrlSubmit(): void {
+    const url = urlValue().trim();
+    if (!url) { setShowUrlInput(false); return; }
+    try {
+      new URL(url); // Basic validation
+      s.setManualConferencing(url);
+      setShowUrlInput(false);
+      setUrlValue("");
+    } catch {
+      // Invalid URL — keep input open
+    }
+  }
+
+  function handleUrlKeyDown(e: KeyboardEvent): void {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleUrlSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setShowUrlInput(false);
+      setUrlValue("");
+    }
+  }
+
+  function openUrl(uri: string): void {
+    if (!uri) return;
+    invoke("open_url", { url: uri }).catch((err) =>
+      console.error("[conferencing] Failed to open URL:", err)
+    );
+  }
+
+  function copyUrl(uri: string): void {
+    navigator.clipboard.writeText(uri).catch((err) =>
+      console.error("[conferencing] Failed to copy URL:", err)
+    );
+  }
+
+  return (
+    <>
+      <Show when={s.conferencingLoading()}>
+        <div class="flex items-center gap-2 text-sm text-fg-muted px-1 -mx-1">
+          <Loader2 size={14} class="shrink-0 animate-spin" />
+          <span>Adding Google Meet…</span>
+        </div>
+      </Show>
+      <Show when={!s.conferencingLoading()}>
+        <Show
+          when={s.conferencing()}
+          fallback={
+            <Show
+              when={showUrlInput()}
+              fallback={
+                <div class="flex items-center gap-1">
+                  <button
+                    class="flex flex-1 items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors"
+                    onClick={handleAddClick}
+                    aria-label="Add Google Meet link"
+                  >
+                    <Video size={14} class="shrink-0" />
+                    <span>Add conferencing</span>
+                  </button>
+                  <button
+                    class="text-xs text-fg-disabled cursor-pointer rounded px-1 hover:text-fg-muted transition-colors"
+                    onClick={() => setShowUrlInput(true)}
+                    aria-label="Paste a conferencing URL"
+                  >
+                    URL
+                  </button>
+                </div>
+              }
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <Video size={14} class="text-fg-muted shrink-0" />
+                <input
+                  type="url"
+                  placeholder="Paste conferencing URL"
+                  aria-label="Conferencing URL"
+                  value={urlValue()}
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  onInput={(e) => setUrlValue(e.currentTarget.value)}
+                  onBlur={handleUrlSubmit}
+                  onKeyDown={handleUrlKeyDown}
+                  class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+                />
+              </div>
+            </Show>
+          }
+        >
+          {(conf) => (
+            <div class="flex items-center gap-2 text-sm">
+              <Video size={14} class="text-fg-muted shrink-0" />
+              <button
+                class="flex-1 text-left text-fg truncate cursor-pointer hover:underline"
+                onClick={() => openUrl(conf().uri)}
+                disabled={!conf().uri}
+                aria-label={`Open ${conferencingLabel(conf())} link`}
+              >
+                {conferencingLabel(conf())}
+              </button>
+              <Show when={conf().uri}>
+                <button
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                  onClick={() => copyUrl(conf().uri)}
+                  aria-label="Copy conferencing link"
+                >
+                  <Copy size={12} />
+                </button>
+              </Show>
+              <button
+                class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                onClick={() => s.removeConferencing()}
+                aria-label="Remove conferencing"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+        </Show>
+      </Show>
+    </>
+  );
+}
+
+const COLOR_SWATCHES: { key: CathrinColorKey; label: string }[] = [
+  { key: "graphite", label: "Graphite" },
+  { key: "coral", label: "Coral" },
+  { key: "terracotta", label: "Terracotta" },
+  { key: "amber", label: "Amber" },
+  { key: "sage", label: "Sage" },
+  { key: "teal", label: "Teal" },
+  { key: "sky", label: "Sky" },
+  { key: "slate", label: "Slate" },
+  { key: "lavender", label: "Lavender" },
+  { key: "plum", label: "Plum" },
+  { key: "rose", label: "Rose" },
+];
+
+function ColorPickerPopover(props: { state: EventFormState }) {
+  const s = props.state;
+
+  return (
+    <Popover.Root positioning={{ placement: "bottom-start" }}>
+      <Popover.Trigger
+        class="w-3 h-3 rounded-full shrink-0 cursor-pointer transition-transform hover:scale-125"
+        style={{ "background-color": s.eventColor() }}
+        aria-label="Event color"
+      />
+      <Popover.Positioner>
+        <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
+          <div role="radiogroup" aria-label="Event color" class="grid grid-cols-4 gap-1.5">
+            <Popover.CloseTrigger
+              role="radio"
+              aria-checked={s.colorId() === null}
+              aria-label="Calendar default"
+              class="w-5 h-5 rounded-full border border-border-light cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
+              style={{ "background-color": "transparent" }}
+              onClick={() => s.setColorId(null)}
+            >
+              <Show when={s.colorId() === null}>
+                <Check size={10} class="text-fg-muted" />
+              </Show>
+            </Popover.CloseTrigger>
+            <For each={COLOR_SWATCHES}>
+              {(swatch) => (
+                <Popover.CloseTrigger
+                  role="radio"
+                  aria-checked={s.colorId() === swatch.key}
+                  aria-label={swatch.label}
+                  class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
+                  style={{ "background-color": CATHRIN_PALETTE[swatch.key] }}
+                  onClick={() => s.setColorId(swatch.key)}
+                >
+                  <Show when={s.colorId() === swatch.key}>
+                    <Check size={10} class="text-white" />
+                  </Show>
+                </Popover.CloseTrigger>
+              )}
+            </For>
+          </div>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
+  );
+}
+
+function ReminderPopover(props: { state: EventFormState; children: any }) {
+  const s = props.state;
+  const availablePresets = () =>
+    REMINDER_PRESETS.filter((p) => !s.reminders().some((r) => r.minutes === p.minutes));
+
+  return (
+    <Popover.Root positioning={{ placement: "bottom-start" }}>
+      {props.children}
+      <Popover.Positioner>
+        <Popover.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
+          <For each={availablePresets()}>
+            {(preset) => (
+              <Popover.CloseTrigger
+                class="flex w-full items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover transition-colors"
+                onClick={() => s.addReminder(preset.minutes)}
+              >
+                {preset.label} before
+              </Popover.CloseTrigger>
+            )}
+          </For>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }

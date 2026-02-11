@@ -21,5 +21,10 @@ export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
     description: event.description || undefined,
     isReadOnly: event.isReadOnly ?? false,
     readOnlyReason: event.readOnlyReason || undefined,
+    transparency: event.transparency || undefined,
+    visibility: event.visibility || undefined,
+    reminders: (event.reminders as { method: string; minutes: number }[]) || undefined,
+    colorId: event.colorId || undefined,
+    conferencing: (event.conferencing as { uri: string; label?: string }) || undefined,
   };
 }

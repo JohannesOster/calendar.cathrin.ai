@@ -89,7 +89,7 @@ export function EventForm() {
         <DetailsSection state={state} />
         <DescriptionSection state={state} />
         <CalendarSection state={state} />
-        <RemindersSection />
+        <RemindersSection state={state} />
       </div>
     </div>
   );
