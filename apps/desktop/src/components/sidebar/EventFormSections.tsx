@@ -248,46 +248,6 @@ export function DetailsSection(props: SectionProps) {
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
-    </div>
-  );
-}
-
-export function DescriptionSection(props: SectionProps) {
-  const s = props.state;
-
-  return (
-    <div class="px-3 py-2 border-t border-border">
-      <div class="flex items-start gap-2">
-        <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
-        <div class="flex-1 grid" style={{ "grid-template-columns": "1fr" }}>
-          <textarea
-            placeholder="Add description"
-            aria-label="Description"
-            value={s.description()}
-            onInput={(e) => s.setDescription(e.currentTarget.value)}
-            onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-            class="text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none resize-none overflow-hidden row-start-1 col-start-1 rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
-            rows={2}
-            style={{ "grid-area": "1 / 1 / 2 / 2" }}
-          />
-          <div
-            class="invisible whitespace-pre-wrap text-sm row-start-1 col-start-1 overflow-hidden max-h-40"
-            style={{ "grid-area": "1 / 1 / 2 / 2" }}
-            aria-hidden="true"
-          >
-            {s.description() + " "}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function CalendarSection(props: SectionProps) {
-  const s = props.state;
-
-  return (
-    <div class="px-3 py-2 border-t border-border space-y-2">
       <Select.Root
         collection={s.calendarCollection()}
         value={s.calendarId() ? [s.calendarId()!] : []}
@@ -299,7 +259,7 @@ export function CalendarSection(props: SectionProps) {
         <Select.Control class="flex items-center gap-2">
           <div
             class="w-3 h-3 rounded-full shrink-0"
-            style={{ "background-color": s.eventColor() }}
+            style={{ "background-color": s.calendarColor() }}
           />
           <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
             <span>
@@ -333,13 +293,41 @@ export function CalendarSection(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
-      <div class="flex items-center gap-2">
-        <Palette size={14} class="text-fg-muted shrink-0" />
-        <ColorPickerPopover state={s} />
-        <Show when={s.colorId()}>
-          <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
-        </Show>
+    </div>
+  );
+}
+
+export function DescriptionSection(props: SectionProps) {
+  const s = props.state;
+
+  return (
+    <div class="px-3 py-2 border-t border-border">
+      <div class="flex items-start gap-2">
+        <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
+        <textarea
+          placeholder="Add description"
+          aria-label="Description"
+          value={s.description()}
+          onInput={(e) => {
+            s.setDescription(e.currentTarget.value);
+            e.currentTarget.style.height = "auto";
+            e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 160) + "px";
+          }}
+          onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
+          class="flex-1 text-xs text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+          rows={2}
+        />
       </div>
+    </div>
+  );
+}
+
+export function CalendarSection(props: SectionProps) {
+  const s = props.state;
+
+  return (
+    <div class="px-3 py-2 border-t border-border space-y-2">
+      <ColorPickerPopover state={s} />
       <div class="ml-[20px]" role="status" aria-live="polite">
         <button
           aria-pressed={s.transparency() === "opaque"}
@@ -642,11 +630,26 @@ function ColorPickerPopover(props: { state: EventFormState }) {
 
   return (
     <Popover.Root positioning={{ placement: "bottom-start" }}>
-      <Popover.Trigger
-        class="w-3 h-3 rounded-full shrink-0 cursor-pointer transition-transform hover:scale-125"
-        style={{ "background-color": s.eventColor() }}
-        aria-label="Event color"
-      />
+      <Popover.Trigger asChild={(triggerProps) => (
+        <button
+          {...triggerProps()}
+          class="flex w-full items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-surface-hover transition-colors"
+        >
+          <Palette size={14} class="text-fg-muted shrink-0" />
+          <div
+            class={`w-3 h-3 rounded-full shrink-0 ${
+              s.colorId() ? "" : "border border-dashed border-fg-muted"
+            }`}
+            style={{ "background-color": s.eventColor() }}
+          />
+          <Show
+            when={s.colorId()}
+            fallback={<span class="text-sm text-fg-disabled">Calendar default</span>}
+          >
+            <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
+          </Show>
+        </button>
+      )} />
       <Popover.Positioner>
         <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
           <div role="radiogroup" aria-label="Event color" class="grid grid-cols-4 gap-1.5">
@@ -654,12 +657,12 @@ function ColorPickerPopover(props: { state: EventFormState }) {
               role="radio"
               aria-checked={s.colorId() === null}
               aria-label="Calendar default"
-              class="w-5 h-5 rounded-full border border-border-light cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
-              style={{ "background-color": "transparent" }}
+              class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125 ring-1 ring-border-light ring-offset-1 ring-offset-surface"
+              style={{ "background-color": s.calendarColor() }}
               onClick={() => s.setColorId(null)}
             >
               <Show when={s.colorId() === null}>
-                <Check size={10} class="text-fg-muted" />
+                <Check size={10} class="text-white" />
               </Show>
             </Popover.CloseTrigger>
             <For each={COLOR_SWATCHES}>

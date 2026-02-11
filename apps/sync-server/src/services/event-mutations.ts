@@ -132,7 +132,7 @@ export async function updateEventViaGoogle(
       ? { useDefault: false, overrides: patch.reminders }
       : { useDefault: true };
   }
-  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? undefined;
+  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? "";
   if (patch.conferencing !== undefined) {
     if (patch.conferencing === null) {
       // Remove conferencing

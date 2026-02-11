@@ -161,11 +161,11 @@ export function AppShell(props: AppShellProps) {
         <aside
           class="shrink-0 border-l border-border bg-surface-alt relative z-10 overflow-hidden transition-[width,border-width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[width]"
           classList={{
-            "w-64": rightSidebarOpen(),
+            "w-72": rightSidebarOpen(),
             "w-0 border-l-0": !rightSidebarOpen(),
           }}
         >
-          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-64">
+          <div class="min-w-0 h-full overflow-y-auto overflow-x-hidden w-72">
             {props.rightSidebar}
           </div>
         </aside>

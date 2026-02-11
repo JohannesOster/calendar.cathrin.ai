@@ -309,20 +309,25 @@ export function useEventFormState() {
     }
   }
 
-  const eventColor = createMemo(() => {
-    if (mode() === "create") return getDraftColor();
-    // In edit mode, respect the local colorId override
-    const overrideKey = editColorId();
-    if (overrideKey && CATHRIN_PALETTE[overrideKey]) return CATHRIN_PALETTE[overrideKey];
-    // No override: use calendar color (not event.color which may have stale override)
-    const calId = editCalendarId();
+  /** The calendar's own color (identity badge — no event override applied). */
+  const calendarColor = createMemo(() => {
+    const calId = mode() === "create" ? draftCalendarId() : editCalendarId();
     if (calId) {
       for (const acc of connectedAccounts()) {
         const cal = acc.calendars.find((c) => c.id === calId);
         if (cal) return cal.color;
       }
     }
-    return selectedEvent()?.color ?? CATHRIN_PALETTE.graphite;
+    return CATHRIN_PALETTE.graphite;
+  });
+
+  const eventColor = createMemo(() => {
+    if (mode() === "create") return getDraftColor();
+    // In edit mode, respect the local colorId override
+    const overrideKey = editColorId();
+    if (overrideKey && CATHRIN_PALETTE[overrideKey]) return CATHRIN_PALETTE[overrideKey];
+    // No override: use calendar color
+    return calendarColor();
   });
 
   function beginTimeEdit(which: "start" | "end"): void {
@@ -469,6 +474,7 @@ export function useEventFormState() {
     setIsAllDay,
     calendarId,
     setCalId,
+    calendarColor,
     eventColor,
     editingTime,
     startTimeText,
