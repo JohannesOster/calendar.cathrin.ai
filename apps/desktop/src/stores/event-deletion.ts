@@ -78,6 +78,7 @@ function fireDeleteApi(event: CalendarEvent): void {
 export function deleteEvent(eventId: string): void {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
+  if (event.isReadOnly) return;
 
   const deletion: PendingDeletion = { event };
   pendingMap.set(eventId, deletion);

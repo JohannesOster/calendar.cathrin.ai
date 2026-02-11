@@ -48,6 +48,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const handleResizePointerDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     if (props.event.isAllDay) return;
+    if (props.event.isReadOnly) return;
 
     const startY = e.clientY;
     let started = false;
@@ -88,6 +89,7 @@ export function CalendarEvent(props: CalendarEventProps) {
     let started = false;
 
     const onMove = (me: PointerEvent) => {
+      if (props.event.isReadOnly) return;
       const dx = me.clientX - startX;
       const dy = me.clientY - startY;
       if (!started && Math.sqrt(dx * dx + dy * dy) >= MOVE_DRAG_THRESHOLD) {
@@ -181,6 +183,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   // Exposed method to trigger the burn animation
   const triggerBurn = () => {
     if (isBurning() || !contentRef) return;
+    if (props.event.isReadOnly) return;
 
     setIsBurning(true);
     contentRef.blur();
@@ -219,13 +222,13 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
         tabIndex={0}
         role="button"
-        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}`}
+        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${props.event.isReadOnly ? ", view only" : ""}`}
         aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
@@ -268,8 +271,8 @@ export function CalendarEvent(props: CalendarEventProps) {
           </div>
         </div>
 
-        {/* Resize handle — bottom edge, visible on hover */}
-        <Show when={!props.event.isAllDay}>
+        {/* Resize handle — bottom edge, visible on hover (hidden for read-only) */}
+        <Show when={!props.event.isAllDay && !props.event.isReadOnly}>
           <div
             data-resize-handle
             class="calendar-event__resize-handle"
