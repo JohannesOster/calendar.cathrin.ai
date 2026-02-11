@@ -35,7 +35,7 @@ import {
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, setEvents, events } from "../../stores/events";
+import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
@@ -82,6 +82,8 @@ export function useEventFormState() {
   let pendingPatch: EventPatch = {};
   /** Original values captured before the first pre-mutation of each field. */
   let pendingRollback: EventPatch = {};
+  /** Debounce timer for reminder add/remove so rapid changes batch into one PATCH. */
+  let reminderFlushTimer: ReturnType<typeof setTimeout> | null = null;
   /** Last selected event ID — survives signal disposal for onCleanup. */
   let activeEditEventId: string | null = null;
 
@@ -108,13 +110,17 @@ export function useEventFormState() {
   // below is the guaranteed fallback using activeEditEventId.
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
+      if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
       flushSave(prevId);
     }
   }));
 
   // Flush on unmount — uses activeEditEventId since selectedEventId() is
   // already null by the time <Show> disposes this component.
-  onCleanup(() => flushSave());
+  onCleanup(() => {
+    if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+    flushSave();
+  });
 
   // Populate edit signals when a *different* event is selected.
   // Track selectedEventId (a primitive) instead of selectedEvent (an object
@@ -127,6 +133,7 @@ export function useEventFormState() {
     if (!id) return;
     // Flush pending saves for the previous event before switching
     if (prevId && prevId !== id) {
+      if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
       flushSave(prevId);
     }
     activeEditEventId = id;
@@ -198,7 +205,30 @@ export function useEventFormState() {
     setEditIsAllDay(v);
   };
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
-  const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
+  const setCalId = (v: string | null) => {
+    if (mode() === "create") {
+      setDraftCalendarId(v);
+      return;
+    }
+    // Edit mode: trigger a move operation (separate from autosave)
+    const eventId = selectedEventId();
+    const currentCalId = editCalendarId();
+    if (!eventId || !v || v === currentCalId) return;
+
+    // Find target calendar color
+    let targetColor = CATHRIN_PALETTE.graphite;
+    for (const acc of connectedAccounts()) {
+      const cal = acc.calendars.find((c) => c.id === v);
+      if (cal) { targetColor = cal.color; break; }
+    }
+
+    setEditCalendarId(v);
+    moveEvent(eventId, v, targetColor).catch((err) => {
+      console.error("[move] Failed to move event:", err);
+      // Rollback the local signal on failure (store already rolls back events signal)
+      setEditCalendarId(currentCalId);
+    });
+  };
 
   const transparency = () => mode() === "create" ? draftTransparency() : editTransparency();
   const setTransparency = (v: "opaque" | "transparent") => {
@@ -240,17 +270,24 @@ export function useEventFormState() {
   };
 
   const reminders = () => mode() === "create" ? draftReminders() : editReminders();
+  function flushRemindersDebounced(): void {
+    if (reminderFlushTimer) clearTimeout(reminderFlushTimer);
+    reminderFlushTimer = setTimeout(() => {
+      reminderFlushTimer = null;
+      flushSave();
+    }, 300);
+  }
   const addReminder = (minutes: number) => {
     const current = reminders();
     if (current.length >= 5 || current.some((r) => r.minutes === minutes)) return;
     const updated = [...current, { method: "popup" as const, minutes }];
     if (mode() === "create") { setDraftReminders(updated); }
-    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushSave(); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushRemindersDebounced(); }
   };
   const removeReminder = (minutes: number) => {
     const updated = reminders().filter((r) => r.minutes !== minutes);
     if (mode() === "create") { setDraftReminders(updated); }
-    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushSave(); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushRemindersDebounced(); }
   };
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
@@ -438,9 +475,33 @@ export function useEventFormState() {
       );
   });
 
+  // In edit mode: only calendars from the same account as the event
+  const editCalendars = createMemo(() => {
+    if (mode() !== "edit") return allCalendars();
+    const calId = editCalendarId();
+    if (!calId) return allCalendars();
+    // Find which account owns the event's calendar
+    const ownerAccount = connectedAccounts().find((a) =>
+      a.calendars.some((c) => c.id === calId)
+    );
+    if (!ownerAccount) return allCalendars();
+    return ownerAccount.calendars
+      .filter((c) => c.visible)
+      .map((c) => ({ ...c, accountEmail: ownerAccount.email }));
+  });
+
+  // Whether the calendar picker should be interactive in edit mode
+  const canMoveCalendar = createMemo(() => {
+    if (mode() !== "edit") return true; // create mode always allows picking
+    const event = selectedEvent();
+    if (!event) return false;
+    if (event.isReadOnly) return false;
+    return editCalendars().length > 1;
+  });
+
   const calendarCollection = createMemo(() =>
     createListCollection({
-      items: allCalendars(),
+      items: mode() === "edit" ? editCalendars() : allCalendars(),
       itemToValue: (item) => item.id,
       itemToString: (item) => item.name,
     })
@@ -449,9 +510,20 @@ export function useEventFormState() {
   const visibilityCollection = createMemo(() =>
     createListCollection({
       items: [
-        { value: "default", label: "Default visibility" },
+        { value: "default", label: "Default" },
         { value: "public", label: "Public" },
         { value: "private", label: "Private" },
+      ],
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
+  const transparencyCollection = createMemo(() =>
+    createListCollection({
+      items: [
+        { value: "opaque", label: "Busy" },
+        { value: "transparent", label: "Free" },
       ],
       itemToValue: (item) => item.value,
       itemToString: (item) => item.label,
@@ -499,8 +571,10 @@ export function useEventFormState() {
     removeConferencing,
     flushSave,
     allCalendars,
+    canMoveCalendar,
     calendarCollection,
     visibilityCollection,
+    transparencyCollection,
     get savedTimedStart() { return savedTimedStart; },
     set savedTimedStart(v: Date | null) { savedTimedStart = v; },
     get savedTimedEnd() { return savedTimedEnd; },

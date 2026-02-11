@@ -81,7 +81,7 @@ export function EventForm() {
             onInput={(e) => state.setTitle(e.currentTarget.value)}
             onBlur={() => { if (state.mode() === "edit") state.flushSave(); }}
             onKeyDown={handleTitleKeyDown}
-            class="w-full text-xs font-medium text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded-md px-2 py-1.5 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+            class="w-full text-sm font-medium text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded-md px-2 py-1.5 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
           />
         </div>
 

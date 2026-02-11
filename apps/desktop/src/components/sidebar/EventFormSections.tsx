@@ -1,36 +1,32 @@
-import { Show, For, createSignal } from "solid-js";
+import { Show, For, createSignal, createMemo } from "solid-js";
 import {
   Clock,
   ArrowRight,
   Users,
   Video,
   MapPin,
-  AlignLeft,
   Bell,
   ChevronDown,
   Globe,
   Lock,
-  Check,
   Copy,
-  Loader2,
-  Palette,
+  Calendar,
+  LoaderCircle,
+  Eye,
+  EyeOff,
+  CircleDot,
+  Circle,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
-import { Select } from "@ark-ui/solid/select";
+import { Select, createListCollection } from "@ark-ui/solid/select";
+import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
-import { Plus, X } from "lucide-solid";
+import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
-import {
-  setDraftStart,
-  setDraftEnd,
-} from "../../stores/event-creation";
-import {
-  formatTime,
-  formatDuration,
-  formatDate,
-} from "../../lib/format-utils";
+import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
+import { formatTime, formatDuration, formatDate } from "../../lib/format-utils";
 import type { EventFormState } from "./useEventFormState";
 
 interface SectionProps {
@@ -41,7 +37,7 @@ export function TimeSection(props: SectionProps) {
   const s = props.state;
 
   return (
-    <div class="px-3 py-2 border-t border-border space-y-1.5">
+    <div class="px-3 py-3 border-t border-border space-y-1.5">
       {/* Start time + End time on one row (hidden for all-day) */}
       <Show when={s.start() && s.end() && !s.isAllDay()}>
         <div class="flex items-center gap-2 text-sm text-fg">
@@ -72,7 +68,12 @@ export function TimeSection(props: SectionProps) {
               inputMode="numeric"
               aria-label="Start time"
               value={s.startTimeText()}
-              ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
+              ref={(el) =>
+                requestAnimationFrame(() => {
+                  el.focus();
+                  el.select();
+                })
+              }
               onInput={(e) => s.handleTimeInput("start", e.currentTarget.value)}
               onBlur={() => s.finishTimeEdit()}
               onKeyDown={s.handleTimeKeyDown}
@@ -107,7 +108,12 @@ export function TimeSection(props: SectionProps) {
               inputMode="numeric"
               aria-label="End time"
               value={s.endTimeText()}
-              ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
+              ref={(el) =>
+                requestAnimationFrame(() => {
+                  el.focus();
+                  el.select();
+                })
+              }
               onInput={(e) => s.handleTimeInput("end", e.currentTarget.value)}
               onBlur={() => s.finishTimeEdit()}
               onKeyDown={s.handleTimeKeyDown}
@@ -116,13 +122,17 @@ export function TimeSection(props: SectionProps) {
             />
           </Show>
           <Show when={formatDate(s.start()!) === formatDate(s.end()!)}>
-            <span class="text-xs text-fg-muted whitespace-nowrap">{formatDuration(s.start()!, s.end()!)}</span>
+            <span class="text-xs text-fg-muted whitespace-nowrap">
+              {formatDuration(s.start()!, s.end()!)}
+            </span>
           </Show>
         </div>
       </Show>
       {/* Date row */}
       <Show when={s.start() && s.end()}>
-        <div class={`flex gap-4 text-sm text-fg ${s.isAllDay() ? "ml-0" : "ml-[22px]"}`}>
+        <div
+          class={`flex gap-4 text-sm text-fg ${s.isAllDay() ? "ml-0" : "ml-[22px]"}`}
+        >
           <Show when={s.isAllDay()}>
             <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
           </Show>
@@ -147,15 +157,23 @@ export function TimeSection(props: SectionProps) {
               s.savedTimedEnd = s.end() ? new Date(s.end()!) : null;
 
               // All-day events use UTC midnight dates (matching Google's format)
-              const allDayStart = new Date(Date.UTC(st.getFullYear(), st.getMonth(), st.getDate()));
+              const allDayStart = new Date(
+                Date.UTC(st.getFullYear(), st.getMonth(), st.getDate()),
+              );
               const e = s.end() ?? st;
-              const allDayEnd = new Date(Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1));
+              const allDayEnd = new Date(
+                Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1),
+              );
 
               s.setIsAllDay(true);
               if (editing) {
                 s.setEditStart(allDayStart);
                 s.setEditEnd(allDayEnd);
-                s.scheduleSave({ isAllDay: true, start: allDayStart, end: allDayEnd });
+                s.scheduleSave({
+                  isAllDay: true,
+                  start: allDayStart,
+                  end: allDayEnd,
+                });
                 s.flushSave();
               }
             } else {
@@ -174,9 +192,19 @@ export function TimeSection(props: SectionProps) {
               let newEnd: Date;
               if (s.savedTimedStart && s.savedTimedEnd) {
                 newStart = new Date(st);
-                newStart.setHours(s.savedTimedStart.getHours(), s.savedTimedStart.getMinutes(), 0, 0);
+                newStart.setHours(
+                  s.savedTimedStart.getHours(),
+                  s.savedTimedStart.getMinutes(),
+                  0,
+                  0,
+                );
                 newEnd = new Date(isMultiDay ? lastDay : st);
-                newEnd.setHours(s.savedTimedEnd.getHours(), s.savedTimedEnd.getMinutes(), 0, 0);
+                newEnd.setHours(
+                  s.savedTimedEnd.getHours(),
+                  s.savedTimedEnd.getMinutes(),
+                  0,
+                  0,
+                );
               } else if (isMultiDay) {
                 // Multi-day: default to 9am on first day, 5pm on last day
                 newStart = new Date(st);
@@ -195,7 +223,11 @@ export function TimeSection(props: SectionProps) {
               if (editing) {
                 s.setEditStart(newStart);
                 s.setEditEnd(newEnd);
-                s.scheduleSave({ isAllDay: false, start: newStart, end: newEnd });
+                s.scheduleSave({
+                  isAllDay: false,
+                  start: newStart,
+                  end: newEnd,
+                });
                 s.flushSave();
               } else {
                 setDraftStart(newStart);
@@ -205,7 +237,9 @@ export function TimeSection(props: SectionProps) {
           }}
           class="inline-flex items-center gap-1.5 cursor-pointer"
         >
-          <Switch.Label class="text-xs text-fg-disabled cursor-pointer">All-day</Switch.Label>
+          <Switch.Label class="text-xs text-fg-disabled cursor-pointer">
+            All-day
+          </Switch.Label>
           <Switch.Control
             class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
               s.isAllDay() ? "bg-fg" : "bg-border-light"
@@ -219,8 +253,12 @@ export function TimeSection(props: SectionProps) {
           </Switch.Control>
           <Switch.HiddenInput />
         </Switch.Root>
-        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Time zone</button>
-        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Repeat</button>
+        <button class="text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
+          Time zone
+        </button>
+        <button class="text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
+          Repeat
+        </button>
       </div>
     </div>
   );
@@ -230,13 +268,13 @@ export function DetailsSection(props: SectionProps) {
   const s = props.state;
 
   return (
-    <div class="px-3 py-2 border-t border-border space-y-2">
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
+    <div class="px-3 py-3 border-t border-border space-y-2">
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
         <Users size={14} class="shrink-0" />
         <span>Participants</span>
       </button>
       <ConferencingField state={s} />
-      <div class="flex items-center gap-2 text-sm">
+      <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
           type="text"
@@ -244,19 +282,18 @@ export function DetailsSection(props: SectionProps) {
           aria-label="Location"
           value={s.location()}
           onInput={(e) => s.setLocation(e.currentTarget.value)}
-          onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+          onBlur={() => {
+            if (s.mode() === "edit") s.flushSave();
+          }}
+          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
         />
       </div>
       <Show
-        when={s.mode() === "create"}
+        when={s.mode() === "create" || s.canMoveCalendar()}
         fallback={
-          <div class="flex items-center gap-2">
-            <div
-              class="w-3 h-3 rounded-full shrink-0"
-              style={{ "background-color": s.calendarColor() }}
-            />
-            <span class="text-sm text-fg">
+          <div class="flex items-center gap-x-8 px-2 py-2">
+            <Calendar size={14} class="text-fg-muted shrink-0" />
+            <span class="flex-1 text-sm text-fg">
               {(() => {
                 const id = s.calendarId();
                 if (!id) return "No calendar";
@@ -264,6 +301,8 @@ export function DetailsSection(props: SectionProps) {
                 return cal?.name ?? "Unknown calendar";
               })()}
             </span>
+            <div class="w-px h-4 bg-border shrink-0" />
+            <ColorSelect state={s} />
           </div>
         }
       >
@@ -274,23 +313,25 @@ export function DetailsSection(props: SectionProps) {
             s.setCalId(details.value[0] ?? null);
           }}
           positioning={{ placement: "bottom-start", sameWidth: true }}
+          class="w-full"
         >
-          <Select.Control class="flex items-center gap-2">
-            <div
-              class="w-3 h-3 rounded-full shrink-0"
-              style={{ "background-color": s.calendarColor() }}
-            />
-            <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
-              <span>
-                {(() => {
-                  const id = s.calendarId();
-                  if (!id) return "Select calendar";
-                  const cal = s.allCalendars().find((c) => c.id === id);
-                  return cal?.name ?? "Select calendar";
-                })()}
-              </span>
-              <ChevronDown size={12} class="text-fg-muted shrink-0" />
-            </Select.Trigger>
+          <Select.Control>
+            <div class="flex w-full items-center gap-2">
+              <Select.Trigger class="flex flex-1 items-center gap-2 text-sm text-fg bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors">
+                <Calendar size={14} class="text-fg-muted shrink-0" />
+                <span class="flex-1 text-left">
+                  {(() => {
+                    const id = s.calendarId();
+                    if (!id) return "Select calendar";
+                    const cal = s.allCalendars().find((c) => c.id === id);
+                    return cal?.name ?? "Select calendar";
+                  })()}
+                </span>
+                <ChevronDown size={14} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+              <div class="w-px h-4 bg-border shrink-0" />
+              <ColorSelect state={s} />
+            </div>
           </Select.Control>
           <Select.Positioner>
             <Select.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
@@ -298,7 +339,7 @@ export function DetailsSection(props: SectionProps) {
                 {(cal) => (
                   <Select.Item
                     item={cal}
-                    class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                    class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
                   >
                     <div
                       class="w-2.5 h-2.5 rounded-full shrink-0"
@@ -321,23 +362,23 @@ export function DescriptionSection(props: SectionProps) {
   const s = props.state;
 
   return (
-    <div class="px-3 py-2 border-t border-border">
-      <div class="flex items-start gap-2">
-        <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
-        <textarea
-          placeholder="Add description"
-          aria-label="Description"
-          value={s.description()}
-          onInput={(e) => {
-            s.setDescription(e.currentTarget.value);
-            e.currentTarget.style.height = "auto";
-            e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 160) + "px";
-          }}
-          onBlur={() => { if (s.mode() === "edit") s.flushSave(); }}
-          class="flex-1 text-xs text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
-          rows={2}
-        />
-      </div>
+    <div class="px-3 py-3 border-t border-border">
+      <textarea
+        placeholder="Add description"
+        aria-label="Description"
+        value={s.description()}
+        onInput={(e) => {
+          s.setDescription(e.currentTarget.value);
+          e.currentTarget.style.height = "auto";
+          e.currentTarget.style.height =
+            Math.min(e.currentTarget.scrollHeight, 160) + "px";
+        }}
+        onBlur={() => {
+          if (s.mode() === "edit") s.flushSave();
+        }}
+        class="w-full text-sm text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+        rows={2}
+      />
     </div>
   );
 }
@@ -346,69 +387,112 @@ export function CalendarSection(props: SectionProps) {
   const s = props.state;
 
   return (
-    <div class="px-3 py-2 border-t border-border space-y-2">
-      <ColorPickerPopover state={s} />
-      <div class="ml-[20px]" role="status" aria-live="polite">
-        <button
-          aria-pressed={s.transparency() === "opaque"}
-          class={`text-xs cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors ${
-            s.transparency() === "opaque" ? "text-fg" : "text-fg-muted"
-          }`}
-          onClick={() => s.setTransparency(s.transparency() === "opaque" ? "transparent" : "opaque")}
-        >
-          {s.transparency() === "opaque" ? "Busy" : "Free"}
-        </button>
-      </div>
-      <Select.Root
-        collection={s.visibilityCollection()}
-        value={[s.visibility()]}
-        onValueChange={(details) => {
-          const val = details.value[0];
-          if (val === "default" || val === "public" || val === "private") {
-            s.setVisibility(val);
-          }
-        }}
-        positioning={{ placement: "bottom-start", sameWidth: true }}
-      >
-        <Select.Control class="ml-[20px]">
-          <Select.Trigger class="flex items-center gap-1 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg">
-            <Show when={s.visibility() === "private"}>
-              <Lock size={10} class="shrink-0" />
-            </Show>
-            <Show when={s.visibility() === "public"}>
-              <Globe size={10} class="shrink-0" />
-            </Show>
-            <span>
-              {s.visibility() === "default" ? "Default visibility" : s.visibility() === "public" ? "Public" : "Private"}
-            </span>
-            <ChevronDown size={10} class="text-fg-muted shrink-0" />
-          </Select.Trigger>
-        </Select.Control>
-        <Select.Positioner>
-          <Select.Content class="bg-surface border border-border rounded py-1 z-50">
-            <For each={s.visibilityCollection().items}>
-              {(item) => (
-                <Select.Item
-                  item={item}
-                  class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+    <div class="px-3 py-3 border-t border-border">
+      <div class="flex items-center gap-2">
+        <div class="w-2/5 shrink-0">
+          <Select.Root
+            collection={s.transparencyCollection()}
+            value={[s.transparency()]}
+            onValueChange={(details) => {
+              const val = details.value[0];
+              if (val === "opaque" || val === "transparent") {
+                s.setTransparency(val);
+              }
+            }}
+            positioning={{ placement: "bottom-start" }}
+          >
+            <Select.Control>
+              <Select.Trigger
+                aria-label="Free/Busy status"
+                class="flex w-full items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+              >
+                <Show
+                  when={s.transparency() === "opaque"}
+                  fallback={<Circle size={14} class="shrink-0" />}
                 >
-                  <Show when={item.value === "public"}>
-                    <Globe size={10} class="shrink-0" />
-                  </Show>
-                  <Show when={item.value === "private"}>
-                    <Lock size={10} class="shrink-0" />
-                  </Show>
-                  <Show when={item.value === "default"}>
-                    <span class="w-[10px]" />
-                  </Show>
-                  <Select.ItemText>{item.label}</Select.ItemText>
-                </Select.Item>
-              )}
-            </For>
-          </Select.Content>
-        </Select.Positioner>
-        <Select.HiddenSelect />
-      </Select.Root>
+                  <CircleDot size={14} class="shrink-0" />
+                </Show>
+                <span class="flex-1 text-left">{s.transparency() === "opaque" ? "Busy" : "Free"}</span>
+                <ChevronDown size={14} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+            </Select.Control>
+            <Select.Positioner>
+              <Select.Content class="bg-surface border border-border rounded py-1 z-50">
+                <For each={s.transparencyCollection().items}>
+                  {(item) => (
+                    <Select.Item
+                      item={item}
+                      class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                    >
+                      <Select.ItemText>{item.label}</Select.ItemText>
+                    </Select.Item>
+                  )}
+                </For>
+              </Select.Content>
+            </Select.Positioner>
+            <Select.HiddenSelect />
+          </Select.Root>
+        </div>
+        <div class="w-px h-4 bg-border shrink-0" />
+        <div class="w-3/5">
+          <Select.Root
+            collection={s.visibilityCollection()}
+            value={[s.visibility()]}
+            onValueChange={(details) => {
+              const val = details.value[0];
+              if (val === "default" || val === "public" || val === "private") {
+                s.setVisibility(val);
+              }
+            }}
+            positioning={{ placement: "bottom-start" }}
+          >
+            <Select.Control>
+              <Select.Trigger
+                aria-label="Event visibility"
+                class="flex w-full items-center gap-2 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+              >
+                <Show
+                  when={s.visibility() === "private"}
+                  fallback={<Eye size={14} class="shrink-0" />}
+                >
+                  <EyeOff size={14} class="shrink-0" />
+                </Show>
+                <span class="flex-1 text-left">
+                  {s.visibility() === "default"
+                    ? "Default"
+                    : s.visibility() === "public"
+                      ? "Public"
+                      : "Private"}
+                </span>
+                <ChevronDown size={14} class="text-fg-muted shrink-0" />
+              </Select.Trigger>
+            </Select.Control>
+          <Select.Positioner>
+            <Select.Content class="bg-surface border border-border rounded z-50">
+              {/* Default — separated like color selector's "Calendar default" */}
+              <Select.Item
+                item={s.visibilityCollection().items[0]}
+                class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+              >
+                <Select.ItemText>Default</Select.ItemText>
+              </Select.Item>
+              <div class="border-t border-border" />
+              <For each={s.visibilityCollection().items.slice(1)}>
+                {(item) => (
+                  <Select.Item
+                    item={item}
+                    class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                  >
+                    <Select.ItemText>{item.label}</Select.ItemText>
+                  </Select.Item>
+                )}
+              </For>
+            </Select.Content>
+          </Select.Positioner>
+          <Select.HiddenSelect />
+        </Select.Root>
+        </div>
+      </div>
     </div>
   );
 }
@@ -422,60 +506,57 @@ const REMINDER_PRESETS = [
   { minutes: 1440, label: "1 day" },
 ];
 
-function formatReminderChip(minutes: number): string {
-  if (minutes >= 1440) return `${minutes / 1440} day before`;
-  if (minutes >= 60) return `${minutes / 60}hr before`;
-  return `${minutes}min before`;
+function formatReminderValue(minutes: number): string {
+  if (minutes >= 1440) return `${minutes / 1440} day`;
+  if (minutes >= 60) return `${minutes / 60}hr`;
+  return `${minutes}min`;
+}
+
+function parseReminderInput(input: string): number | null {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return null;
+  const match = trimmed.match(
+    /^(\d+)\s*(min|minute|minutes|h|hr|hrs|hour|hours|d|day|days)?/,
+  );
+  if (!match) return null;
+  const num = parseInt(match[1], 10);
+  if (num <= 0 || isNaN(num)) return null;
+  const unit = match[2];
+  if (!unit) return num; // bare number → minutes
+  if (unit.startsWith("h")) return num * 60;
+  if (unit.startsWith("d")) return num * 1440;
+  return num;
 }
 
 export function RemindersSection(props: SectionProps) {
   const s = props.state;
 
   return (
-    <div class="px-3 py-2 border-t border-border space-y-1">
-      <Show
-        when={s.reminders().length > 0}
-        fallback={
-          <ReminderPopover state={s}>
-            <Popover.Trigger class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
-              <Bell size={14} class="shrink-0" />
-              <span>Add reminder</span>
-            </Popover.Trigger>
-          </ReminderPopover>
-        }
-      >
-        <div class="flex items-center gap-2 text-sm text-fg">
-          <Bell size={14} class="text-fg-muted shrink-0" />
-          <span>Reminders</span>
-        </div>
-        <div class="ml-[22px] flex flex-wrap gap-1">
-          <For each={s.reminders()}>
+    <div class="px-3 py-3 border-t border-border space-y-1">
+      <Show when={s.reminders().length < 5}>
+        <ReminderCombobox state={s} />
+      </Show>
+      <Show when={s.reminders().length > 0}>
+        <div class="flex flex-col">
+          <For each={[...s.reminders()].sort((a, b) => a.minutes - b.minutes)}>
             {(r) => (
-              <span
-                class="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 bg-surface-hover text-fg"
-                aria-label={`${formatReminderChip(r.minutes)}, press delete to remove`}
+              <div
+                class="group flex items-center gap-2 pl-[30px] pr-2 py-2 rounded hover:bg-surface-hover transition-colors"
+                aria-label={`${formatReminderValue(r.minutes)} before, press delete to remove`}
               >
-                {formatReminderChip(r.minutes)}
+                <span class="flex-1 text-sm text-fg-muted">
+                  {formatReminderValue(r.minutes)} before
+                </span>
                 <button
-                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                  class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
                   onClick={() => s.removeReminder(r.minutes)}
-                  aria-label={`Remove ${formatReminderChip(r.minutes)} reminder`}
+                  aria-label={`Remove ${formatReminderValue(r.minutes)} before reminder`}
                 >
-                  <X size={10} />
+                  <X size={12} />
                 </button>
-              </span>
+              </div>
             )}
           </For>
-          <Show when={s.reminders().length < 5}>
-            <ReminderPopover state={s}>
-              <Popover.Trigger
-                class="w-5 h-5 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
-                aria-label="Add another reminder"
-              >
-                <Plus size={12} />
-              </Popover.Trigger>
-            </ReminderPopover>
-          </Show>
         </div>
       </Show>
     </div>
@@ -510,7 +591,10 @@ function ConferencingField(props: { state: EventFormState }) {
 
   function handleUrlSubmit(): void {
     const url = urlValue().trim();
-    if (!url) { setShowUrlInput(false); return; }
+    if (!url) {
+      setShowUrlInput(false);
+      return;
+    }
     try {
       new URL(url); // Basic validation
       s.setManualConferencing(url);
@@ -535,21 +619,21 @@ function ConferencingField(props: { state: EventFormState }) {
   function openUrl(uri: string): void {
     if (!uri) return;
     invoke("open_url", { url: uri }).catch((err) =>
-      console.error("[conferencing] Failed to open URL:", err)
+      console.error("[conferencing] Failed to open URL:", err),
     );
   }
 
   function copyUrl(uri: string): void {
-    navigator.clipboard.writeText(uri).catch((err) =>
-      console.error("[conferencing] Failed to copy URL:", err)
-    );
+    navigator.clipboard
+      .writeText(uri)
+      .catch((err) => console.error("[conferencing] Failed to copy URL:", err));
   }
 
   return (
     <>
       <Show when={s.conferencingLoading()}>
-        <div class="flex items-center gap-2 text-sm text-fg-muted px-1 -mx-1">
-          <Loader2 size={14} class="shrink-0 animate-spin" />
+        <div class="flex items-center gap-2 text-sm text-fg-muted px-2 py-2">
+          <LoaderCircle size={14} class="shrink-0 animate-spin" />
           <span>Adding Google Meet…</span>
         </div>
       </Show>
@@ -562,7 +646,7 @@ function ConferencingField(props: { state: EventFormState }) {
               fallback={
                 <div class="flex items-center gap-1">
                   <button
-                    class="flex flex-1 items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors"
+                    class="flex flex-1 items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors"
                     onClick={handleAddClick}
                     aria-label="Add Google Meet link"
                   >
@@ -579,7 +663,7 @@ function ConferencingField(props: { state: EventFormState }) {
                 </div>
               }
             >
-              <div class="flex items-center gap-2 text-sm">
+              <div class="flex items-center gap-2 text-sm px-2">
                 <Video size={14} class="text-fg-muted shrink-0" />
                 <input
                   type="url"
@@ -590,14 +674,17 @@ function ConferencingField(props: { state: EventFormState }) {
                   onInput={(e) => setUrlValue(e.currentTarget.value)}
                   onBlur={handleUrlSubmit}
                   onKeyDown={handleUrlKeyDown}
-                  class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+                  class="flex-1 text-sm text-fg py-2 px-2 placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
                 />
+                <button>
+                  <X size={14} />
+                </button>
               </div>
             </Show>
           }
         >
           {(conf) => (
-            <div class="flex items-center gap-2 text-sm">
+            <div class="flex items-center gap-2 text-sm px-2 py-2">
               <Video size={14} class="text-fg-muted shrink-0" />
               <button
                 class="flex-1 text-left text-fg truncate cursor-pointer hover:underline"
@@ -605,7 +692,7 @@ function ConferencingField(props: { state: EventFormState }) {
                 disabled={!conf().uri}
                 aria-label={`Open ${conferencingLabel(conf())} link`}
               >
-                {conferencingLabel(conf())}
+                {conferencingLabel(conf())} Link
               </button>
               <Show when={conf().uri}>
                 <button
@@ -645,57 +732,66 @@ const COLOR_SWATCHES: { key: CathrinColorKey; label: string }[] = [
   { key: "rose", label: "Rose" },
 ];
 
-function ColorPickerPopover(props: { state: EventFormState }) {
+function ColorSelect(props: { state: EventFormState }) {
   const s = props.state;
+
+  const calendarColorKey = createMemo(() => {
+    const hex = s.calendarColor();
+    const entries = Object.entries(CATHRIN_PALETTE) as [
+      CathrinColorKey,
+      string,
+    ][];
+    const match = entries.find(([, v]) => v === hex);
+    return match ? match[0] : null;
+  });
+
+  const otherSwatches = createMemo(() =>
+    COLOR_SWATCHES.filter((sw) => sw.key !== calendarColorKey()),
+  );
+
+  const isSelected = (key: CathrinColorKey | null) => s.colorId() === key;
+
+  const ringStyle = (color: string, selected: boolean) => ({
+    "background-color": color,
+    "box-shadow": selected
+      ? `0 0 0 2px var(--color-surface), 0 0 0 3.5px ${color}`
+      : undefined,
+  });
 
   return (
     <Popover.Root positioning={{ placement: "bottom-start" }}>
-      <Popover.Trigger
-        class="flex w-full items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-surface-hover transition-colors bg-transparent border-none outline-none text-left"
-      >
-        <Palette size={14} class="text-fg-muted shrink-0" />
+      <Popover.Trigger class="flex items-center gap-1 rounded px-2 min-h-9 hover:bg-surface-hover transition-colors cursor-pointer bg-transparent border-none outline-none shrink-0">
         <div
-          class={`w-3 h-3 rounded-full shrink-0 ${
-            s.colorId() ? "" : "border border-dashed border-fg-muted"
-          }`}
+          class="w-3.5 h-3.5 rounded-full shrink-0"
           style={{ "background-color": s.eventColor() }}
         />
-        <Show
-          when={s.colorId()}
-          fallback={<span class="text-sm text-fg-disabled">Calendar default</span>}
-        >
-          <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
-        </Show>
+        <ChevronDown size={12} class="text-fg-muted shrink-0" />
       </Popover.Trigger>
       <Popover.Positioner>
-        <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
-          <div role="radiogroup" aria-label="Event color" class="grid grid-cols-4 gap-1.5">
-            <Popover.CloseTrigger
-              role="radio"
-              aria-checked={s.colorId() === null}
-              aria-label="Calendar default"
-              class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125 ring-1 ring-border-light ring-offset-1 ring-offset-surface"
-              style={{ "background-color": s.calendarColor() }}
-              onClick={() => s.setColorId(null)}
-            >
-              <Show when={s.colorId() === null}>
-                <Check size={10} class="text-white" />
-              </Show>
-            </Popover.CloseTrigger>
-            <For each={COLOR_SWATCHES}>
+        <Popover.Content class="bg-surface border border-border rounded z-50 max-w-[180px]">
+          {/* Header — calendar default */}
+          <Popover.CloseTrigger
+            class="flex items-center gap-2 w-full px-3 py-2 cursor-pointer bg-transparent border-none outline-none hover:bg-surface-hover transition-colors rounded-t"
+            onClick={() => s.setColorId(null)}
+          >
+            <div
+              class="w-3.5 h-3.5 rounded-full shrink-0"
+              style={ringStyle(s.calendarColor(), isSelected(null))}
+            />
+            <span class="text-xs text-fg-muted">Calendar default</span>
+          </Popover.CloseTrigger>
+          {/* Body — palette swatches */}
+          <div class="flex items-center gap-x-3 gap-y-3 flex-wrap px-3 pt-3 pb-4 border-t border-border">
+            <For each={otherSwatches()}>
               {(swatch) => (
                 <Popover.CloseTrigger
-                  role="radio"
-                  aria-checked={s.colorId() === swatch.key}
-                  aria-label={swatch.label}
-                  class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
-                  style={{ "background-color": CATHRIN_PALETTE[swatch.key] }}
+                  class="w-3.5 h-3.5 rounded-full cursor-pointer shrink-0 transition-transform hover:scale-125 bg-transparent border-none outline-none"
+                  style={ringStyle(
+                    CATHRIN_PALETTE[swatch.key],
+                    isSelected(swatch.key),
+                  )}
                   onClick={() => s.setColorId(swatch.key)}
-                >
-                  <Show when={s.colorId() === swatch.key}>
-                    <Check size={10} class="text-white" />
-                  </Show>
-                </Popover.CloseTrigger>
+                />
               )}
             </For>
           </div>
@@ -705,28 +801,92 @@ function ColorPickerPopover(props: { state: EventFormState }) {
   );
 }
 
-function ReminderPopover(props: { state: EventFormState; children: any }) {
+function ReminderCombobox(props: { state: EventFormState }) {
   const s = props.state;
-  const availablePresets = () =>
-    REMINDER_PRESETS.filter((p) => !s.reminders().some((r) => r.minutes === p.minutes));
+  const [inputValue, setInputValue] = createSignal("");
+
+  const suggestions = createMemo(() => {
+    const existing = s.reminders().map((r) => r.minutes);
+    const text = inputValue().trim();
+    const num = parseInt(text, 10);
+
+    if (num > 0 && !isNaN(num)) {
+      const items: { value: string; label: string }[] = [];
+      if (!existing.includes(num))
+        items.push({ value: String(num), label: `${num} min before` });
+      if (!existing.includes(num * 60))
+        items.push({
+          value: String(num * 60),
+          label: `${num} hour${num !== 1 ? "s" : ""} before`,
+        });
+      if (!existing.includes(num * 1440))
+        items.push({
+          value: String(num * 1440),
+          label: `${num} day${num !== 1 ? "s" : ""} before`,
+        });
+      return items;
+    }
+
+    return REMINDER_PRESETS.filter((p) => !existing.includes(p.minutes)).map(
+      (p) => ({ value: String(p.minutes), label: `${p.label} before` }),
+    );
+  });
+
+  const collection = createMemo(() =>
+    createListCollection({
+      items: suggestions(),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    }),
+  );
+
+  function handleAdd(minutes: number): void {
+    if (minutes > 0 && !s.reminders().some((r) => r.minutes === minutes)) {
+      s.addReminder(minutes);
+    }
+    setInputValue("");
+  }
 
   return (
-    <Popover.Root positioning={{ placement: "bottom-start" }}>
-      {props.children}
-      <Popover.Positioner>
-        <Popover.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
-          <For each={availablePresets()}>
-            {(preset) => (
-              <Popover.CloseTrigger
-                class="flex w-full items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover transition-colors"
-                onClick={() => s.addReminder(preset.minutes)}
+    <Combobox.Root
+      collection={collection()}
+      allowCustomValue
+      openOnClick
+      closeOnSelect
+      selectionBehavior="clear"
+      inputBehavior="autohighlight"
+      inputValue={inputValue()}
+      onInputValueChange={(details) => setInputValue(details.inputValue)}
+      onValueChange={(details) => {
+        const val = details.value[0];
+        if (!val) return;
+        const minutes = parseReminderInput(val);
+        if (minutes) handleAdd(minutes);
+      }}
+      positioning={{ placement: "bottom-start", sameWidth: true }}
+    >
+      <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
+        <Bell size={14} class="text-fg-muted shrink-0" />
+        <Combobox.Input
+          placeholder="Reminders"
+          aria-label="Reminders"
+          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none cursor-text"
+        />
+      </Combobox.Control>
+      <Combobox.Positioner>
+        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
+          <For each={suggestions()}>
+            {(item) => (
+              <Combobox.Item
+                item={item}
+                class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
               >
-                {preset.label} before
-              </Popover.CloseTrigger>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+              </Combobox.Item>
             )}
           </For>
-        </Popover.Content>
-      </Popover.Positioner>
-    </Popover.Root>
+        </Combobox.Content>
+      </Combobox.Positioner>
+    </Combobox.Root>
   );
 }

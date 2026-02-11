@@ -12,7 +12,7 @@ import {
   getCalendarsToCheck,
 } from "../services/calendar-sync.js";
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
-import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle } from "../services/event-mutations.js";
+import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 
 const querySchema = z
@@ -214,4 +214,53 @@ export const eventsRoute = new Hono()
       if (errorResponse) return errorResponse;
       throw error;
     }
-  });
+  })
+  .post(
+    "/:eventId/move",
+    zValidator(
+      "json",
+      z.object({
+        targetCalendarId: z.string().min(1),
+      })
+    ),
+    async (c) => {
+      if (!db) {
+        return c.json({ error: "Database not configured" }, 500);
+      }
+
+      const userId = c.get("userId");
+      const googleEventId = c.req.param("eventId");
+      const { targetCalendarId } = c.req.valid("json");
+
+      const accountIds = await getUserAccountIds(userId);
+      if (accountIds.length === 0) {
+        return c.json({ error: "No accounts found" }, 404);
+      }
+
+      const event = await findUserEvent(accountIds, googleEventId);
+      if (!event) {
+        return c.json({ error: "Event not found" }, 404);
+      }
+
+      if (event.calendarId === targetCalendarId) {
+        return c.json({ error: "Event is already on this calendar" }, 400);
+      }
+
+      const targetOwner = await resolveCalendarOwner(accountIds, targetCalendarId);
+      if (!targetOwner) {
+        return c.json({ error: "Target calendar not found" }, 404);
+      }
+
+      try {
+        const apiEvent = await moveEventViaGoogle(
+          event.accountId, event.calendarId, targetCalendarId,
+          googleEventId, event.id, targetOwner.color
+        );
+        return c.json(apiEvent);
+      } catch (error) {
+        const errorResponse = handleGoogleApiError(error, c);
+        if (errorResponse) return errorResponse;
+        throw error;
+      }
+    }
+  );

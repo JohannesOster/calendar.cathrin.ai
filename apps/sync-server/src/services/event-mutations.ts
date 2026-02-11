@@ -7,6 +7,7 @@ import {
   type GoogleEventPatch,
 } from "./google-calendar.js";
 import { upsertServerEvent } from "./event-storage.js";
+import { mapServerEventToApi } from "./event-mapper.js";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { InferSelectModel } from "drizzle-orm";
 
@@ -128,11 +129,12 @@ export async function updateEventViaGoogle(
   if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
   if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
   if (patch.reminders !== undefined) {
-    googlePatch.reminders = patch.reminders && patch.reminders.length > 0
-      ? { useDefault: false, overrides: patch.reminders }
-      : { useDefault: true };
+    googlePatch.reminders = {
+      useDefault: false,
+      overrides: patch.reminders && patch.reminders.length > 0 ? patch.reminders : [],
+    };
   }
-  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? "";
+  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? null;
   if (patch.conferencing !== undefined) {
     if (patch.conferencing === null) {
       // Remove conferencing
@@ -187,7 +189,11 @@ export async function updateEventViaGoogle(
       description: updated.description || null,
       transparency: updated.transparency || existingEvent.transparency || null,
       visibility: updated.visibility || existingEvent.visibility || null,
-      reminders: updated.reminders?.overrides || existingEvent.reminders || null,
+      reminders: patch.reminders !== undefined
+        ? (patch.reminders && patch.reminders.length > 0
+          ? (updated.reminders?.overrides || patch.reminders)
+          : null)
+        : (updated.reminders?.overrides || existingEvent.reminders || null),
       colorId: updated.colorId || null,
       ...(patch.conferencing !== undefined && {
         conferencing: (() => {
@@ -231,7 +237,11 @@ export async function updateEventViaGoogle(
     readOnlyReason: existingEvent.readOnlyReason || undefined,
     transparency: updated.transparency || existingEvent.transparency || undefined,
     visibility: updated.visibility || existingEvent.visibility || undefined,
-    reminders: (updated.reminders?.overrides || existingEvent.reminders as { method: string; minutes: number }[]) || undefined,
+    reminders: patch.reminders !== undefined
+      ? (patch.reminders && patch.reminders.length > 0
+        ? (updated.reminders?.overrides || patch.reminders || undefined)
+        : undefined)
+      : ((updated.reminders?.overrides || existingEvent.reminders) as { method: string; minutes: number }[] | undefined),
     colorId: updated.colorId || undefined,
     conferencing: conferencingResult,
   };
@@ -253,4 +263,50 @@ export async function deleteEventViaGoogle(
   await db!
     .delete(serverEvents)
     .where(eq(serverEvents.id, eventDbId));
+}
+
+/**
+ * Move an event to a different calendar via Google Calendar API.
+ * Updates calendarId and color in the local cache.
+ * Returns the updated ApiCalendarEvent.
+ *
+ * IMPORTANT: Once Google processes the move, the DB MUST be updated —
+ * otherwise background sync will delete the event from the old calendar's
+ * cache and it becomes invisible until the new calendar is re-fetched.
+ */
+export async function moveEventViaGoogle(
+  accountId: string,
+  sourceCalendarId: string,
+  destinationCalendarId: string,
+  googleEventId: string,
+  eventDbId: string,
+  destinationColor: string | null
+): Promise<ApiCalendarEvent> {
+  const accessToken = await getAccessToken(accountId);
+  const service = new GoogleCalendarService(accessToken);
+  await service.moveEvent(sourceCalendarId, googleEventId, destinationCalendarId);
+
+  // Google succeeded — update DB. If this fails, the event will vanish from
+  // the UI until the next full sync picks it up from the new calendar.
+  const color = destinationColor || "#4285f4";
+
+  try {
+    await db!
+      .update(serverEvents)
+      .set({
+        calendarId: destinationCalendarId,
+        color,
+        updatedAt: new Date(),
+      })
+      .where(eq(serverEvents.id, eventDbId));
+  } catch (dbError) {
+    console.error(`[events] CRITICAL: Google moved event ${googleEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
+    throw dbError;
+  }
+
+  const updated = await db!.query.serverEvents.findFirst({
+    where: eq(serverEvents.id, eventDbId),
+  });
+
+  return mapServerEventToApi(updated!);
 }
