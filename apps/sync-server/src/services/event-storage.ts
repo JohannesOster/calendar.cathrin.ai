@@ -25,6 +25,8 @@ function buildEventValues(
     location: event.location ?? null,
     description: event.description ?? null,
     status: "confirmed" as const,
+    isReadOnly: event.isReadOnly,
+    readOnlyReason: event.readOnlyReason ?? null,
   };
 }
 
@@ -40,6 +42,8 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     color: event.color,
     location: event.location ?? null,
     description: event.description ?? null,
+    isReadOnly: event.isReadOnly,
+    readOnlyReason: event.readOnlyReason ?? null,
     updatedAt: new Date(),
   };
 }
@@ -88,6 +92,8 @@ export async function upsertServerEvents(
         color: sql`excluded.color`,
         location: sql`excluded.location`,
         description: sql`excluded.description`,
+        isReadOnly: sql`excluded.is_read_only`,
+        readOnlyReason: sql`excluded.read_only_reason`,
         updatedAt: new Date(),
       },
     });

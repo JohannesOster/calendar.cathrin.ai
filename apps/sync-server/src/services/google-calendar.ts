@@ -71,6 +71,9 @@ interface GoogleEvent {
   status?: string;
   location?: string;
   description?: string;
+  guestsCanModify?: boolean;
+  locked?: boolean;
+  organizer?: { self?: boolean };
 }
 
 interface EventsListResponse {
@@ -142,7 +145,8 @@ export class GoogleCalendarService {
     calendarId: string,
     timeMin: string,
     timeMax: string,
-    calendarColor: string
+    calendarColor: string,
+    calendarAccessRole?: string
   ): Promise<ApiCalendarEvent[]> {
     const allEvents: GoogleEvent[] = [];
     let pageToken: string | undefined;
@@ -179,7 +183,7 @@ export class GoogleCalendarService {
     } while (pageToken);
 
     return allEvents
-      .map((event) => this.mapEvent(event, calendarId, calendarColor))
+      .map((event) => this.mapEvent(event, calendarId, calendarColor, calendarAccessRole))
       .filter((e): e is ApiCalendarEvent => e !== null);
   }
 
@@ -189,7 +193,8 @@ export class GoogleCalendarService {
   async fetchEventsIncremental(
     calendarId: string,
     syncToken: string,
-    calendarColor: string
+    calendarColor: string,
+    calendarAccessRole?: string
   ): Promise<{
     events: ApiCalendarEvent[];
     cancelledIds: string[];
@@ -241,7 +246,7 @@ export class GoogleCalendarService {
 
     return {
       events: activeEvents
-        .map((event) => this.mapEvent(event, calendarId, calendarColor))
+        .map((event) => this.mapEvent(event, calendarId, calendarColor, calendarAccessRole))
         .filter((e): e is ApiCalendarEvent => e !== null),
       cancelledIds,
       nextSyncToken,
@@ -364,17 +369,22 @@ export class GoogleCalendarService {
       color: calendar.backgroundColor ?? "#4285f4",
       visible: true, // Default to visible, will be user preference later
       provider: "google",
+      accessRole: calendar.accessRole,
     };
   }
 
   /**
    * Map Google event to ApiCalendarEvent.
    * Returns null if the event has no start or end date (skipped with a warning).
+   *
+   * Computes `isReadOnly` from calendar-level `accessRole` and event-level
+   * permission fields (`guestsCanModify`, `locked`, `organizer.self`).
    */
   private mapEvent(
     event: GoogleEvent,
     calendarId: string,
-    calendarColor: string
+    calendarColor: string,
+    calendarAccessRole?: string
   ): ApiCalendarEvent | null {
     const start = event.start.dateTime || event.start.date;
     const end = event.end.dateTime || event.end.date;
@@ -385,6 +395,11 @@ export class GoogleCalendarService {
       );
       return null;
     }
+
+    const { isReadOnly, readOnlyReason } = this.computeReadOnly(
+      calendarAccessRole,
+      event
+    );
 
     return {
       id: event.id,
@@ -397,6 +412,32 @@ export class GoogleCalendarService {
       provider: "google",
       location: event.location || undefined,
       description: event.description || undefined,
+      isReadOnly,
+      readOnlyReason,
     };
+  }
+
+  /**
+   * Derive isReadOnly + reason from calendar access role and event fields.
+   * Priority: calendar_read_only > locked > not_organizer
+   * Defaults to editable when permission data is unavailable.
+   */
+  private computeReadOnly(
+    calendarAccessRole: string | undefined,
+    event: GoogleEvent
+  ): { isReadOnly: boolean; readOnlyReason?: string } {
+    if (calendarAccessRole === "reader" || calendarAccessRole === "freeBusyReader") {
+      return { isReadOnly: true, readOnlyReason: "calendar_read_only" };
+    }
+
+    if (event.locked) {
+      return { isReadOnly: true, readOnlyReason: "locked" };
+    }
+
+    if (!event.organizer?.self && !event.guestsCanModify) {
+      return { isReadOnly: true, readOnlyReason: "not_organizer" };
+    }
+
+    return { isReadOnly: false };
   }
 }

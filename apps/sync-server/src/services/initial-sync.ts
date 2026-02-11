@@ -66,7 +66,8 @@ export async function performInitialSync(accountId: string): Promise<void> {
           calendar.id,
           timeMin.toISOString(),
           timeMax.toISOString(),
-          calendar.color
+          calendar.color,
+          calendar.accessRole
         );
 
         console.log(
@@ -132,12 +133,14 @@ export async function performInitialSync(accountId: string): Promise<void> {
           .values({
             accountId,
             calendarId: calendar.id,
+            accessRole: calendar.accessRole ?? null,
             syncToken,
             lastSyncAt: new Date(),
           })
           .onConflictDoUpdate({
             target: [calendarSyncState.accountId, calendarSyncState.calendarId],
             set: {
+              accessRole: calendar.accessRole ?? null,
               syncToken,
               lastSyncAt: new Date(),
             },

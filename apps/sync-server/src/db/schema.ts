@@ -95,6 +95,8 @@ export const serverEvents = pgTable(
     location: text("location"),
     description: text("description"),
     status: text("status"), // confirmed, tentative, cancelled
+    isReadOnly: boolean("is_read_only").default(false),
+    readOnlyReason: text("read_only_reason"),
     raw: jsonb("raw"), // Store raw Google event for future fields
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
@@ -122,6 +124,7 @@ export const calendarSyncState = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
     calendarId: text("calendar_id").notNull(),
+    accessRole: text("access_role"),
     syncToken: text("sync_token"),
     lastSyncAt: timestamp("last_sync_at"),
     createdAt: timestamp("created_at").defaultNow(),

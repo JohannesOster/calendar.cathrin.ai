@@ -21,7 +21,8 @@ import { upsertServerEvents } from "./event-storage.js";
 export async function syncCalendarIncremental(
   accountId: string,
   calendarId: string,
-  calendarColor: string
+  calendarColor: string,
+  calendarAccessRole?: string
 ): Promise<{ updated: number; deleted: number }> {
   if (!db) {
     throw new Error("Database not configured");
@@ -47,7 +48,8 @@ export async function syncCalendarIncremental(
       await service.fetchEventsIncremental(
         calendarId,
         state.syncToken,
-        calendarColor
+        calendarColor,
+        calendarAccessRole
       );
 
     let updated = 0;
@@ -127,7 +129,8 @@ export async function syncCalendarFull(
   calendarId: string,
   calendarColor: string,
   timeMin: Date,
-  timeMax: Date
+  timeMax: Date,
+  calendarAccessRole?: string
 ): Promise<{ synced: number; syncToken: string }> {
   if (!db) {
     throw new Error("Database not configured");
@@ -141,7 +144,8 @@ export async function syncCalendarFull(
     calendarId,
     timeMin.toISOString(),
     timeMax.toISOString(),
-    calendarColor
+    calendarColor,
+    calendarAccessRole
   );
 
   // Store events
