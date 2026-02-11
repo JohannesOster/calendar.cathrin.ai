@@ -14,6 +14,8 @@ import {
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
+import { Popover } from "@ark-ui/solid/popover";
+import { Plus, X } from "lucide-solid";
 import {
   setDraftStart,
   setDraftEnd,
@@ -397,14 +399,97 @@ export function CalendarSection(props: SectionProps) {
   );
 }
 
-export function RemindersSection() {
+const REMINDER_PRESETS = [
+  { minutes: 5, label: "5 min" },
+  { minutes: 10, label: "10 min" },
+  { minutes: 15, label: "15 min" },
+  { minutes: 30, label: "30 min" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 1440, label: "1 day" },
+];
+
+function formatReminderChip(minutes: number): string {
+  if (minutes >= 1440) return `${minutes / 1440} day before`;
+  if (minutes >= 60) return `${minutes / 60}hr before`;
+  return `${minutes}min before`;
+}
+
+export function RemindersSection(props: SectionProps) {
+  const s = props.state;
+
   return (
     <div class="px-3 py-2 border-t border-border space-y-1">
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
-        <Bell size={14} class="shrink-0" />
-        <span>Reminders</span>
-      </button>
-      <button class="ml-[22px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">30min before</button>
+      <Show
+        when={s.reminders().length > 0}
+        fallback={
+          <ReminderPopover state={s}>
+            <Popover.Trigger class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
+              <Bell size={14} class="shrink-0" />
+              <span>Add reminder</span>
+            </Popover.Trigger>
+          </ReminderPopover>
+        }
+      >
+        <div class="flex items-center gap-2 text-sm text-fg">
+          <Bell size={14} class="text-fg-muted shrink-0" />
+          <span>Reminders</span>
+        </div>
+        <div class="ml-[22px] flex flex-wrap gap-1">
+          <For each={s.reminders()}>
+            {(r) => (
+              <span
+                class="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 bg-surface-hover text-fg"
+                aria-label={`${formatReminderChip(r.minutes)}, press delete to remove`}
+              >
+                {formatReminderChip(r.minutes)}
+                <button
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer"
+                  onClick={() => s.removeReminder(r.minutes)}
+                  aria-label={`Remove ${formatReminderChip(r.minutes)} reminder`}
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )}
+          </For>
+          <Show when={s.reminders().length < 5}>
+            <ReminderPopover state={s}>
+              <Popover.Trigger
+                class="w-5 h-5 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
+                aria-label="Add another reminder"
+              >
+                <Plus size={12} />
+              </Popover.Trigger>
+            </ReminderPopover>
+          </Show>
+        </div>
+      </Show>
     </div>
+  );
+}
+
+function ReminderPopover(props: { state: EventFormState; children: any }) {
+  const s = props.state;
+  const availablePresets = () =>
+    REMINDER_PRESETS.filter((p) => !s.reminders().some((r) => r.minutes === p.minutes));
+
+  return (
+    <Popover.Root positioning={{ placement: "bottom-start" }}>
+      {props.children}
+      <Popover.Positioner>
+        <Popover.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
+          <For each={availablePresets()}>
+            {(preset) => (
+              <Popover.CloseTrigger
+                class="flex w-full items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover transition-colors"
+                onClick={() => s.addReminder(preset.minutes)}
+              >
+                {preset.label} before
+              </Popover.CloseTrigger>
+            )}
+          </For>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }

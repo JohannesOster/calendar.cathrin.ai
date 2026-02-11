@@ -26,6 +26,7 @@ function buildEventValues(
     description: event.description ?? null,
     transparency: event.transparency ?? null,
     visibility: event.visibility ?? null,
+    reminders: event.reminders ?? null,
     status: "confirmed" as const,
   };
 }
@@ -44,6 +45,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     description: event.description ?? null,
     transparency: event.transparency ?? null,
     visibility: event.visibility ?? null,
+    reminders: event.reminders ?? null,
     updatedAt: new Date(),
   };
 }
@@ -94,6 +96,7 @@ export async function upsertServerEvents(
         description: sql`excluded.description`,
         transparency: sql`excluded.transparency`,
         visibility: sql`excluded.visibility`,
+        reminders: sql`excluded.reminders`,
         updatedAt: new Date(),
       },
     });

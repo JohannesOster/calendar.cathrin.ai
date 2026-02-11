@@ -96,6 +96,7 @@ export const serverEvents = pgTable(
     description: text("description"),
     transparency: text("transparency"), // opaque (busy) or transparent (free)
     visibility: text("visibility"), // default, public, private
+    reminders: jsonb("reminders"), // Array of { method, minutes }
     status: text("status"), // confirmed, tentative, cancelled
     raw: jsonb("raw"), // Store raw Google event for future fields
     createdAt: timestamp("created_at").defaultNow(),

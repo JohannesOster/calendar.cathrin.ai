@@ -73,6 +73,10 @@ interface GoogleEvent {
   description?: string;
   transparency?: string;
   visibility?: string;
+  reminders?: {
+    useDefault: boolean;
+    overrides?: { method: string; minutes: number }[];
+  };
 }
 
 interface EventsListResponse {
@@ -97,6 +101,7 @@ export interface GoogleEventPatch {
   end?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
   transparency?: string;
   visibility?: string;
+  reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
 }
 
 /**
@@ -265,6 +270,7 @@ export class GoogleCalendarService {
       description?: string;
       transparency?: string;
       visibility?: string;
+      reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
     }
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
@@ -405,6 +411,7 @@ export class GoogleCalendarService {
       description: event.description || undefined,
       transparency: event.transparency || undefined,
       visibility: event.visibility || undefined,
+      reminders: event.reminders?.overrides || undefined,
     };
   }
 }

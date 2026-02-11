@@ -20,6 +20,8 @@ import {
   setDraftTransparency,
   draftVisibility,
   setDraftVisibility,
+  draftReminders,
+  setDraftReminders,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -54,6 +56,7 @@ export function useEventFormState() {
   const [editCalendarId, setEditCalendarId] = createSignal<string | null>(null);
   const [editTransparency, setEditTransparency] = createSignal<"opaque" | "transparent">("opaque");
   const [editVisibility, setEditVisibility] = createSignal<"default" | "public" | "private">("default");
+  const [editReminders, setEditReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -108,6 +111,7 @@ export function useEventFormState() {
     setEditCalendarId(event.calendarId);
     setEditTransparency(event.transparency ?? "opaque");
     setEditVisibility(event.visibility ?? "default");
+    setEditReminders(event.reminders ?? []);
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -169,6 +173,20 @@ export function useEventFormState() {
   const setVisibility = (v: "default" | "public" | "private") => {
     if (mode() === "create") { setDraftVisibility(v); }
     else { setEditVisibility(v); scheduleSave({ visibility: v }); flushSave(); }
+  };
+
+  const reminders = () => mode() === "create" ? draftReminders() : editReminders();
+  const addReminder = (minutes: number) => {
+    const current = reminders();
+    if (current.length >= 5 || current.some((r) => r.minutes === minutes)) return;
+    const updated = [...current, { method: "popup" as const, minutes }];
+    if (mode() === "create") { setDraftReminders(updated); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated }); flushSave(); }
+  };
+  const removeReminder = (minutes: number) => {
+    const updated = reminders().filter((r) => r.minutes !== minutes);
+    if (mode() === "create") { setDraftReminders(updated); }
+    else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushSave(); }
   };
 
   const eventColor = createMemo(() => {
@@ -333,6 +351,9 @@ export function useEventFormState() {
     setTransparency,
     visibility,
     setVisibility,
+    reminders,
+    addReminder,
+    removeReminder,
     flushSave,
     allCalendars,
     calendarCollection,

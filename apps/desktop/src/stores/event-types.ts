@@ -17,6 +17,7 @@ export interface CalendarEvent {
   description?: string;
   transparency?: "opaque" | "transparent";
   visibility?: "default" | "public" | "private";
+  reminders?: { method: "popup"; minutes: number }[];
 }
 
 export type EventPatch = {
@@ -28,6 +29,7 @@ export type EventPatch = {
   isAllDay?: boolean;
   transparency?: "opaque" | "transparent";
   visibility?: "default" | "public" | "private";
+  reminders?: { method: "popup"; minutes: number }[] | null;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
@@ -43,5 +45,6 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     description: event.description,
     transparency: event.transparency as CalendarEvent["transparency"],
     visibility: event.visibility as CalendarEvent["visibility"],
+    reminders: event.reminders as CalendarEvent["reminders"],
   };
 }

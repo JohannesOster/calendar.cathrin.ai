@@ -27,7 +27,8 @@ export async function createEventViaGoogle(
   location?: string,
   description?: string,
   transparency?: string,
-  visibility?: string
+  visibility?: string,
+  reminders?: { method: string; minutes: number }[]
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -40,6 +41,11 @@ export async function createEventViaGoogle(
     description,
     transparency,
     visibility,
+    ...(reminders !== undefined && {
+      reminders: reminders && reminders.length > 0
+        ? { useDefault: false, overrides: reminders }
+        : { useDefault: true },
+    }),
   });
 
   const color = calendarColor || "#4285f4";
@@ -63,6 +69,7 @@ export async function createEventViaGoogle(
     description: googleEvent.description || description || undefined,
     transparency: googleEvent.transparency || transparency || undefined,
     visibility: googleEvent.visibility || visibility || undefined,
+    reminders: googleEvent.reminders?.overrides || reminders || undefined,
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -87,6 +94,7 @@ export async function updateEventViaGoogle(
     isAllDay?: boolean;
     transparency?: string;
     visibility?: string;
+    reminders?: { method: string; minutes: number }[] | null;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -96,6 +104,11 @@ export async function updateEventViaGoogle(
   if (patch.location !== undefined) googlePatch.location = patch.location;
   if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
   if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
+  if (patch.reminders !== undefined) {
+    googlePatch.reminders = patch.reminders && patch.reminders.length > 0
+      ? { useDefault: false, overrides: patch.reminders }
+      : { useDefault: true };
+  }
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
   if (patch.start !== undefined) {
@@ -136,6 +149,7 @@ export async function updateEventViaGoogle(
       description: updated.description || null,
       transparency: updated.transparency || existingEvent.transparency || null,
       visibility: updated.visibility || existingEvent.visibility || null,
+      reminders: updated.reminders?.overrides || existingEvent.reminders || null,
       updatedAt: new Date(),
     })
     .where(eq(serverEvents.id, existingEvent.id));
@@ -153,6 +167,7 @@ export async function updateEventViaGoogle(
     description: updated.description || undefined,
     transparency: updated.transparency || existingEvent.transparency || undefined,
     visibility: updated.visibility || existingEvent.visibility || undefined,
+    reminders: (updated.reminders?.overrides || existingEvent.reminders as { method: string; minutes: number }[]) || undefined,
   };
 }
 

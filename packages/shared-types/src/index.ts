@@ -37,6 +37,7 @@ export interface ApiCalendarEvent {
   description?: string;
   transparency?: string;
   visibility?: string;
+  reminders?: { method: string; minutes: number }[];
 }
 
 /**

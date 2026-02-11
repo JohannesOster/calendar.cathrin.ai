@@ -22,6 +22,7 @@ export const [draftDescription, setDraftDescription] = createSignal("");
 export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
 export const [draftTransparency, setDraftTransparency] = createSignal<"opaque" | "transparent">("opaque");
 export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "public" | "private">("default");
+export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -158,6 +159,7 @@ export function cancelCreation(): void {
   setDraftIsAllDay(false);
   setDraftTransparency("opaque");
   setDraftVisibility("default");
+  setDraftReminders([]);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -186,6 +188,7 @@ export function commitCreation(): boolean {
   const description = draftDescription().trim() || undefined;
   const transparency = draftTransparency();
   const visibility = draftVisibility();
+  const reminders = draftReminders();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -229,6 +232,7 @@ export function commitCreation(): boolean {
     description,
     transparency,
     visibility,
+    reminders: reminders.length > 0 ? reminders : undefined,
   });
 
   // Reset creation state
@@ -247,6 +251,7 @@ export function commitCreation(): boolean {
       description,
       transparency,
       visibility,
+      ...(reminders.length > 0 && { reminders }),
     }),
   })
     .then((serverEvent) => {
