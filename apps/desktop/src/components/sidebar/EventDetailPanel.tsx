@@ -2,26 +2,13 @@ import { Show, createMemo } from "solid-js";
 import { Clock, MapPin, AlignLeft } from "lucide-solid";
 import type { CalendarEvent } from "../../stores/event-types";
 import { connectedAccounts } from "../../stores/accounts";
-import { formatTime, formatDate, formatTimeRange } from "../../lib/format-utils";
+import { formatTime, formatDate } from "../../lib/format-utils";
 
 interface EventDetailPanelProps {
   event: CalendarEvent;
 }
 
 export function EventDetailPanel(props: EventDetailPanelProps) {
-  const contextLine = createMemo(() => {
-    switch (props.event.readOnlyReason) {
-      case "calendar_read_only":
-        return `From ${calendarName()} · View only`;
-      case "not_organizer":
-        return `From ${calendarName()}`;
-      case "locked":
-        return "This event is locked";
-      default:
-        return "View only";
-    }
-  });
-
   function calendarName(): string {
     for (const account of connectedAccounts()) {
       const cal = account.calendars.find((c) => c.id === props.event.calendarId);
@@ -64,7 +51,6 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
         {/* Title */}
         <div class="px-3 pt-3 pb-1">
           <h2 class="text-sm font-medium text-fg break-words">{props.event.title}</h2>
-          <p class="text-xs text-fg-muted mt-1">{contextLine()}</p>
         </div>
 
         {/* Date & time */}
