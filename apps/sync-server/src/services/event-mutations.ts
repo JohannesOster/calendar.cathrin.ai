@@ -129,9 +129,10 @@ export async function updateEventViaGoogle(
   if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
   if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
   if (patch.reminders !== undefined) {
-    googlePatch.reminders = patch.reminders && patch.reminders.length > 0
-      ? { useDefault: false, overrides: patch.reminders }
-      : { useDefault: true };
+    googlePatch.reminders = {
+      useDefault: false,
+      overrides: patch.reminders && patch.reminders.length > 0 ? patch.reminders : [],
+    };
   }
   if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? null;
   if (patch.conferencing !== undefined) {
@@ -189,7 +190,9 @@ export async function updateEventViaGoogle(
       transparency: updated.transparency || existingEvent.transparency || null,
       visibility: updated.visibility || existingEvent.visibility || null,
       reminders: patch.reminders !== undefined
-        ? (updated.reminders?.overrides || null)
+        ? (patch.reminders && patch.reminders.length > 0
+          ? (updated.reminders?.overrides || patch.reminders)
+          : null)
         : (updated.reminders?.overrides || existingEvent.reminders || null),
       colorId: updated.colorId || null,
       ...(patch.conferencing !== undefined && {
@@ -235,7 +238,9 @@ export async function updateEventViaGoogle(
     transparency: updated.transparency || existingEvent.transparency || undefined,
     visibility: updated.visibility || existingEvent.visibility || undefined,
     reminders: patch.reminders !== undefined
-      ? (updated.reminders?.overrides || undefined)
+      ? (patch.reminders && patch.reminders.length > 0
+        ? (updated.reminders?.overrides || patch.reminders || undefined)
+        : undefined)
       : ((updated.reminders?.overrides || existingEvent.reminders) as { method: string; minutes: number }[] | undefined),
     colorId: updated.colorId || undefined,
     conferencing: conferencingResult,
