@@ -248,51 +248,71 @@ export function DetailsSection(props: SectionProps) {
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
-      <Select.Root
-        collection={s.calendarCollection()}
-        value={s.calendarId() ? [s.calendarId()!] : []}
-        onValueChange={(details) => {
-          s.setCalId(details.value[0] ?? null);
-        }}
-        positioning={{ placement: "bottom-start", sameWidth: true }}
-      >
-        <Select.Control class="flex items-center gap-2">
-          <div
-            class="w-3 h-3 rounded-full shrink-0"
-            style={{ "background-color": s.calendarColor() }}
-          />
-          <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
-            <span>
+      <Show
+        when={s.mode() === "create"}
+        fallback={
+          <div class="flex items-center gap-2">
+            <div
+              class="w-3 h-3 rounded-full shrink-0"
+              style={{ "background-color": s.calendarColor() }}
+            />
+            <span class="text-sm text-fg">
               {(() => {
                 const id = s.calendarId();
-                if (!id) return "Select calendar";
+                if (!id) return "No calendar";
                 const cal = s.allCalendars().find((c) => c.id === id);
-                return cal?.name ?? "Select calendar";
+                return cal?.name ?? "Unknown calendar";
               })()}
             </span>
-            <ChevronDown size={12} class="text-fg-muted shrink-0" />
-          </Select.Trigger>
-        </Select.Control>
-        <Select.Positioner>
-          <Select.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
-            <For each={s.allCalendars()}>
-              {(cal) => (
-                <Select.Item
-                  item={cal}
-                  class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
-                >
-                  <div
-                    class="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ "background-color": cal.color }}
-                  />
-                  <Select.ItemText>{cal.name}</Select.ItemText>
-                </Select.Item>
-              )}
-            </For>
-          </Select.Content>
-        </Select.Positioner>
-        <Select.HiddenSelect />
-      </Select.Root>
+          </div>
+        }
+      >
+        <Select.Root
+          collection={s.calendarCollection()}
+          value={s.calendarId() ? [s.calendarId()!] : []}
+          onValueChange={(details) => {
+            s.setCalId(details.value[0] ?? null);
+          }}
+          positioning={{ placement: "bottom-start", sameWidth: true }}
+        >
+          <Select.Control class="flex items-center gap-2">
+            <div
+              class="w-3 h-3 rounded-full shrink-0"
+              style={{ "background-color": s.calendarColor() }}
+            />
+            <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
+              <span>
+                {(() => {
+                  const id = s.calendarId();
+                  if (!id) return "Select calendar";
+                  const cal = s.allCalendars().find((c) => c.id === id);
+                  return cal?.name ?? "Select calendar";
+                })()}
+              </span>
+              <ChevronDown size={12} class="text-fg-muted shrink-0" />
+            </Select.Trigger>
+          </Select.Control>
+          <Select.Positioner>
+            <Select.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
+              <For each={s.allCalendars()}>
+                {(cal) => (
+                  <Select.Item
+                    item={cal}
+                    class="flex items-center gap-2 px-3 py-1.5 text-sm text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                  >
+                    <div
+                      class="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ "background-color": cal.color }}
+                    />
+                    <Select.ItemText>{cal.name}</Select.ItemText>
+                  </Select.Item>
+                )}
+              </For>
+            </Select.Content>
+          </Select.Positioner>
+          <Select.HiddenSelect />
+        </Select.Root>
+      </Show>
     </div>
   );
 }
@@ -630,26 +650,23 @@ function ColorPickerPopover(props: { state: EventFormState }) {
 
   return (
     <Popover.Root positioning={{ placement: "bottom-start" }}>
-      <Popover.Trigger asChild={(triggerProps) => (
-        <button
-          {...triggerProps()}
-          class="flex w-full items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-surface-hover transition-colors"
+      <Popover.Trigger
+        class="flex w-full items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-surface-hover transition-colors bg-transparent border-none outline-none text-left"
+      >
+        <Palette size={14} class="text-fg-muted shrink-0" />
+        <div
+          class={`w-3 h-3 rounded-full shrink-0 ${
+            s.colorId() ? "" : "border border-dashed border-fg-muted"
+          }`}
+          style={{ "background-color": s.eventColor() }}
+        />
+        <Show
+          when={s.colorId()}
+          fallback={<span class="text-sm text-fg-disabled">Calendar default</span>}
         >
-          <Palette size={14} class="text-fg-muted shrink-0" />
-          <div
-            class={`w-3 h-3 rounded-full shrink-0 ${
-              s.colorId() ? "" : "border border-dashed border-fg-muted"
-            }`}
-            style={{ "background-color": s.eventColor() }}
-          />
-          <Show
-            when={s.colorId()}
-            fallback={<span class="text-sm text-fg-disabled">Calendar default</span>}
-          >
-            <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
-          </Show>
-        </button>
-      )} />
+          <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
+        </Show>
+      </Popover.Trigger>
       <Popover.Positioner>
         <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
           <div role="radiogroup" aria-label="Event color" class="grid grid-cols-4 gap-1.5">
