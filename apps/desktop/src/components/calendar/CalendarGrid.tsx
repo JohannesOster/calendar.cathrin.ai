@@ -34,6 +34,8 @@ import {
   visibleDaysCount,
   initVisibleDaysCount,
   createVisibleDaysPersistence,
+  initCurrentView,
+  createCurrentViewPersistence,
 } from "../../stores/view";
 import {
   getDateKey,
@@ -146,8 +148,9 @@ export function CalendarGrid() {
   // --- Keyboard Handlers ---
   setupKeyboardHandlers();
 
-  // --- Persist visible days count ---
+  // --- Persist view state ---
   createVisibleDaysPersistence();
+  createCurrentViewPersistence();
 
   // --- Month/Year Label ---
   const monthYearLabel = createMemo(() => {
@@ -170,6 +173,7 @@ export function CalendarGrid() {
 
   // --- Initialize on mount ---
   onMount(() => {
+    initCurrentView();
     initVisibleDaysCount();
 
     const freshAnchor = getInitialAnchor();

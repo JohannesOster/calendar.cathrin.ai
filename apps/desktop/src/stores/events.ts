@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 import { apiFetch } from "../lib/api";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
-import { DURATION_SLOW_MS } from "../constants/timings";
 import type { CalendarEvent, EventPatch } from "./event-types";
 
 // =============================================================================
@@ -12,8 +11,6 @@ export const [isLoading, setIsLoading] = createSignal(false);
 export const [lastRefreshed, setLastRefreshed] = createSignal<Date | null>(null);
 export const [eventsError, setEventsError] = createSignal<string | null>(null);
 export const [fetchedWeeks, setFetchedWeeks] = createSignal<Set<string>>(new Set());
-/** Event IDs currently animating back to their original position after a failed edit. */
-export const [revertingEventIds, setRevertingEventIds] = createSignal<Set<string>>(new Set());
 
 // =============================================================================
 // Cross-module registrations
@@ -172,26 +169,10 @@ export async function updateEvent(
     _revalidateWeeksForDates?.(snapshot.start, patch.start ?? snapshot.start);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
-    // Enable transition for animated snap-back
-    setRevertingEventIds((prev) => {
-      const next = new Set(prev);
-      next.add(eventId);
-      return next;
-    });
-    // Defer rollback to next frame so the browser paints the transition
-    // property before the position changes, enabling the CSS animation.
-    requestAnimationFrame(() => {
-      setEvents((prev) =>
-        prev.map((e) => (e.id === eventId ? snapshot : e))
-      );
-      setTimeout(() => {
-        setRevertingEventIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      }, DURATION_SLOW_MS);
-    });
+    // Rollback
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? snapshot : e))
+    );
   }
 }
 

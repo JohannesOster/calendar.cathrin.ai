@@ -6,7 +6,6 @@ import type { CalendarEvent as CalendarEventData } from "../../stores/event-type
 import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
-import { revertingEventIds } from "../../stores/events";
 import { snapMinutes } from "../../stores/event-creation";
 import { formatCompactTime, formatTimeRange } from "../../lib/format-utils";
 
@@ -41,7 +40,6 @@ export function CalendarEvent(props: CalendarEventProps) {
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
   const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
-  const isReverting = createMemo(() => revertingEventIds().has(props.event.id));
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;
@@ -216,9 +214,6 @@ export function CalendarEvent(props: CalendarEventProps) {
         left: getLeft(),
         width: getWidth(),
         "z-index": getZIndex(),
-        transition: isReverting() && !isBeingDragged()
-          ? "top var(--duration-slow) ease-out, height var(--duration-slow) ease-out"
-          : undefined,
       }}
     >
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
