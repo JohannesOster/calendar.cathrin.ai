@@ -1,4 +1,4 @@
-import { Show, For, createSignal, onCleanup } from "solid-js";
+import { Show, For, createSignal, createMemo, onCleanup } from "solid-js";
 import {
   Clock,
   ArrowRight,
@@ -14,9 +14,10 @@ import {
   Loader2,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
-import { Select } from "@ark-ui/solid/select";
+import { Select, createListCollection } from "@ark-ui/solid/select";
+import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
-import { Plus, X } from "lucide-solid";
+import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
@@ -450,22 +451,26 @@ function formatReminderChip(minutes: number): string {
   return `${minutes}min before`;
 }
 
+function parseReminderInput(input: string): number | null {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d+)\s*(min|minute|minutes|h|hr|hrs|hour|hours|d|day|days)?/);
+  if (!match) return null;
+  const num = parseInt(match[1], 10);
+  if (num <= 0 || isNaN(num)) return null;
+  const unit = match[2];
+  if (!unit) return num; // bare number → minutes
+  if (unit.startsWith("h")) return num * 60;
+  if (unit.startsWith("d")) return num * 1440;
+  return num;
+}
+
 export function RemindersSection(props: SectionProps) {
   const s = props.state;
 
   return (
     <div class="px-3 py-3 border-t border-border space-y-1">
-      <Show
-        when={s.reminders().length > 0}
-        fallback={
-          <ReminderPopover state={s}>
-            <Popover.Trigger class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1.5 py-1 -mx-1.5 hover:text-fg hover:bg-surface-hover transition-colors">
-              <Bell size={14} class="shrink-0" />
-              <span>Add reminder</span>
-            </Popover.Trigger>
-          </ReminderPopover>
-        }
-      >
+      <Show when={s.reminders().length > 0}>
         <div class="flex items-center gap-2 text-sm text-fg">
           <Bell size={14} class="text-fg-muted shrink-0" />
           <span>Reminders</span>
@@ -488,17 +493,10 @@ export function RemindersSection(props: SectionProps) {
               </span>
             )}
           </For>
-          <Show when={s.reminders().length < 5}>
-            <ReminderPopover state={s}>
-              <Popover.Trigger
-                class="w-6 h-6 flex items-center justify-center rounded-full text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors cursor-pointer"
-                aria-label="Add another reminder"
-              >
-                <Plus size={12} />
-              </Popover.Trigger>
-            </ReminderPopover>
-          </Show>
         </div>
+      </Show>
+      <Show when={s.reminders().length < 5}>
+        <ReminderCombobox state={s} showIcon={s.reminders().length === 0} />
       </Show>
     </div>
   );
@@ -782,28 +780,91 @@ function ColorPickerPopover(props: { state: EventFormState }) {
   );
 }
 
-function ReminderPopover(props: { state: EventFormState; children: any }) {
+function ReminderCombobox(props: { state: EventFormState; showIcon: boolean }) {
   const s = props.state;
-  const availablePresets = () =>
-    REMINDER_PRESETS.filter((p) => !s.reminders().some((r) => r.minutes === p.minutes));
+  const [inputValue, setInputValue] = createSignal("");
+
+  const suggestions = createMemo(() => {
+    const existing = s.reminders().map((r) => r.minutes);
+    const text = inputValue().trim();
+    const num = parseInt(text, 10);
+
+    if (num > 0 && !isNaN(num)) {
+      const items: { value: string; label: string }[] = [];
+      if (!existing.includes(num))
+        items.push({ value: String(num), label: `${num} min before` });
+      if (!existing.includes(num * 60))
+        items.push({ value: String(num * 60), label: `${num} hour${num !== 1 ? "s" : ""} before` });
+      if (!existing.includes(num * 1440))
+        items.push({ value: String(num * 1440), label: `${num} day${num !== 1 ? "s" : ""} before` });
+      return items;
+    }
+
+    return REMINDER_PRESETS
+      .filter((p) => !existing.includes(p.minutes))
+      .map((p) => ({ value: String(p.minutes), label: `${p.label} before` }));
+  });
+
+  const collection = createMemo(() =>
+    createListCollection({
+      items: suggestions(),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
+  function handleAdd(minutes: number): void {
+    if (minutes > 0 && !s.reminders().some((r) => r.minutes === minutes)) {
+      s.addReminder(minutes);
+    }
+    setInputValue("");
+  }
 
   return (
-    <Popover.Root positioning={{ placement: "bottom-start" }}>
-      {props.children}
-      <Popover.Positioner>
-        <Popover.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
-          <For each={availablePresets()}>
-            {(preset) => (
-              <Popover.CloseTrigger
-                class="flex w-full items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover transition-colors"
-                onClick={() => s.addReminder(preset.minutes)}
+    <Combobox.Root
+      collection={collection()}
+      allowCustomValue
+      openOnClick
+      closeOnSelect
+      selectionBehavior="clear"
+      inputValue={inputValue()}
+      onInputValueChange={(details) => setInputValue(details.inputValue)}
+      onValueChange={(details) => {
+        const val = details.value[0];
+        if (!val) return;
+        const minutes = parseReminderInput(val);
+        if (minutes) handleAdd(minutes);
+      }}
+      positioning={{ placement: "bottom-start", sameWidth: true }}
+    >
+      <Combobox.Control
+        class={`flex items-center gap-2 rounded hover:bg-surface-hover transition-colors ${
+          props.showIcon ? "px-1.5 py-1 -mx-1.5" : "ml-[22px]"
+        }`}
+      >
+        <Show when={props.showIcon}>
+          <Bell size={14} class="text-fg-muted shrink-0" />
+        </Show>
+        <Combobox.Input
+          placeholder="Add reminder"
+          aria-label="Add reminder"
+          class="flex-1 text-sm text-fg placeholder-fg-muted bg-transparent outline-none border-none cursor-text"
+        />
+      </Combobox.Control>
+      <Combobox.Positioner>
+        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
+          <For each={suggestions()}>
+            {(item) => (
+              <Combobox.Item
+                item={item}
+                class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
               >
-                {preset.label} before
-              </Popover.CloseTrigger>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+              </Combobox.Item>
             )}
           </For>
-        </Popover.Content>
-      </Popover.Positioner>
-    </Popover.Root>
+        </Combobox.Content>
+      </Combobox.Positioner>
+    </Combobox.Root>
   );
 }
