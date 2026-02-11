@@ -100,13 +100,31 @@ export function removeLocalEvent(eventId: string): void {
 /**
  * Update an event optimistically: apply patch locally, then PATCH API.
  * On failure, rollback to the snapshot.
+ *
+ * When the caller has already mutated the events signal before calling this
+ * (e.g. live drag preview), pass the true original values via `rollback`
+ * so the snapshot captures the correct pre-mutation state.
  */
-export async function updateEvent(eventId: string, patch: EventPatch): Promise<void> {
+export async function updateEvent(
+  eventId: string,
+  patch: EventPatch,
+  rollback?: EventPatch,
+): Promise<void> {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
 
-  // Snapshot for rollback
-  const snapshot = { ...event };
+  // Snapshot for rollback — merge in any explicit rollback values so the
+  // snapshot reflects the true pre-mutation state even when the caller
+  // pre-mutated the signal (e.g. during drag).
+  const snapshot: CalendarEvent = {
+    ...event,
+    ...(rollback?.title !== undefined && { title: rollback.title }),
+    ...(rollback?.description !== undefined && { description: rollback.description }),
+    ...(rollback?.location !== undefined && { location: rollback.location }),
+    ...(rollback?.start !== undefined && { start: rollback.start }),
+    ...(rollback?.end !== undefined && { end: rollback.end }),
+    ...(rollback?.isAllDay !== undefined && { isAllDay: rollback.isAllDay }),
+  };
 
   // Apply optimistic update
   setEvents((prev) =>
@@ -148,7 +166,7 @@ export async function updateEvent(eventId: string, patch: EventPatch): Promise<v
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    _revalidateWeeksForDates?.(event.start, patch.start ?? event.start);
+    _revalidateWeeksForDates?.(snapshot.start, patch.start ?? snapshot.start);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
     // Rollback

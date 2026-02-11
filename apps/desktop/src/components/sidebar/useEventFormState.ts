@@ -55,6 +55,8 @@ export function useEventFormState() {
   // Autosave infrastructure (edit mode only)
   // ===========================================================================
   let pendingPatch: EventPatch = {};
+  /** Original values captured before the first pre-mutation of each field. */
+  let pendingRollback: EventPatch = {};
 
   /** Accumulate a field change. Flushed on blur via flushSave(). */
   function scheduleSave(patch: EventPatch): void {
@@ -66,8 +68,10 @@ export function useEventFormState() {
     if (!eventId || Object.keys(pendingPatch).length === 0) return;
 
     const patchToSend = { ...pendingPatch };
+    const rollback = Object.keys(pendingRollback).length > 0 ? { ...pendingRollback } : undefined;
     pendingPatch = {};
-    updateEvent(eventId, patchToSend).catch((err) =>
+    pendingRollback = {};
+    updateEvent(eventId, patchToSend, rollback).catch((err) =>
       console.error("Failed to save event update:", err)
     );
   }
@@ -87,6 +91,7 @@ export function useEventFormState() {
     if (!event) return;
     // Clear any pending saves for the previous event
     pendingPatch = {};
+    pendingRollback = {};
 
     setEditTitle(event.title);
     setEditStart(new Date(event.start));
@@ -105,6 +110,11 @@ export function useEventFormState() {
   const setTitle = (v: string) => {
     if (mode() === "create") { setDraftTitle(v); }
     else {
+      // Capture original title before first pre-mutation for rollback
+      if (pendingRollback.title === undefined) {
+        const event = selectedEvent();
+        if (event) pendingRollback.title = event.title;
+      }
       setEditTitle(v);
       // Live-update the chip title on the calendar grid
       const eventId = selectedEventId();

@@ -403,7 +403,11 @@ export function createDragHandlers(deps: DragHandlersDeps) {
           (event.start.getTime() !== drag.originalStart.getTime() ||
            event.end.getTime() !== drag.originalEnd.getTime());
         if (event && changed) {
-          updateEvent(drag.event.id, { start: event.start, end: event.end });
+          updateEvent(
+            drag.event.id,
+            { start: event.start, end: event.end },
+            { start: drag.originalStart, end: drag.originalEnd },
+          );
         }
       }
 
@@ -422,7 +426,11 @@ export function createDragHandlers(deps: DragHandlersDeps) {
           (event.start.getTime() !== drag.originalStart.getTime() ||
            event.end.getTime() !== drag.originalEnd.getTime());
         if (event && changed) {
-          updateEvent(drag.event.id, { start: event.start, end: event.end });
+          updateEvent(
+            drag.event.id,
+            { start: event.start, end: event.end },
+            { start: drag.originalStart, end: drag.originalEnd },
+          );
         }
       }
       return;
@@ -440,7 +448,11 @@ export function createDragHandlers(deps: DragHandlersDeps) {
           (event.start.getTime() !== drag.originalStart.getTime() ||
            event.end.getTime() !== drag.originalEnd.getTime());
         if (event && changed) {
-          updateEvent(drag.event.id, { start: event.start, end: event.end });
+          updateEvent(
+            drag.event.id,
+            { start: event.start, end: event.end },
+            { start: drag.originalStart, end: drag.originalEnd },
+          );
         }
       }
 
@@ -460,7 +472,11 @@ export function createDragHandlers(deps: DragHandlersDeps) {
           (event.start.getTime() !== drag.originalStart.getTime() ||
            event.end.getTime() !== drag.originalEnd.getTime());
         if (event && changed) {
-          updateEvent(drag.event.id, { start: event.start, end: event.end });
+          updateEvent(
+            drag.event.id,
+            { start: event.start, end: event.end },
+            { start: drag.originalStart, end: drag.originalEnd },
+          );
         }
       }
 
