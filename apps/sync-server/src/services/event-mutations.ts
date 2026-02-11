@@ -188,7 +188,9 @@ export async function updateEventViaGoogle(
       description: updated.description || null,
       transparency: updated.transparency || existingEvent.transparency || null,
       visibility: updated.visibility || existingEvent.visibility || null,
-      reminders: updated.reminders?.overrides || existingEvent.reminders || null,
+      reminders: patch.reminders !== undefined
+        ? (updated.reminders?.overrides || null)
+        : (updated.reminders?.overrides || existingEvent.reminders || null),
       colorId: updated.colorId || null,
       ...(patch.conferencing !== undefined && {
         conferencing: (() => {
@@ -232,7 +234,9 @@ export async function updateEventViaGoogle(
     readOnlyReason: existingEvent.readOnlyReason || undefined,
     transparency: updated.transparency || existingEvent.transparency || undefined,
     visibility: updated.visibility || existingEvent.visibility || undefined,
-    reminders: (updated.reminders?.overrides || existingEvent.reminders as { method: string; minutes: number }[]) || undefined,
+    reminders: patch.reminders !== undefined
+      ? (updated.reminders?.overrides || undefined)
+      : ((updated.reminders?.overrides || existingEvent.reminders) as { method: string; minutes: number }[] | undefined),
     colorId: updated.colorId || undefined,
     conferencing: conferencingResult,
   };
