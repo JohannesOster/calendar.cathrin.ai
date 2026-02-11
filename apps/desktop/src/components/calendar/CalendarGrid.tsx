@@ -148,7 +148,11 @@ export function CalendarGrid() {
   // --- Keyboard Handlers ---
   setupKeyboardHandlers();
 
-  // --- Persist view state ---
+  // --- Restore & persist view state ---
+  // Init MUST come before persistence effects — effects run immediately
+  // and would overwrite localStorage with defaults before onMount reads them.
+  initCurrentView();
+  initVisibleDaysCount();
   createVisibleDaysPersistence();
   createCurrentViewPersistence();
 
@@ -173,9 +177,6 @@ export function CalendarGrid() {
 
   // --- Initialize on mount ---
   onMount(() => {
-    initCurrentView();
-    initVisibleDaysCount();
-
     const freshAnchor = getInitialAnchor();
     setAnchorDate(freshAnchor);
     gridScroll.setSnapCenter(0);
