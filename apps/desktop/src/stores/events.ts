@@ -219,11 +219,12 @@ export async function moveEvent(
   const originalCalendarId = event.calendarId;
   const originalColor = event.color;
 
-  // Optimistic update
+  // Optimistic update — only change color if no per-event override
+  const newColor = event.colorId ? event.color : targetCalendarColor;
   setEvents((prev) =>
     prev.map((e) =>
       e.id === eventId
-        ? { ...e, calendarId: targetCalendarId, color: targetCalendarColor }
+        ? { ...e, calendarId: targetCalendarId, color: newColor }
         : e
     )
   );
