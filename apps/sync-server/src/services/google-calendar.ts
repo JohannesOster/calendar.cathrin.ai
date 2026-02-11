@@ -366,6 +366,33 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Move an event from one calendar to another.
+   * Uses Google's dedicated events.move endpoint.
+   */
+  async moveEvent(
+    sourceCalendarId: string,
+    eventId: string,
+    destinationCalendarId: string
+  ): Promise<GoogleEvent> {
+    const url = new URL(
+      `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(sourceCalendarId)}/events/${encodeURIComponent(eventId)}/move`
+    );
+    url.searchParams.set("destination", destinationCalendarId);
+    url.searchParams.set("sendUpdates", "none");
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+      },
+    });
+
+    await this.handleErrorResponse(response);
+
+    return (await response.json()) as GoogleEvent;
+  }
+
+  /**
    * Handle non-2xx responses
    */
   private async handleErrorResponse(response: Response): Promise<void> {

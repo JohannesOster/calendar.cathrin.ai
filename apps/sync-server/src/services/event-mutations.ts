@@ -7,6 +7,7 @@ import {
   type GoogleEventPatch,
 } from "./google-calendar.js";
 import { upsertServerEvent } from "./event-storage.js";
+import { mapServerEventToApi } from "./event-mapper.js";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { InferSelectModel } from "drizzle-orm";
 
@@ -253,4 +254,39 @@ export async function deleteEventViaGoogle(
   await db!
     .delete(serverEvents)
     .where(eq(serverEvents.id, eventDbId));
+}
+
+/**
+ * Move an event to a different calendar via Google Calendar API.
+ * Updates calendarId and color in the local cache.
+ * Returns the updated ApiCalendarEvent.
+ */
+export async function moveEventViaGoogle(
+  accountId: string,
+  sourceCalendarId: string,
+  destinationCalendarId: string,
+  googleEventId: string,
+  eventDbId: string,
+  destinationColor: string | null
+): Promise<ApiCalendarEvent> {
+  const accessToken = await getAccessToken(accountId);
+  const service = new GoogleCalendarService(accessToken);
+  await service.moveEvent(sourceCalendarId, googleEventId, destinationCalendarId);
+
+  const color = destinationColor || "#4285f4";
+
+  await db!
+    .update(serverEvents)
+    .set({
+      calendarId: destinationCalendarId,
+      color,
+      updatedAt: new Date(),
+    })
+    .where(eq(serverEvents.id, eventDbId));
+
+  const updated = await db!.query.serverEvents.findFirst({
+    where: eq(serverEvents.id, eventDbId),
+  });
+
+  return mapServerEventToApi(updated!);
 }
