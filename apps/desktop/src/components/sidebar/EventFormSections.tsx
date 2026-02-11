@@ -695,19 +695,23 @@ function ColorPickerPopover(props: { state: EventFormState }) {
   });
 
   return (
-    <div class="flex w-full items-center gap-2">
-      <Popover.Root positioning={{ placement: "bottom-start" }}>
-        <Popover.Trigger
-          class="flex flex-1 items-center gap-2 cursor-pointer rounded px-2 py-2 -mx-2 hover:bg-surface-hover transition-colors bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none text-left"
-        >
-          <div
-            class={`w-3 h-3 rounded-full shrink-0 ${
-              s.colorId() ? "" : "border border-dashed border-fg-muted"
-            }`}
-            style={{ "background-color": s.eventColor() }}
-          />
-          <span class="text-sm text-fg-muted">Event color</span>
-        </Popover.Trigger>
+    <Popover.Root positioning={{ placement: "bottom-start" }}>
+      <Popover.Trigger
+        class="flex w-full items-center gap-2 cursor-pointer rounded px-2 py-2 -mx-2 hover:bg-surface-hover transition-colors bg-transparent border-none outline-none focus:outline-none focus-visible:outline-none text-left"
+      >
+        <div
+          class={`w-3 h-3 rounded-full shrink-0 ${
+            s.colorId() ? "" : "border border-dashed border-fg-muted"
+          }`}
+          style={{ "background-color": s.eventColor() }}
+        />
+        <span class="text-sm text-fg-muted truncate">
+          {s.colorId()
+            ? COLOR_SWATCHES.find((sw) => sw.key === s.colorId())?.label ?? "Event color"
+            : "Calendar default"}
+        </span>
+        <ChevronDown size={14} class="text-fg-muted shrink-0 ml-auto" />
+      </Popover.Trigger>
         <Popover.Positioner>
           <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
             {/* Calendar default — separate from palette */}
@@ -774,20 +778,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
             </Show>
           </Popover.Content>
         </Popover.Positioner>
-      </Popover.Root>
-
-      {/* Reset button — only visible when a custom color is set */}
-      <Show when={s.colorId()}>
-        <button
-          type="button"
-          aria-label="Reset to calendar default"
-          class="p-1.5 rounded hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg cursor-pointer bg-transparent border-none outline-none shrink-0"
-          onClick={() => s.setColorId(null)}
-        >
-          <X size={12} />
-        </button>
-      </Show>
-    </div>
+    </Popover.Root>
   );
 }
 
