@@ -1,5 +1,6 @@
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
-import { mapProviderColor } from "../lib/color-mapping";
+import { mapProviderColor, googleColorIdToCathrinKey, CATHRIN_PALETTE } from "../lib/color-mapping";
+import type { CathrinColorKey } from "../lib/color-mapping";
 
 
 /**
@@ -18,6 +19,7 @@ export interface CalendarEvent {
   transparency?: "opaque" | "transparent";
   visibility?: "default" | "public" | "private";
   reminders?: { method: "popup"; minutes: number }[];
+  colorId?: CathrinColorKey;
 }
 
 export type EventPatch = {
@@ -30,9 +32,11 @@ export type EventPatch = {
   transparency?: "opaque" | "transparent";
   visibility?: "default" | "public" | "private";
   reminders?: { method: "popup"; minutes: number }[] | null;
+  colorId?: CathrinColorKey | null;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
+  const cathrinKey = event.colorId ? googleColorIdToCathrinKey(event.colorId) : undefined;
   return {
     id: event.id,
     calendarId: event.calendarId,
@@ -40,11 +44,12 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     start: new Date(event.start),
     end: new Date(event.end),
     isAllDay: event.isAllDay,
-    color: mapProviderColor(event.color),
+    color: cathrinKey ? CATHRIN_PALETTE[cathrinKey] : mapProviderColor(event.color),
     location: event.location,
     description: event.description,
     transparency: event.transparency as CalendarEvent["transparency"],
     visibility: event.visibility as CalendarEvent["visibility"],
     reminders: event.reminders as CalendarEvent["reminders"],
+    colorId: cathrinKey,
   };
 }

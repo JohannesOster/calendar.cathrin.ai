@@ -4,7 +4,8 @@ import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch } from "../lib/api";
-import { CATHRIN_PALETTE } from "../lib/color-mapping";
+import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
+import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
@@ -23,6 +24,7 @@ export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
 export const [draftTransparency, setDraftTransparency] = createSignal<"opaque" | "transparent">("opaque");
 export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "public" | "private">("default");
 export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
+export const [draftColorId, setDraftColorId] = createSignal<string | null>(null);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -43,6 +45,10 @@ export function snapMinutes(totalMinutes: number): number {
  * Get the calendar color for the current draft event
  */
 export function getDraftColor(): string {
+  // If a per-event color override is set, use it
+  const colorKey = draftColorId() as CathrinColorKey | null;
+  if (colorKey && CATHRIN_PALETTE[colorKey]) return CATHRIN_PALETTE[colorKey];
+
   const calId = draftCalendarId() ?? resolveCalendarId();
   if (!calId) return CATHRIN_PALETTE.graphite;
 
@@ -160,6 +166,7 @@ export function cancelCreation(): void {
   setDraftTransparency("opaque");
   setDraftVisibility("default");
   setDraftReminders([]);
+  setDraftColorId(null);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -192,6 +199,7 @@ export function commitCreation(): boolean {
 
   if (!title || !start || !end || !calId) return false;
 
+  const colorKey = draftColorId() as CathrinColorKey | null;
   const color = getDraftColor();
   const tempId = `temp-${crypto.randomUUID()}`;
 
@@ -233,6 +241,7 @@ export function commitCreation(): boolean {
     transparency,
     visibility,
     reminders: reminders.length > 0 ? reminders : undefined,
+    colorId: colorKey ?? undefined,
   });
 
   // Reset creation state
@@ -252,6 +261,7 @@ export function commitCreation(): boolean {
       transparency,
       visibility,
       ...(reminders.length > 0 && { reminders }),
+      ...(colorKey && { colorId: cathrinKeyToGoogleColorId(colorKey) }),
     }),
   })
     .then((serverEvent) => {

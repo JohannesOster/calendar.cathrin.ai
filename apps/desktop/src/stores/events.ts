@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { apiFetch } from "../lib/api";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 import type { CalendarEvent, EventPatch } from "./event-types";
+import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 
 // =============================================================================
 // Signals
@@ -127,6 +128,7 @@ export async function updateEvent(
     ...(rollback?.transparency !== undefined && { transparency: rollback.transparency }),
     ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
     ...(rollback?.reminders !== undefined && { reminders: rollback.reminders }),
+    ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
   };
 
   // Apply optimistic update
@@ -144,6 +146,7 @@ export async function updateEvent(
             ...(patch.transparency !== undefined && { transparency: patch.transparency }),
             ...(patch.visibility !== undefined && { visibility: patch.visibility }),
             ...(patch.reminders !== undefined && { reminders: patch.reminders ?? undefined }),
+            ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
           }
         : e
     )
@@ -158,6 +161,9 @@ export async function updateEvent(
   if (patch.transparency !== undefined) apiPatch.transparency = patch.transparency;
   if (patch.visibility !== undefined) apiPatch.visibility = patch.visibility;
   if (patch.reminders !== undefined) (apiPatch as Record<string, unknown>).reminders = patch.reminders;
+  if (patch.colorId !== undefined) {
+    (apiPatch as Record<string, unknown>).colorId = patch.colorId ? cathrinKeyToGoogleColorId(patch.colorId) : null;
+  }
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {
     apiPatch.start = isAllDay

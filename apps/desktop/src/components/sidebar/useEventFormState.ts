@@ -22,6 +22,8 @@ import {
   setDraftVisibility,
   draftReminders,
   setDraftReminders,
+  draftColorId,
+  setDraftColorId,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -29,6 +31,7 @@ import {
   setShadowEnd,
 } from "../../stores/event-creation";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
+import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
 import { updateEvent, setEvents } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
@@ -57,6 +60,7 @@ export function useEventFormState() {
   const [editTransparency, setEditTransparency] = createSignal<"opaque" | "transparent">("opaque");
   const [editVisibility, setEditVisibility] = createSignal<"default" | "public" | "private">("default");
   const [editReminders, setEditReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
+  const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -112,6 +116,7 @@ export function useEventFormState() {
     setEditTransparency(event.transparency ?? "opaque");
     setEditVisibility(event.visibility ?? "default");
     setEditReminders(event.reminders ?? []);
+    setEditColorId(event.colorId ?? null);
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -175,6 +180,34 @@ export function useEventFormState() {
     else { setEditVisibility(v); scheduleSave({ visibility: v }); flushSave(); }
   };
 
+  const colorId = (): CathrinColorKey | null => mode() === "create" ? (draftColorId() as CathrinColorKey | null) : editColorId();
+  const setColorId = (v: CathrinColorKey | null) => {
+    if (mode() === "create") { setDraftColorId(v); }
+    else {
+      setEditColorId(v);
+      // Live-update the chip color on the calendar grid
+      const eventId = selectedEventId();
+      if (eventId) {
+        let newColor: string;
+        if (v && CATHRIN_PALETTE[v]) {
+          newColor = CATHRIN_PALETTE[v];
+        } else {
+          // Reset to calendar default: look up from accounts
+          const calId = editCalendarId();
+          newColor = CATHRIN_PALETTE.graphite;
+          if (calId) {
+            for (const acc of connectedAccounts()) {
+              const cal = acc.calendars.find((c) => c.id === calId);
+              if (cal) { newColor = cal.color; break; }
+            }
+          }
+        }
+        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, color: newColor, colorId: v ?? undefined } : e));
+      }
+      scheduleSave({ colorId: v }); flushSave();
+    }
+  };
+
   const reminders = () => mode() === "create" ? draftReminders() : editReminders();
   const addReminder = (minutes: number) => {
     const current = reminders();
@@ -191,8 +224,18 @@ export function useEventFormState() {
 
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
-    const event = selectedEvent();
-    return event?.color ?? CATHRIN_PALETTE.graphite;
+    // In edit mode, respect the local colorId override
+    const overrideKey = editColorId();
+    if (overrideKey && CATHRIN_PALETTE[overrideKey]) return CATHRIN_PALETTE[overrideKey];
+    // No override: use calendar color (not event.color which may have stale override)
+    const calId = editCalendarId();
+    if (calId) {
+      for (const acc of connectedAccounts()) {
+        const cal = acc.calendars.find((c) => c.id === calId);
+        if (cal) return cal.color;
+      }
+    }
+    return selectedEvent()?.color ?? CATHRIN_PALETTE.graphite;
   });
 
   function beginTimeEdit(which: "start" | "end"): void {
@@ -351,6 +394,8 @@ export function useEventFormState() {
     setTransparency,
     visibility,
     setVisibility,
+    colorId,
+    setColorId,
     reminders,
     addReminder,
     removeReminder,

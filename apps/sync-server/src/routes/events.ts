@@ -99,6 +99,7 @@ export const eventsRoute = new Hono()
         transparency: z.enum(["opaque", "transparent"]).optional(),
         visibility: z.enum(["default", "public", "private"]).optional(),
         reminders: z.array(z.object({ method: z.string(), minutes: z.number() })).max(5).optional(),
+        colorId: z.string().optional(),
       })
     ),
     async (c) => {
@@ -107,7 +108,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -121,7 +122,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await createEventViaGoogle(
-          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders
+          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId
         );
         return c.json(apiEvent, 201);
       } catch (error) {
@@ -145,6 +146,7 @@ export const eventsRoute = new Hono()
         transparency: z.enum(["opaque", "transparent"]).optional(),
         visibility: z.enum(["default", "public", "private"]).optional(),
         reminders: z.array(z.object({ method: z.string(), minutes: z.number() })).max(5).nullable().optional(),
+        colorId: z.string().nullable().optional(),
       })
     ),
     async (c) => {

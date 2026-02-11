@@ -35,7 +35,28 @@ export const CATHRIN_PALETTE = {
   rose:       "#c43262",  // hot rose
 } as const;
 
-export type CathrinColor = (typeof CATHRIN_PALETTE)[keyof typeof CATHRIN_PALETTE];
+export type CathrinColorKey = keyof typeof CATHRIN_PALETTE;
+export type CathrinColor = (typeof CATHRIN_PALETTE)[CathrinColorKey];
+
+// Cathrin palette key → Google Calendar colorId ("1"-"11")
+const CATHRIN_TO_GOOGLE_COLOR_ID: Record<string, string> = {
+  lavender: "1", sage: "2", plum: "3", coral: "4", amber: "5",
+  terracotta: "6", sky: "7", graphite: "8", slate: "9", teal: "10", rose: "11",
+};
+
+// Google colorId → Cathrin palette key
+const GOOGLE_COLOR_ID_TO_CATHRIN: Record<string, CathrinColorKey> = {
+  "1": "lavender", "2": "sage", "3": "plum", "4": "coral", "5": "amber",
+  "6": "terracotta", "7": "sky", "8": "graphite", "9": "slate", "10": "teal", "11": "rose",
+};
+
+export function cathrinKeyToGoogleColorId(key: string): string | undefined {
+  return CATHRIN_TO_GOOGLE_COLOR_ID[key];
+}
+
+export function googleColorIdToCathrinKey(colorId: string): CathrinColorKey | undefined {
+  return GOOGLE_COLOR_ID_TO_CATHRIN[colorId];
+}
 
 // =============================================================================
 // Provider → Cathrin Lookup Table

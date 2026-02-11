@@ -11,11 +11,14 @@ import {
   ChevronDown,
   Globe,
   Lock,
+  Check,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
 import { Popover } from "@ark-ui/solid/popover";
 import { Plus, X } from "lucide-solid";
+import { CATHRIN_PALETTE } from "../../lib/color-mapping";
+import type { CathrinColorKey } from "../../lib/color-mapping";
 import {
   setDraftStart,
   setDraftEnd,
@@ -298,10 +301,7 @@ export function CalendarSection(props: SectionProps) {
         positioning={{ placement: "bottom-start", sameWidth: true }}
       >
         <Select.Control class="flex items-center gap-2">
-          <div
-            class="w-3 h-3 rounded-full shrink-0"
-            style={{ "background-color": s.eventColor() }}
-          />
+          <ColorPickerPopover state={s} />
           <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
             <span>
               {(() => {
@@ -465,6 +465,68 @@ export function RemindersSection(props: SectionProps) {
         </div>
       </Show>
     </div>
+  );
+}
+
+const COLOR_SWATCHES: { key: CathrinColorKey; label: string }[] = [
+  { key: "graphite", label: "Graphite" },
+  { key: "coral", label: "Coral" },
+  { key: "terracotta", label: "Terracotta" },
+  { key: "amber", label: "Amber" },
+  { key: "sage", label: "Sage" },
+  { key: "teal", label: "Teal" },
+  { key: "sky", label: "Sky" },
+  { key: "slate", label: "Slate" },
+  { key: "lavender", label: "Lavender" },
+  { key: "plum", label: "Plum" },
+  { key: "rose", label: "Rose" },
+];
+
+function ColorPickerPopover(props: { state: EventFormState }) {
+  const s = props.state;
+
+  return (
+    <Popover.Root positioning={{ placement: "bottom-start" }}>
+      <Popover.Trigger
+        class="w-3 h-3 rounded-full shrink-0 cursor-pointer transition-transform hover:scale-125"
+        style={{ "background-color": s.eventColor() }}
+        aria-label="Event color"
+      />
+      <Popover.Positioner>
+        <Popover.Content class="bg-surface border border-border rounded p-2 z-50">
+          <div role="radiogroup" aria-label="Event color" class="grid grid-cols-4 gap-1.5">
+            <Popover.CloseTrigger
+              role="radio"
+              aria-checked={s.colorId() === null}
+              aria-label="Calendar default"
+              class="w-5 h-5 rounded-full border border-border-light cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
+              style={{ "background-color": "transparent" }}
+              onClick={() => s.setColorId(null)}
+            >
+              <Show when={s.colorId() === null}>
+                <Check size={10} class="text-fg-muted" />
+              </Show>
+            </Popover.CloseTrigger>
+            <For each={COLOR_SWATCHES}>
+              {(swatch) => (
+                <Popover.CloseTrigger
+                  role="radio"
+                  aria-checked={s.colorId() === swatch.key}
+                  aria-label={swatch.label}
+                  class="w-5 h-5 rounded-full cursor-pointer flex items-center justify-center transition-transform hover:scale-125"
+                  style={{ "background-color": CATHRIN_PALETTE[swatch.key] }}
+                  onClick={() => s.setColorId(swatch.key)}
+                >
+                  <Show when={s.colorId() === swatch.key}>
+                    <Check size={10} class="text-white" />
+                  </Show>
+                </Popover.CloseTrigger>
+              )}
+            </For>
+          </div>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }
 

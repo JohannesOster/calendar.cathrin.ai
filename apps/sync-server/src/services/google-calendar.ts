@@ -102,6 +102,7 @@ export interface GoogleEventPatch {
   transparency?: string;
   visibility?: string;
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
+  colorId?: string;
 }
 
 /**
@@ -271,6 +272,7 @@ export class GoogleCalendarService {
       transparency?: string;
       visibility?: string;
       reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
+      colorId?: string;
     }
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
@@ -412,6 +414,7 @@ export class GoogleCalendarService {
       transparency: event.transparency || undefined,
       visibility: event.visibility || undefined,
       reminders: event.reminders?.overrides || undefined,
+      colorId: event.colorId || undefined,
     };
   }
 }

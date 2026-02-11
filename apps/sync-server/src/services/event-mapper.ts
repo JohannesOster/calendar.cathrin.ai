@@ -22,5 +22,6 @@ export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
     transparency: event.transparency || undefined,
     visibility: event.visibility || undefined,
     reminders: (event.reminders as { method: string; minutes: number }[]) || undefined,
+    colorId: event.colorId || undefined,
   };
 }
