@@ -98,6 +98,7 @@ export const serverEvents = pgTable(
     visibility: text("visibility"), // default, public, private
     reminders: jsonb("reminders"), // Array of { method, minutes }
     colorId: text("color_id"), // Google colorId "1"-"11" for per-event color override
+    conferencing: jsonb("conferencing"), // { uri, label } or null
     status: text("status"), // confirmed, tentative, cancelled
     raw: jsonb("raw"), // Store raw Google event for future fields
     createdAt: timestamp("created_at").defaultNow(),

@@ -20,6 +20,7 @@ export interface CalendarEvent {
   visibility?: "default" | "public" | "private";
   reminders?: { method: "popup"; minutes: number }[];
   colorId?: CathrinColorKey;
+  conferencing?: { uri: string; label?: string } | null;
 }
 
 export type EventPatch = {
@@ -33,6 +34,7 @@ export type EventPatch = {
   visibility?: "default" | "public" | "private";
   reminders?: { method: "popup"; minutes: number }[] | null;
   colorId?: CathrinColorKey | null;
+  conferencing?: { uri: string; label?: string } | null;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
@@ -51,5 +53,6 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     visibility: event.visibility as CalendarEvent["visibility"],
     reminders: event.reminders as CalendarEvent["reminders"],
     colorId: cathrinKey,
+    conferencing: event.conferencing ?? undefined,
   };
 }

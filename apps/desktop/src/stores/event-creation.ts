@@ -25,6 +25,7 @@ export const [draftTransparency, setDraftTransparency] = createSignal<"opaque" |
 export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "public" | "private">("default");
 export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
 export const [draftColorId, setDraftColorId] = createSignal<string | null>(null);
+export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -167,6 +168,7 @@ export function cancelCreation(): void {
   setDraftVisibility("default");
   setDraftReminders([]);
   setDraftColorId(null);
+  setDraftConferencing(null);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -196,6 +198,7 @@ export function commitCreation(): boolean {
   const transparency = draftTransparency();
   const visibility = draftVisibility();
   const reminders = draftReminders();
+  const conferencing = draftConferencing();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -242,6 +245,7 @@ export function commitCreation(): boolean {
     visibility,
     reminders: reminders.length > 0 ? reminders : undefined,
     colorId: colorKey ?? undefined,
+    conferencing,
   });
 
   // Reset creation state
@@ -262,6 +266,11 @@ export function commitCreation(): boolean {
       visibility,
       ...(reminders.length > 0 && { reminders }),
       ...(colorKey && { colorId: cathrinKeyToGoogleColorId(colorKey) }),
+      ...(conferencing && {
+        conferencing: conferencing.uri
+          ? { type: "manual" as const, uri: conferencing.uri }
+          : { type: "meet" as const },
+      }),
     }),
   })
     .then((serverEvent) => {
@@ -275,6 +284,7 @@ export function commitCreation(): boolean {
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
                 end: new Date(serverEvent.end),
+                conferencing: serverEvent.conferencing ?? e.conferencing,
               }
             : e
         )

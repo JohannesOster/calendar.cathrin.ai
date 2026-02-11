@@ -1,4 +1,4 @@
-import { Show, For } from "solid-js";
+import { Show, For, createSignal } from "solid-js";
 import {
   Clock,
   ArrowRight,
@@ -12,11 +12,14 @@ import {
   Globe,
   Lock,
   Check,
+  Copy,
+  Loader2,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
 import { Popover } from "@ark-ui/solid/popover";
 import { Plus, X } from "lucide-solid";
+import { invoke } from "@tauri-apps/api/core";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import {
@@ -232,10 +235,7 @@ export function DetailsSection(props: SectionProps) {
         <Users size={14} class="shrink-0" />
         <span>Participants</span>
       </button>
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
-        <Video size={14} class="shrink-0" />
-        <span>Conferencing</span>
-      </button>
+      <ConferencingField state={s} />
       <div class="flex items-center gap-2 text-sm">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
@@ -465,6 +465,155 @@ export function RemindersSection(props: SectionProps) {
         </div>
       </Show>
     </div>
+  );
+}
+
+/** Extract a short display label from a conferencing URI */
+function conferencingLabel(conf: { uri: string; label?: string }): string {
+  if (conf.label) return conf.label;
+  if (!conf.uri) return "Conferencing";
+  try {
+    const url = new URL(conf.uri);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host.includes("meet.google.com")) return "Google Meet";
+    if (host.includes("zoom.us")) return "Zoom";
+    if (host.includes("teams.microsoft.com")) return "Microsoft Teams";
+    return host;
+  } catch {
+    return conf.uri;
+  }
+}
+
+function ConferencingField(props: { state: EventFormState }) {
+  const s = props.state;
+  const [showUrlInput, setShowUrlInput] = createSignal(false);
+  const [urlValue, setUrlValue] = createSignal("");
+
+  function handleAddClick(): void {
+    // Auto-generate Meet link (all calendars are Google for now)
+    s.addMeetConferencing();
+  }
+
+  function handleUrlSubmit(): void {
+    const url = urlValue().trim();
+    if (!url) { setShowUrlInput(false); return; }
+    try {
+      new URL(url); // Basic validation
+      s.setManualConferencing(url);
+      setShowUrlInput(false);
+      setUrlValue("");
+    } catch {
+      // Invalid URL — keep input open
+    }
+  }
+
+  function handleUrlKeyDown(e: KeyboardEvent): void {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleUrlSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setShowUrlInput(false);
+      setUrlValue("");
+    }
+  }
+
+  function openUrl(uri: string): void {
+    if (!uri) return;
+    invoke("open_url", { url: uri }).catch((err) =>
+      console.error("[conferencing] Failed to open URL:", err)
+    );
+  }
+
+  function copyUrl(uri: string): void {
+    navigator.clipboard.writeText(uri).catch((err) =>
+      console.error("[conferencing] Failed to copy URL:", err)
+    );
+  }
+
+  return (
+    <>
+      <Show when={s.conferencingLoading()}>
+        <div class="flex items-center gap-2 text-sm text-fg-muted px-1 -mx-1">
+          <Loader2 size={14} class="shrink-0 animate-spin" />
+          <span>Adding Google Meet…</span>
+        </div>
+      </Show>
+      <Show when={!s.conferencingLoading()}>
+        <Show
+          when={s.conferencing()}
+          fallback={
+            <Show
+              when={showUrlInput()}
+              fallback={
+                <div class="flex items-center gap-1">
+                  <button
+                    class="flex flex-1 items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors"
+                    onClick={handleAddClick}
+                    aria-label="Add Google Meet link"
+                  >
+                    <Video size={14} class="shrink-0" />
+                    <span>Add conferencing</span>
+                  </button>
+                  <button
+                    class="text-xs text-fg-disabled cursor-pointer rounded px-1 hover:text-fg-muted transition-colors"
+                    onClick={() => setShowUrlInput(true)}
+                    aria-label="Paste a conferencing URL"
+                  >
+                    URL
+                  </button>
+                </div>
+              }
+            >
+              <div class="flex items-center gap-2 text-sm">
+                <Video size={14} class="text-fg-muted shrink-0" />
+                <input
+                  type="url"
+                  placeholder="Paste conferencing URL"
+                  aria-label="Conferencing URL"
+                  value={urlValue()}
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  onInput={(e) => setUrlValue(e.currentTarget.value)}
+                  onBlur={handleUrlSubmit}
+                  onKeyDown={handleUrlKeyDown}
+                  class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+                />
+              </div>
+            </Show>
+          }
+        >
+          {(conf) => (
+            <div class="flex items-center gap-2 text-sm">
+              <Video size={14} class="text-fg-muted shrink-0" />
+              <button
+                class="flex-1 text-left text-fg truncate cursor-pointer hover:underline"
+                onClick={() => openUrl(conf().uri)}
+                disabled={!conf().uri}
+                aria-label={`Open ${conferencingLabel(conf())} link`}
+              >
+                {conferencingLabel(conf())}
+              </button>
+              <Show when={conf().uri}>
+                <button
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                  onClick={() => copyUrl(conf().uri)}
+                  aria-label="Copy conferencing link"
+                >
+                  <Copy size={12} />
+                </button>
+              </Show>
+              <button
+                class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                onClick={() => s.removeConferencing()}
+                aria-label="Remove conferencing"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+        </Show>
+      </Show>
+    </>
   );
 }
 

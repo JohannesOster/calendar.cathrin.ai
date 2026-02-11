@@ -39,6 +39,7 @@ export interface ApiCalendarEvent {
   visibility?: string;
   reminders?: { method: string; minutes: number }[];
   colorId?: string;
+  conferencing?: { uri: string; label?: string } | null;
 }
 
 /**

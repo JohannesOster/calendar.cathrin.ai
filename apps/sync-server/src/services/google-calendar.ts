@@ -62,6 +62,17 @@ interface EventDateTime {
   timeZone?: string;
 }
 
+interface GoogleConferenceData {
+  createRequest?: {
+    requestId: string;
+    conferenceSolutionKey: { type: string };
+    status?: { statusCode: string };
+  };
+  conferenceSolution?: { name: string; key?: { type: string } };
+  entryPoints?: { entryPointType: string; uri: string; label?: string }[];
+  conferenceId?: string;
+}
+
 interface GoogleEvent {
   id: string;
   summary?: string;
@@ -77,6 +88,7 @@ interface GoogleEvent {
     useDefault: boolean;
     overrides?: { method: string; minutes: number }[];
   };
+  conferenceData?: GoogleConferenceData;
 }
 
 interface EventsListResponse {
@@ -103,6 +115,7 @@ export interface GoogleEventPatch {
   visibility?: string;
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
   colorId?: string;
+  conferenceData?: GoogleConferenceData | null;
 }
 
 /**
@@ -273,11 +286,15 @@ export class GoogleCalendarService {
       visibility?: string;
       reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
       colorId?: string;
+      conferenceData?: GoogleConferenceData;
     }
   ): Promise<GoogleEvent> {
-    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
+    const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`);
+    if (event.conferenceData) {
+      url.searchParams.set("conferenceDataVersion", "1");
+    }
 
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -303,9 +320,12 @@ export class GoogleCalendarService {
     eventId: string,
     patch: GoogleEventPatch
   ): Promise<GoogleEvent> {
-    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+    const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+    if (patch.conferenceData !== undefined) {
+      url.searchParams.set("conferenceDataVersion", "1");
+    }
 
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -400,6 +420,13 @@ export class GoogleCalendarService {
       return null;
     }
 
+    // Extract conferencing from Google's conferenceData entry points
+    const videoEntryPoint = event.conferenceData?.entryPoints
+      ?.find(ep => ep.entryPointType === "video");
+    const conferencing = videoEntryPoint
+      ? { uri: videoEntryPoint.uri, label: event.conferenceData?.conferenceSolution?.name }
+      : undefined;
+
     return {
       id: event.id,
       calendarId,
@@ -415,6 +442,7 @@ export class GoogleCalendarService {
       visibility: event.visibility || undefined,
       reminders: event.reminders?.overrides || undefined,
       colorId: event.colorId || undefined,
+      conferencing,
     };
   }
 }

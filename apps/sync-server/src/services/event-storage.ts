@@ -28,6 +28,7 @@ function buildEventValues(
     visibility: event.visibility ?? null,
     reminders: event.reminders ?? null,
     colorId: event.colorId ?? null,
+    conferencing: event.conferencing ?? null,
     status: "confirmed" as const,
   };
 }
@@ -48,6 +49,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     visibility: event.visibility ?? null,
     reminders: event.reminders ?? null,
     colorId: event.colorId ?? null,
+    conferencing: event.conferencing ?? null,
     updatedAt: new Date(),
   };
 }
@@ -100,6 +102,7 @@ export async function upsertServerEvents(
         visibility: sql`excluded.visibility`,
         reminders: sql`excluded.reminders`,
         colorId: sql`excluded.color_id`,
+        conferencing: sql`excluded.conferencing`,
         updatedAt: new Date(),
       },
     });

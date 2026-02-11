@@ -129,6 +129,7 @@ export async function updateEvent(
     ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
     ...(rollback?.reminders !== undefined && { reminders: rollback.reminders }),
     ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
+    ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
   };
 
   // Apply optimistic update
@@ -147,6 +148,7 @@ export async function updateEvent(
             ...(patch.visibility !== undefined && { visibility: patch.visibility }),
             ...(patch.reminders !== undefined && { reminders: patch.reminders ?? undefined }),
             ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
+            ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
           }
         : e
     )
@@ -163,6 +165,13 @@ export async function updateEvent(
   if (patch.reminders !== undefined) (apiPatch as Record<string, unknown>).reminders = patch.reminders;
   if (patch.colorId !== undefined) {
     (apiPatch as Record<string, unknown>).colorId = patch.colorId ? cathrinKeyToGoogleColorId(patch.colorId) : null;
+  }
+  if (patch.conferencing !== undefined) {
+    if (patch.conferencing === null) {
+      (apiPatch as Record<string, unknown>).conferencing = null;
+    } else if (patch.conferencing.uri) {
+      (apiPatch as Record<string, unknown>).conferencing = { type: "manual", uri: patch.conferencing.uri };
+    }
   }
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {

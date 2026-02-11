@@ -24,6 +24,8 @@ import {
   setDraftReminders,
   draftColorId,
   setDraftColorId,
+  draftConferencing,
+  setDraftConferencing,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -35,6 +37,8 @@ import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
 import { updateEvent, setEvents } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
+import { apiFetch } from "../../lib/api";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { toTimeText, parseTimeInput } from "../../lib/format-utils";
 
@@ -61,6 +65,8 @@ export function useEventFormState() {
   const [editVisibility, setEditVisibility] = createSignal<"default" | "public" | "private">("default");
   const [editReminders, setEditReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
   const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
+  const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
+  const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -117,6 +123,8 @@ export function useEventFormState() {
     setEditVisibility(event.visibility ?? "default");
     setEditReminders(event.reminders ?? []);
     setEditColorId(event.colorId ?? null);
+    setEditConferencing(event.conferencing ?? null);
+    setConferencingLoading(false);
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -221,6 +229,62 @@ export function useEventFormState() {
     if (mode() === "create") { setDraftReminders(updated); }
     else { setEditReminders(updated); scheduleSave({ reminders: updated.length > 0 ? updated : null }); flushSave(); }
   };
+
+  const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
+
+  /** Add a Google Meet link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
+  function addMeetConferencing(): void {
+    if (mode() === "create") {
+      // Mark pending — resolved server-side during commitCreation
+      setDraftConferencing({ uri: "", label: "Google Meet" });
+    } else {
+      const eventId = selectedEventId();
+      if (!eventId) return;
+      setConferencingLoading(true);
+      // PATCH the event with a Meet request
+      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(eventId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ conferencing: { type: "meet" } }),
+      })
+        .then((updated) => {
+          const conf = updated.conferencing ?? null;
+          setEditConferencing(conf);
+          // Update the events signal so the chip reflects changes
+          setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, conferencing: conf } : e));
+        })
+        .catch((err) => {
+          console.error("[conferencing] Failed to add Meet link:", err);
+        })
+        .finally(() => setConferencingLoading(false));
+    }
+  }
+
+  /** Set a manual conferencing URL */
+  function setManualConferencing(uri: string): void {
+    const conf = { uri };
+    if (mode() === "create") {
+      setDraftConferencing(conf);
+    } else {
+      setEditConferencing(conf);
+      scheduleSave({ conferencing: conf });
+      flushSave();
+    }
+  }
+
+  /** Remove conferencing */
+  function removeConferencing(): void {
+    if (mode() === "create") {
+      setDraftConferencing(null);
+    } else {
+      setEditConferencing(null);
+      const eventId = selectedEventId();
+      if (eventId) {
+        setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, conferencing: null } : e));
+      }
+      scheduleSave({ conferencing: null });
+      flushSave();
+    }
+  }
 
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
@@ -399,6 +463,11 @@ export function useEventFormState() {
     reminders,
     addReminder,
     removeReminder,
+    conferencing,
+    conferencingLoading,
+    addMeetConferencing,
+    setManualConferencing,
+    removeConferencing,
     flushSave,
     allCalendars,
     calendarCollection,
