@@ -117,7 +117,7 @@ export interface GoogleEventPatch {
   transparency?: string;
   visibility?: string;
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
-  colorId?: string;
+  colorId?: string | null;
   conferenceData?: GoogleConferenceData | null;
 }
 
