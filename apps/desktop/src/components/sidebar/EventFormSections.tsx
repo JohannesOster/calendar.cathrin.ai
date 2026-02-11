@@ -470,11 +470,10 @@ export function RemindersSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-3 border-t border-border space-y-1">
+      <Show when={s.reminders().length < 5}>
+        <ReminderCombobox state={s} />
+      </Show>
       <Show when={s.reminders().length > 0}>
-        <div class="flex items-center gap-2 text-sm text-fg">
-          <Bell size={14} class="text-fg-muted shrink-0" />
-          <span>Reminders</span>
-        </div>
         <div class="ml-[22px] flex flex-wrap gap-1">
           <For each={s.reminders()}>
             {(r) => (
@@ -494,9 +493,6 @@ export function RemindersSection(props: SectionProps) {
             )}
           </For>
         </div>
-      </Show>
-      <Show when={s.reminders().length < 5}>
-        <ReminderCombobox state={s} showIcon={s.reminders().length === 0} />
       </Show>
     </div>
   );
@@ -780,7 +776,7 @@ function ColorPickerPopover(props: { state: EventFormState }) {
   );
 }
 
-function ReminderCombobox(props: { state: EventFormState; showIcon: boolean }) {
+function ReminderCombobox(props: { state: EventFormState }) {
   const s = props.state;
   const [inputValue, setInputValue] = createSignal("");
 
@@ -827,6 +823,7 @@ function ReminderCombobox(props: { state: EventFormState; showIcon: boolean }) {
       openOnClick
       closeOnSelect
       selectionBehavior="clear"
+      inputBehavior="autohighlight"
       inputValue={inputValue()}
       onInputValueChange={(details) => setInputValue(details.inputValue)}
       onValueChange={(details) => {
@@ -837,17 +834,11 @@ function ReminderCombobox(props: { state: EventFormState; showIcon: boolean }) {
       }}
       positioning={{ placement: "bottom-start", sameWidth: true }}
     >
-      <Combobox.Control
-        class={`flex items-center gap-2 rounded hover:bg-surface-hover transition-colors ${
-          props.showIcon ? "px-1.5 py-1 -mx-1.5" : "ml-[22px]"
-        }`}
-      >
-        <Show when={props.showIcon}>
-          <Bell size={14} class="text-fg-muted shrink-0" />
-        </Show>
+      <Combobox.Control class="flex items-center gap-2 rounded hover:bg-surface-hover transition-colors px-1.5 py-1 -mx-1.5">
+        <Bell size={14} class="text-fg-muted shrink-0" />
         <Combobox.Input
-          placeholder="Add reminder"
-          aria-label="Add reminder"
+          placeholder="Reminders"
+          aria-label="Reminders"
           class="flex-1 text-sm text-fg placeholder-fg-muted bg-transparent outline-none border-none cursor-text"
         />
       </Combobox.Control>
