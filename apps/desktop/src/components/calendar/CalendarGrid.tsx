@@ -37,7 +37,6 @@ import {
 } from "../../stores/view";
 import {
   getDateKey,
-  isWeekStart,
   getInitialAnchor,
   anchorDate,
   setAnchorDate,
@@ -446,8 +445,8 @@ export function CalendarGrid() {
                           left: "0",
                           transform: `translateX(${item().left}px)`,
                           width: `${gridLayout.layout().width}px`,
-                          height: `${allDay.visualAllDayHeight()}px`,
                           top: 0,
+                          bottom: 0,
                         }}
                       >
                         <AllDayFlashOverlay date={() => item().date} />
@@ -634,33 +633,23 @@ export function CalendarGrid() {
 
               {/* Phantom Snap Track */}
               <Key each={gridScroll.snapTrackIndices()} by={(i) => i}>
-                {(dayIndex) => {
-                  const date = addDays(anchorDate(), dayIndex());
-                  return (
-                    <div
-                      class="pointer-events-none"
-                      style={{
-                        position: "absolute",
-                        top: "0",
-                        left: "0",
-                        transform: `translateX(${getDayLeftPosition(dayIndex(), gridLayout.layout().width)}px)`,
-                        width: `${gridLayout.layout().width}px`,
-                        height: `${allDay.contentHeight()}px`,
-                        "z-index": "-1",
-                        "scroll-snap-align":
-                          isRestoringScrollPosition()
-                            ? "none"
-                            : visibleDaysCount() === 7 && !isWeekStart(date)
-                              ? "none"
-                              : "start",
-                        "scroll-snap-stop":
-                          isWeekStart(date) && visibleDaysCount() >= 7
-                            ? "always"
-                            : "normal",
-                      }}
-                    />
-                  );
-                }}
+                {(dayIndex) => (
+                  <div
+                    class="pointer-events-none"
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      transform: `translateX(${getDayLeftPosition(dayIndex(), gridLayout.layout().width)}px)`,
+                      width: `${gridLayout.layout().width}px`,
+                      height: `${allDay.contentHeight()}px`,
+                      "z-index": "-1",
+                      "scroll-snap-align":
+                        isRestoringScrollPosition() ? "none" : "start",
+                      "scroll-snap-stop": "normal",
+                    }}
+                  />
+                )}
               </Key>
             </div>
           </div>
