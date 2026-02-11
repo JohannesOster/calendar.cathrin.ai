@@ -123,7 +123,7 @@ export function TimeSection(props: SectionProps) {
         </div>
       </Show>
       {/* All-day toggle + stubs */}
-      <div class="ml-[22px] flex items-center gap-3 text-xs text-fg-disabled">
+      <div class="ml-[22px] flex items-center gap-3 text-xs">
         <Switch.Root
           checked={s.isAllDay()}
           onCheckedChange={() => {
@@ -209,8 +209,8 @@ export function TimeSection(props: SectionProps) {
           </Switch.Control>
           <Switch.HiddenInput />
         </Switch.Root>
-        <span>Time zone</span>
-        <span>Repeat</span>
+        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Time zone</button>
+        <button class="text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Repeat</button>
       </div>
     </div>
   );
@@ -221,14 +221,14 @@ export function DetailsSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-2 border-t border-border space-y-2">
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
         <Users size={14} class="shrink-0" />
         <span>Participants</span>
-      </div>
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
+      </button>
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
         <Video size={14} class="shrink-0" />
         <span>Conferencing</span>
-      </div>
+      </button>
       <div class="flex items-center gap-2 text-sm">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
@@ -241,10 +241,10 @@ export function DetailsSection(props: SectionProps) {
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
         <FileText size={14} class="shrink-0" />
         <span>Docs and links</span>
-      </div>
+      </button>
     </div>
   );
 }
@@ -330,8 +330,8 @@ export function CalendarSection(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
-      <div class="ml-[20px] text-xs text-fg-disabled">Busy</div>
-      <div class="ml-[20px] text-xs text-fg-disabled">Default visibility</div>
+      <button class="ml-[20px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Busy</button>
+      <button class="ml-[20px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Default visibility</button>
     </div>
   );
 }
@@ -339,11 +339,11 @@ export function CalendarSection(props: SectionProps) {
 export function RemindersSection() {
   return (
     <div class="px-3 py-2 border-t border-border space-y-1">
-      <div class="flex items-center gap-2 text-sm text-fg-disabled">
+      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
         <Bell size={14} class="shrink-0" />
         <span>Reminders</span>
-      </div>
-      <div class="ml-[22px] text-xs text-fg-disabled">30min before</div>
+      </button>
+      <button class="ml-[22px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">30min before</button>
     </div>
   );
 }
