@@ -25,7 +25,9 @@ export async function createEventViaGoogle(
   isAllDay?: boolean,
   calendarColor?: string | null,
   location?: string,
-  description?: string
+  description?: string,
+  transparency?: string,
+  visibility?: string
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -36,6 +38,8 @@ export async function createEventViaGoogle(
     end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end },
     location,
     description,
+    transparency,
+    visibility,
   });
 
   const color = calendarColor || "#4285f4";
@@ -57,6 +61,8 @@ export async function createEventViaGoogle(
     provider: "google",
     location: googleEvent.location || location || undefined,
     description: googleEvent.description || description || undefined,
+    transparency: googleEvent.transparency || transparency || undefined,
+    visibility: googleEvent.visibility || visibility || undefined,
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -79,6 +85,8 @@ export async function updateEventViaGoogle(
     start?: string;
     end?: string;
     isAllDay?: boolean;
+    transparency?: string;
+    visibility?: string;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -86,6 +94,8 @@ export async function updateEventViaGoogle(
   if (patch.summary !== undefined) googlePatch.summary = patch.summary;
   if (patch.description !== undefined) googlePatch.description = patch.description;
   if (patch.location !== undefined) googlePatch.location = patch.location;
+  if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
+  if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
   if (patch.start !== undefined) {
@@ -124,6 +134,8 @@ export async function updateEventViaGoogle(
       isAllDay: !!updated.start.date,
       location: updated.location || null,
       description: updated.description || null,
+      transparency: updated.transparency || existingEvent.transparency || null,
+      visibility: updated.visibility || existingEvent.visibility || null,
       updatedAt: new Date(),
     })
     .where(eq(serverEvents.id, existingEvent.id));
@@ -139,6 +151,8 @@ export async function updateEventViaGoogle(
     provider: "google",
     location: updated.location || undefined,
     description: updated.description || undefined,
+    transparency: updated.transparency || existingEvent.transparency || undefined,
+    visibility: updated.visibility || existingEvent.visibility || undefined,
   };
 }
 

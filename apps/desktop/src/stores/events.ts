@@ -124,6 +124,8 @@ export async function updateEvent(
     ...(rollback?.start !== undefined && { start: rollback.start }),
     ...(rollback?.end !== undefined && { end: rollback.end }),
     ...(rollback?.isAllDay !== undefined && { isAllDay: rollback.isAllDay }),
+    ...(rollback?.transparency !== undefined && { transparency: rollback.transparency }),
+    ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
   };
 
   // Apply optimistic update
@@ -138,6 +140,8 @@ export async function updateEvent(
             ...(patch.start !== undefined && { start: patch.start }),
             ...(patch.end !== undefined && { end: patch.end }),
             ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
+            ...(patch.transparency !== undefined && { transparency: patch.transparency }),
+            ...(patch.visibility !== undefined && { visibility: patch.visibility }),
           }
         : e
     )
@@ -149,6 +153,8 @@ export async function updateEvent(
   if (patch.description !== undefined) apiPatch.description = patch.description;
   if (patch.location !== undefined) apiPatch.location = patch.location;
   if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+  if (patch.transparency !== undefined) apiPatch.transparency = patch.transparency;
+  if (patch.visibility !== undefined) apiPatch.visibility = patch.visibility;
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {
     apiPatch.start = isAllDay

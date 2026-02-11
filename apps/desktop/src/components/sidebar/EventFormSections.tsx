@@ -9,6 +9,8 @@ import {
   AlignLeft,
   Bell,
   ChevronDown,
+  Globe,
+  Lock,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
@@ -330,8 +332,67 @@ export function CalendarSection(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
-      <button class="ml-[20px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Busy</button>
-      <button class="ml-[20px] text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg hover:bg-surface-hover transition-colors">Default visibility</button>
+      <div class="ml-[20px]" role="status" aria-live="polite">
+        <button
+          aria-pressed={s.transparency() === "opaque"}
+          class={`text-xs cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors ${
+            s.transparency() === "opaque" ? "text-fg" : "text-fg-muted"
+          }`}
+          onClick={() => s.setTransparency(s.transparency() === "opaque" ? "transparent" : "opaque")}
+        >
+          {s.transparency() === "opaque" ? "Busy" : "Free"}
+        </button>
+      </div>
+      <Select.Root
+        collection={s.visibilityCollection()}
+        value={[s.visibility()]}
+        onValueChange={(details) => {
+          const val = details.value[0];
+          if (val === "default" || val === "public" || val === "private") {
+            s.setVisibility(val);
+          }
+        }}
+        positioning={{ placement: "bottom-start", sameWidth: true }}
+      >
+        <Select.Control class="ml-[20px]">
+          <Select.Trigger class="flex items-center gap-1 text-xs bg-transparent outline-none border-none cursor-pointer rounded px-1 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg">
+            <Show when={s.visibility() === "private"}>
+              <Lock size={10} class="shrink-0" />
+            </Show>
+            <Show when={s.visibility() === "public"}>
+              <Globe size={10} class="shrink-0" />
+            </Show>
+            <span>
+              {s.visibility() === "default" ? "Default visibility" : s.visibility() === "public" ? "Public" : "Private"}
+            </span>
+            <ChevronDown size={10} class="text-fg-muted shrink-0" />
+          </Select.Trigger>
+        </Select.Control>
+        <Select.Positioner>
+          <Select.Content class="bg-surface border border-border rounded py-1 z-50">
+            <For each={s.visibilityCollection().items}>
+              {(item) => (
+                <Select.Item
+                  item={item}
+                  class="flex items-center gap-2 px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                >
+                  <Show when={item.value === "public"}>
+                    <Globe size={10} class="shrink-0" />
+                  </Show>
+                  <Show when={item.value === "private"}>
+                    <Lock size={10} class="shrink-0" />
+                  </Show>
+                  <Show when={item.value === "default"}>
+                    <span class="w-[10px]" />
+                  </Show>
+                  <Select.ItemText>{item.label}</Select.ItemText>
+                </Select.Item>
+              )}
+            </For>
+          </Select.Content>
+        </Select.Positioner>
+        <Select.HiddenSelect />
+      </Select.Root>
     </div>
   );
 }

@@ -16,6 +16,10 @@ import {
   setDraftLocation,
   draftDescription,
   setDraftDescription,
+  draftTransparency,
+  setDraftTransparency,
+  draftVisibility,
+  setDraftVisibility,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -48,6 +52,8 @@ export function useEventFormState() {
   const [editDescription, setEditDescription] = createSignal("");
   const [editIsAllDay, setEditIsAllDay] = createSignal(false);
   const [editCalendarId, setEditCalendarId] = createSignal<string | null>(null);
+  const [editTransparency, setEditTransparency] = createSignal<"opaque" | "transparent">("opaque");
+  const [editVisibility, setEditVisibility] = createSignal<"default" | "public" | "private">("default");
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -100,6 +106,8 @@ export function useEventFormState() {
     setEditDescription(event.description ?? "");
     setEditIsAllDay(event.isAllDay);
     setEditCalendarId(event.calendarId);
+    setEditTransparency(event.transparency ?? "opaque");
+    setEditVisibility(event.visibility ?? "default");
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -151,6 +159,17 @@ export function useEventFormState() {
   };
   const calendarId = () => mode() === "create" ? draftCalendarId() : editCalendarId();
   const setCalId = (v: string | null) => mode() === "create" ? setDraftCalendarId(v) : setEditCalendarId(v);
+
+  const transparency = () => mode() === "create" ? draftTransparency() : editTransparency();
+  const setTransparency = (v: "opaque" | "transparent") => {
+    if (mode() === "create") { setDraftTransparency(v); }
+    else { setEditTransparency(v); scheduleSave({ transparency: v }); flushSave(); }
+  };
+  const visibility = () => mode() === "create" ? draftVisibility() : editVisibility();
+  const setVisibility = (v: "default" | "public" | "private") => {
+    if (mode() === "create") { setDraftVisibility(v); }
+    else { setEditVisibility(v); scheduleSave({ visibility: v }); flushSave(); }
+  };
 
   const eventColor = createMemo(() => {
     if (mode() === "create") return getDraftColor();
@@ -274,6 +293,18 @@ export function useEventFormState() {
     })
   );
 
+  const visibilityCollection = createMemo(() =>
+    createListCollection({
+      items: [
+        { value: "default", label: "Default visibility" },
+        { value: "public", label: "Public" },
+        { value: "private", label: "Private" },
+      ],
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
   return {
     mode,
     title,
@@ -298,9 +329,14 @@ export function useEventFormState() {
     handleTimeInput,
     finishTimeEdit,
     handleTimeKeyDown,
+    transparency,
+    setTransparency,
+    visibility,
+    setVisibility,
     flushSave,
     allCalendars,
     calendarCollection,
+    visibilityCollection,
     get savedTimedStart() { return savedTimedStart; },
     set savedTimedStart(v: Date | null) { savedTimedStart = v; },
     get savedTimedEnd() { return savedTimedEnd; },

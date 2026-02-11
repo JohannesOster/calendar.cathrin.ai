@@ -20,6 +20,8 @@ export const [draftCalendarId, setDraftCalendarId] = createSignal<string | null>
 export const [draftLocation, setDraftLocation] = createSignal("");
 export const [draftDescription, setDraftDescription] = createSignal("");
 export const [draftIsAllDay, setDraftIsAllDay] = createSignal(false);
+export const [draftTransparency, setDraftTransparency] = createSignal<"opaque" | "transparent">("opaque");
+export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "public" | "private">("default");
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -154,6 +156,8 @@ export function cancelCreation(): void {
   setDraftLocation("");
   setDraftDescription("");
   setDraftIsAllDay(false);
+  setDraftTransparency("opaque");
+  setDraftVisibility("default");
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -180,6 +184,8 @@ export function commitCreation(): boolean {
   const isAllDay = draftIsAllDay();
   const location = draftLocation().trim() || undefined;
   const description = draftDescription().trim() || undefined;
+  const transparency = draftTransparency();
+  const visibility = draftVisibility();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -221,6 +227,8 @@ export function commitCreation(): boolean {
     color,
     location,
     description,
+    transparency,
+    visibility,
   });
 
   // Reset creation state
@@ -237,6 +245,8 @@ export function commitCreation(): boolean {
       isAllDay,
       location,
       description,
+      transparency,
+      visibility,
     }),
   })
     .then((serverEvent) => {

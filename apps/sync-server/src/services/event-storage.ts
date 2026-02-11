@@ -24,6 +24,8 @@ function buildEventValues(
     color: event.color,
     location: event.location ?? null,
     description: event.description ?? null,
+    transparency: event.transparency ?? null,
+    visibility: event.visibility ?? null,
     status: "confirmed" as const,
   };
 }
@@ -40,6 +42,8 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     color: event.color,
     location: event.location ?? null,
     description: event.description ?? null,
+    transparency: event.transparency ?? null,
+    visibility: event.visibility ?? null,
     updatedAt: new Date(),
   };
 }
@@ -88,6 +92,8 @@ export async function upsertServerEvents(
         color: sql`excluded.color`,
         location: sql`excluded.location`,
         description: sql`excluded.description`,
+        transparency: sql`excluded.transparency`,
+        visibility: sql`excluded.visibility`,
         updatedAt: new Date(),
       },
     });

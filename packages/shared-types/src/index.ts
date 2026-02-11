@@ -35,6 +35,8 @@ export interface ApiCalendarEvent {
   provider: Provider;
   location?: string;
   description?: string;
+  transparency?: string;
+  visibility?: string;
 }
 
 /**

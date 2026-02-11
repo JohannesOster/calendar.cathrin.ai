@@ -15,6 +15,8 @@ export interface CalendarEvent {
   color: string;
   location?: string;
   description?: string;
+  transparency?: "opaque" | "transparent";
+  visibility?: "default" | "public" | "private";
 }
 
 export type EventPatch = {
@@ -24,6 +26,8 @@ export type EventPatch = {
   start?: Date;
   end?: Date;
   isAllDay?: boolean;
+  transparency?: "opaque" | "transparent";
+  visibility?: "default" | "public" | "private";
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
@@ -37,5 +41,7 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     color: mapProviderColor(event.color),
     location: event.location,
     description: event.description,
+    transparency: event.transparency as CalendarEvent["transparency"],
+    visibility: event.visibility as CalendarEvent["visibility"],
   };
 }

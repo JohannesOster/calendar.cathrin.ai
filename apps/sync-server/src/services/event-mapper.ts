@@ -19,5 +19,7 @@ export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
     provider: "google",
     location: event.location || undefined,
     description: event.description || undefined,
+    transparency: event.transparency || undefined,
+    visibility: event.visibility || undefined,
   };
 }

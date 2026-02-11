@@ -71,6 +71,8 @@ interface GoogleEvent {
   status?: string;
   location?: string;
   description?: string;
+  transparency?: string;
+  visibility?: string;
 }
 
 interface EventsListResponse {
@@ -93,6 +95,8 @@ export interface GoogleEventPatch {
   location?: string;
   start?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
   end?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
+  transparency?: string;
+  visibility?: string;
 }
 
 /**
@@ -259,6 +263,8 @@ export class GoogleCalendarService {
       end: { dateTime?: string; date?: string };
       location?: string;
       description?: string;
+      transparency?: string;
+      visibility?: string;
     }
   ): Promise<GoogleEvent> {
     const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
@@ -397,6 +403,8 @@ export class GoogleCalendarService {
       provider: "google",
       location: event.location || undefined,
       description: event.description || undefined,
+      transparency: event.transparency || undefined,
+      visibility: event.visibility || undefined,
     };
   }
 }
