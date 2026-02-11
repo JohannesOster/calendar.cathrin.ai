@@ -173,7 +173,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       ref={chipRef}
       class={`all-day-chip absolute flex items-center px-1.5 text-xs truncate transition-[background-color] ${props.event.isReadOnly ? "cursor-default" : "cursor-pointer"}`}
       classList={{
-        "all-day-chip--selected": isSelected(),
+        "all-day-chip--selected": isSelected() || isDragging(),
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
       onPointerDown={handlePointerDown}

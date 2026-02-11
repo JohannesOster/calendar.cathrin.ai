@@ -366,9 +366,9 @@ export function createAllDayState(deps: AllDayStateDeps) {
     }
   });
 
-  // Ghost chip layout showing original position during unfold drag
+  // Ghost chip layout showing original position during unfold or all-day move drag
   const unfoldOriginalGhost = createMemo(() => {
-    const drag = unfoldDrag();
+    const drag = unfoldDrag() ?? allDayMoveDrag();
     if (!drag) return null;
 
     const days = deps.layout().days;
