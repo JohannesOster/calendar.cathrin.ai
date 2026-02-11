@@ -537,23 +537,24 @@ export function RemindersSection(props: SectionProps) {
         <ReminderCombobox state={s} />
       </Show>
       <Show when={s.reminders().length > 0}>
-        <div class="ml-[22px] flex flex-wrap gap-1">
-          <For each={s.reminders()}>
+        <div class="flex flex-col">
+          <For each={[...s.reminders()].sort((a, b) => a.minutes - b.minutes)}>
             {(r) => (
-              <span
-                class="inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 bg-surface-hover text-fg"
+              <div
+                class="group flex items-center gap-2 pl-[30px] pr-2 py-2 rounded hover:bg-surface-hover transition-colors"
                 aria-label={`${formatReminderValue(r.minutes)} before, press delete to remove`}
               >
-                {formatReminderValue(r.minutes)}{" "}
-                <span class="text-fg-muted">before</span>
+                <span class="flex-1 text-sm text-fg-muted">
+                  {formatReminderValue(r.minutes)} before
+                </span>
                 <button
-                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer p-1.5"
+                  class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
                   onClick={() => s.removeReminder(r.minutes)}
                   aria-label={`Remove ${formatReminderValue(r.minutes)} before reminder`}
                 >
                   <X size={12} />
                 </button>
-              </span>
+              </div>
             )}
           </For>
         </div>
