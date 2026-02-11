@@ -148,9 +148,13 @@ export function CalendarGrid() {
   // --- Keyboard Handlers ---
   setupKeyboardHandlers();
 
-  // --- Persist view state ---
-  createVisibleDaysPersistence();
+  // --- Restore & persist view state ---
+  // Init must run before persistence effects, otherwise the effect fires with
+  // the default value and overwrites the saved localStorage entry.
+  initCurrentView();
+  initVisibleDaysCount();
   createCurrentViewPersistence();
+  createVisibleDaysPersistence();
 
   // --- Month/Year Label ---
   const monthYearLabel = createMemo(() => {
@@ -173,9 +177,6 @@ export function CalendarGrid() {
 
   // --- Initialize on mount ---
   onMount(() => {
-    initCurrentView();
-    initVisibleDaysCount();
-
     const freshAnchor = getInitialAnchor();
     setAnchorDate(freshAnchor);
     gridScroll.setSnapCenter(0);

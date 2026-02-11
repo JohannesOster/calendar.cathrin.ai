@@ -5,7 +5,6 @@ import {
   Users,
   Video,
   MapPin,
-  FileText,
   AlignLeft,
   Bell,
   ChevronDown,
@@ -14,6 +13,7 @@ import {
   Check,
   Copy,
   Loader2,
+  Palette,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select } from "@ark-ui/solid/select";
@@ -248,10 +248,6 @@ export function DetailsSection(props: SectionProps) {
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
         />
       </div>
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-1 -mx-1 hover:text-fg hover:bg-surface-hover transition-colors">
-        <FileText size={14} class="shrink-0" />
-        <span>Docs and links</span>
-      </button>
     </div>
   );
 }
@@ -301,7 +297,10 @@ export function CalendarSection(props: SectionProps) {
         positioning={{ placement: "bottom-start", sameWidth: true }}
       >
         <Select.Control class="flex items-center gap-2">
-          <ColorPickerPopover state={s} />
+          <div
+            class="w-3 h-3 rounded-full shrink-0"
+            style={{ "background-color": s.eventColor() }}
+          />
           <Select.Trigger class="flex-1 flex items-center justify-between text-sm text-fg bg-transparent outline-none border-none cursor-pointer">
             <span>
               {(() => {
@@ -334,6 +333,13 @@ export function CalendarSection(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
+      <div class="flex items-center gap-2">
+        <Palette size={14} class="text-fg-muted shrink-0" />
+        <ColorPickerPopover state={s} />
+        <Show when={s.colorId()}>
+          <span class="text-sm text-fg-muted">{COLOR_SWATCHES.find(c => c.key === s.colorId())?.label}</span>
+        </Show>
+      </div>
       <div class="ml-[20px]" role="status" aria-live="polite">
         <button
           aria-pressed={s.transparency() === "opaque"}

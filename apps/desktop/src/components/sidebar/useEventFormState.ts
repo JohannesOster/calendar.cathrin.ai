@@ -35,7 +35,7 @@ import {
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
-import { updateEvent, setEvents } from "../../stores/events";
+import { updateEvent, setEvents, events } from "../../stores/events";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
@@ -72,18 +72,26 @@ export function useEventFormState() {
 
   // ===========================================================================
   // Autosave infrastructure (edit mode only)
+  //
+  // The EventForm lives inside <Show when={selectedEventId()}>. When the
+  // signal becomes null, Show disposes children (and their effects) BEFORE
+  // those effects can react. So the deselection effect below may never fire.
+  // We track the active event ID in a plain variable so onCleanup can always
+  // flush pending changes even after the signal is null.
   // ===========================================================================
   let pendingPatch: EventPatch = {};
   /** Original values captured before the first pre-mutation of each field. */
   let pendingRollback: EventPatch = {};
+  /** Last selected event ID — survives signal disposal for onCleanup. */
+  let activeEditEventId: string | null = null;
 
   /** Accumulate a field change. Flushed on blur via flushSave(). */
   function scheduleSave(patch: EventPatch): void {
     Object.assign(pendingPatch, patch);
   }
 
-  function flushSave(): void {
-    const eventId = selectedEventId();
+  function flushSave(overrideEventId?: string): void {
+    const eventId = overrideEventId ?? activeEditEventId ?? selectedEventId();
     if (!eventId || Object.keys(pendingPatch).length === 0) return;
 
     const patchToSend = { ...pendingPatch };
@@ -95,20 +103,35 @@ export function useEventFormState() {
     );
   }
 
-  // Flush pending save when deselecting (sidebar closes)
+  // Flush pending save when deselecting (sidebar closes).
+  // Note: this effect may be disposed by <Show> before it runs. onCleanup
+  // below is the guaranteed fallback using activeEditEventId.
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
-      flushSave();
+      flushSave(prevId);
     }
   }));
 
-  // Flush on unmount
+  // Flush on unmount — uses activeEditEventId since selectedEventId() is
+  // already null by the time <Show> disposes this component.
   onCleanup(() => flushSave());
 
-  // Populate edit signals whenever the selected event changes
-  createEffect(on(selectedEvent, (event) => {
+  // Populate edit signals when a *different* event is selected.
+  // Track selectedEventId (a primitive) instead of selectedEvent (an object
+  // whose reference changes on every setEvents call). This prevents the effect
+  // from re-running during live chip updates (e.g. title keystroke → setEvents
+  // → new selectedEvent ref → effect would clear pendingPatch mid-edit).
+  // events() is read inside the callback which runs in untrack(), so it does
+  // not become a dependency.
+  createEffect(on(selectedEventId, (id, prevId) => {
+    if (!id) return;
+    // Flush pending saves for the previous event before switching
+    if (prevId && prevId !== id) {
+      flushSave(prevId);
+    }
+    activeEditEventId = id;
+    const event = events().find((e) => e.id === id);
     if (!event) return;
-    // Clear any pending saves for the previous event
     pendingPatch = {};
     pendingRollback = {};
 
