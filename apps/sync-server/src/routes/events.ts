@@ -12,7 +12,7 @@ import {
   getCalendarsToCheck,
 } from "../services/calendar-sync.js";
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
-import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle } from "../services/event-mutations.js";
+import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle, rsvpEventViaGoogle } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 
 const querySchema = z
@@ -105,6 +105,7 @@ export const eventsRoute = new Hono()
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
+        attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).optional(),
       })
     ),
     async (c) => {
@@ -113,7 +114,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -127,7 +128,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await createEventViaGoogle(
-          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone
+          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees
         );
         return c.json(apiEvent, 201);
       } catch (error) {
@@ -157,6 +158,7 @@ export const eventsRoute = new Hono()
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
+        attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
       })
     ),
     async (c) => {
@@ -173,7 +175,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "No accounts found" }, 404);
       }
 
-      const event = await findUserEvent(accountIds, googleEventId);
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -197,19 +200,21 @@ export const eventsRoute = new Hono()
 
     const userId = c.get("userId");
     const googleEventId = c.req.param("eventId");
+    const sendUpdates = c.req.query("sendUpdates") as "all" | "none" | undefined;
 
     const accountIds = await getUserAccountIds(userId);
     if (accountIds.length === 0) {
       return c.json({ error: "No accounts found" }, 404);
     }
 
-    const event = await findUserEvent(accountIds, googleEventId);
+    const calendarId = c.req.query("calendarId");
+    const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
     if (!event) {
       return c.json({ error: "Event not found" }, 404);
     }
 
     try {
-      await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id);
+      await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id, sendUpdates);
       return c.json({ success: true });
     } catch (error) {
       const errorResponse = handleGoogleApiError(error, c);
@@ -217,6 +222,46 @@ export const eventsRoute = new Hono()
       throw error;
     }
   })
+  .patch(
+    "/:eventId/rsvp",
+    zValidator(
+      "json",
+      z.object({
+        responseStatus: z.enum(["accepted", "declined", "tentative"]),
+      })
+    ),
+    async (c) => {
+      if (!db) {
+        return c.json({ error: "Database not configured" }, 500);
+      }
+
+      const userId = c.get("userId");
+      const googleEventId = c.req.param("eventId");
+      const { responseStatus } = c.req.valid("json");
+
+      const accountIds = await getUserAccountIds(userId);
+      if (accountIds.length === 0) {
+        return c.json({ error: "No accounts found" }, 404);
+      }
+
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
+      if (!event) {
+        return c.json({ error: "Event not found" }, 404);
+      }
+
+      try {
+        const apiEvent = await rsvpEventViaGoogle(
+          event.accountId, event.calendarId, googleEventId, responseStatus, event
+        );
+        return c.json(apiEvent);
+      } catch (error) {
+        const errorResponse = handleGoogleApiError(error, c);
+        if (errorResponse) return errorResponse;
+        throw error;
+      }
+    }
+  )
   .post(
     "/:eventId/move",
     zValidator(
@@ -239,7 +284,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "No accounts found" }, 404);
       }
 
-      const event = await findUserEvent(accountIds, googleEventId);
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }

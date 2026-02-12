@@ -8,7 +8,7 @@ import {
 } from "./google-calendar.js";
 import { upsertServerEvent } from "./event-storage.js";
 import { mapServerEventToApi } from "./event-mapper.js";
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import type { InferSelectModel } from "drizzle-orm";
 
 type ServerEvent = InferSelectModel<typeof serverEvents>;
@@ -32,7 +32,8 @@ export async function createEventViaGoogle(
   reminders?: { method: string; minutes: number }[],
   colorId?: string,
   conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null,
-  timeZone?: string
+  timeZone?: string,
+  attendees?: { email: string; name?: string }[]
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -59,7 +60,10 @@ export async function createEventViaGoogle(
         },
       },
     }),
-  });
+    ...(attendees && attendees.length > 0 && {
+      attendees: attendees.map(a => ({ email: a.email, displayName: a.name })),
+    }),
+  }, attendees && attendees.length > 0 ? { sendUpdates: "all" } : undefined);
 
   // Extract conferencing from Google response
   const videoEntryPoint = googleEvent.conferenceData?.entryPoints
@@ -94,6 +98,15 @@ export async function createEventViaGoogle(
     colorId: googleEvent.colorId || colorId || undefined,
     conferencing: conferencingResult,
     timeZone: timeZone || undefined,
+    attendees: googleEvent.attendees
+      ?.filter(a => !a.resource)
+      .map(a => ({
+        email: a.email,
+        name: a.displayName || undefined,
+        responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+        isOrganizer: a.organizer || undefined,
+        isSelf: a.self || undefined,
+      })),
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -122,6 +135,7 @@ export async function updateEventViaGoogle(
     colorId?: string | null;
     conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
     timeZone?: string;
+    attendees?: { email: string; name?: string }[] | null;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -152,6 +166,11 @@ export async function updateEventViaGoogle(
     }
     // Manual URLs don't go through Google's conferenceData — stored locally only
   }
+  if (patch.attendees !== undefined) {
+    googlePatch.attendees = patch.attendees
+      ? patch.attendees.map(a => ({ email: a.email }))
+      : [];
+  }
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
   const patchTimeZone = !useDate ? patch.timeZone : undefined;
@@ -173,7 +192,10 @@ export async function updateEventViaGoogle(
   console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  const updated = await service.patchEvent(calendarId, googleEventId, googlePatch);
+  const updated = await service.patchEvent(
+    calendarId, googleEventId, googlePatch,
+    patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
+  );
 
   const updatedStart = updated.start.dateTime
     ? new Date(updated.start.dateTime)
@@ -214,6 +236,17 @@ export async function updateEventViaGoogle(
       }),
       ...(patch.timeZone !== undefined && {
         timeZone: patch.timeZone || null,
+      }),
+      ...(patch.attendees !== undefined && {
+        attendees: updated.attendees
+          ?.filter(a => !a.resource)
+          .map(a => ({
+            email: a.email,
+            name: a.displayName || undefined,
+            responseStatus: (a.responseStatus || "needsAction"),
+            isOrganizer: a.organizer || undefined,
+            isSelf: a.self || undefined,
+          })) ?? null,
       }),
       updatedAt: new Date(),
     })
@@ -258,6 +291,17 @@ export async function updateEventViaGoogle(
     timeZone: patch.timeZone !== undefined
       ? (patch.timeZone || undefined)
       : (existingEvent.timeZone || undefined),
+    attendees: patch.attendees !== undefined
+      ? (updated.attendees
+          ?.filter(a => !a.resource)
+          .map(a => ({
+            email: a.email,
+            name: a.displayName || undefined,
+            responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+            isOrganizer: a.organizer || undefined,
+            isSelf: a.self || undefined,
+          })) || undefined)
+      : (existingEvent.attendees as Attendee[] | undefined),
   };
 }
 
@@ -268,11 +312,12 @@ export async function deleteEventViaGoogle(
   accountId: string,
   calendarId: string,
   googleEventId: string,
-  eventDbId: string
+  eventDbId: string,
+  sendUpdates?: "all" | "none"
 ): Promise<void> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  await service.deleteEvent(calendarId, googleEventId);
+  await service.deleteEvent(calendarId, googleEventId, sendUpdates ? { sendUpdates } : undefined);
 
   await db!
     .delete(serverEvents)
@@ -323,4 +368,54 @@ export async function moveEventViaGoogle(
   });
 
   return mapServerEventToApi(updated!);
+}
+
+/**
+ * Update the current user's RSVP status on an event via Google Calendar API.
+ * Reads the attendees array from DB, updates the self entry's responseStatus,
+ * PATCHes to Google, and updates the local cache.
+ */
+export async function rsvpEventViaGoogle(
+  accountId: string,
+  calendarId: string,
+  googleEventId: string,
+  responseStatus: "accepted" | "declined" | "tentative",
+  existingEvent: ServerEvent
+): Promise<ApiCalendarEvent> {
+  const attendees = (existingEvent.attendees as Attendee[]) || [];
+  if (attendees.length === 0) {
+    throw new Error("Event has no attendees");
+  }
+
+  // Build the Google-format attendees array with updated self status
+  const googleAttendees = attendees.map(a => ({
+    email: a.email,
+    responseStatus: a.isSelf ? responseStatus : a.responseStatus,
+    ...(a.isOrganizer && { organizer: true }),
+    ...(a.isSelf && { self: true }),
+  }));
+
+  const accessToken = await getAccessToken(accountId);
+  const service = new GoogleCalendarService(accessToken);
+  await service.patchEvent(
+    calendarId,
+    googleEventId,
+    { attendees: googleAttendees },
+    { sendUpdates: "none" }
+  );
+
+  // Update attendees in local DB
+  const updatedAttendees = attendees.map(a =>
+    a.isSelf ? { ...a, responseStatus } : a
+  );
+
+  await db!
+    .update(serverEvents)
+    .set({ attendees: updatedAttendees, updatedAt: new Date() })
+    .where(eq(serverEvents.id, existingEvent.id));
+
+  return mapServerEventToApi({
+    ...existingEvent,
+    attendees: updatedAttendees,
+  } as ServerEvent);
 }

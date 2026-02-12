@@ -7,6 +7,7 @@ import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
+import { Users } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
 // Shared signal: all segments of the focused event highlight together
@@ -41,6 +42,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const isFocused = createMemo(() => focusedEventId() === props.event.id);
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
   const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
+  const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;
@@ -81,6 +83,14 @@ export function CalendarEvent(props: CalendarEventProps) {
     if (e.button !== 0) return;
     if (props.event.isAllDay) return;
 
+    // Read-only events: click-to-select only, no drag
+    if (props.event.isReadOnly) {
+      e.preventDefault();
+      contentRef?.focus();
+      selectEvent(props.event.id);
+      return;
+    }
+
     // Don't start move drag from the resize handle
     const target = e.target as HTMLElement;
     if (target.closest("[data-resize-handle]")) return;
@@ -90,7 +100,6 @@ export function CalendarEvent(props: CalendarEventProps) {
     let started = false;
 
     const onMove = (me: PointerEvent) => {
-      if (props.event.isReadOnly) return;
       const dx = me.clientX - startX;
       const dy = me.clientY - startY;
       if (!started && Math.sqrt(dx * dx + dy * dy) >= MOVE_DRAG_THRESHOLD) {
@@ -230,7 +239,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
@@ -272,10 +281,23 @@ export function CalendarEvent(props: CalendarEventProps) {
               >
                 {props.event.title}
               </div>
-              <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
-                {getHeight() < SHORT_TIME_THRESHOLD_PX
-                  ? formatCompactTime(props.event.start, props.event.timeZone)
-                  : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
+              <div class="flex items-center gap-1 text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
+                <span>
+                  {getHeight() < SHORT_TIME_THRESHOLD_PX
+                    ? formatCompactTime(props.event.start, props.event.timeZone)
+                    : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
+                </span>
+                <Show when={props.event.attendees && props.event.attendees.length > 1}>
+                  <span
+                    class="inline-flex items-center gap-0.5"
+                    aria-label={`${props.event.attendees!.length} participants`}
+                  >
+                    <Users size={10} aria-hidden="true" />
+                    <Show when={getHeight() >= SHORT_TIME_THRESHOLD_PX}>
+                      {props.event.attendees!.length}
+                    </Show>
+                  </span>
+                </Show>
               </div>
               <Show when={showTzIndicator()}>
                 <div class="text-2xs font-light opacity-60">

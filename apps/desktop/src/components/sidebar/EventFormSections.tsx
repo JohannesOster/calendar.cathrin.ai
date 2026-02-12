@@ -1,4 +1,5 @@
 import { Show, For, createSignal, createMemo, createEffect } from "solid-js";
+import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
   ArrowRight,
@@ -18,6 +19,8 @@ import {
   Circle,
   Sun,
   Repeat,
+  Check,
+  HelpCircle,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select, createListCollection } from "@ark-ui/solid/select";
@@ -228,10 +231,13 @@ export function DetailsSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-3 border-t border-border space-y-2">
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
-        <Users size={14} class="shrink-0" />
-        <span>Participants</span>
-      </button>
+      <AttendeeList
+        attendees={s.attendees()}
+        isOrganizer={s.isOrganizer()}
+        onAdd={(email, name) => s.addAttendee(email, name)}
+        onRemove={(email) => s.removeAttendee(email)}
+        onRsvp={(status) => s.rsvpAttendee(status)}
+      />
       <ConferencingField state={s} />
       <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <MapPin size={14} class="text-fg-muted shrink-0" />
@@ -564,6 +570,197 @@ export function RemindersSection(props: SectionProps) {
           </For>
         </div>
       </Show>
+    </div>
+  );
+}
+
+// =============================================================================
+// Attendee list
+// =============================================================================
+
+const RESPONSE_STATUS_ORDER: Record<string, number> = {
+  accepted: 0,
+  tentative: 1,
+  needsAction: 2,
+  declined: 3,
+};
+
+function sortAttendees(attendees: Attendee[]): Attendee[] {
+  return [...attendees].sort((a, b) => {
+    // Organizer always first
+    if (a.isOrganizer && !b.isOrganizer) return -1;
+    if (!a.isOrganizer && b.isOrganizer) return 1;
+    // Then by response status
+    const aOrder = RESPONSE_STATUS_ORDER[a.responseStatus] ?? 4;
+    const bOrder = RESPONSE_STATUS_ORDER[b.responseStatus] ?? 4;
+    return aOrder - bOrder;
+  });
+}
+
+function ResponseStatusIcon(props: { status: Attendee["responseStatus"] }) {
+  switch (props.status) {
+    case "accepted":
+      return (
+        <span class="text-green-600" aria-hidden="true">
+          <Check size={12} />
+        </span>
+      );
+    case "declined":
+      return (
+        <span class="text-red-500" aria-hidden="true">
+          <X size={12} />
+        </span>
+      );
+    case "tentative":
+      return (
+        <span class="text-amber-500" aria-hidden="true">
+          <HelpCircle size={12} />
+        </span>
+      );
+    default:
+      return (
+        <span class="text-fg-disabled" aria-hidden="true">
+          <Circle size={12} />
+        </span>
+      );
+  }
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  accepted: "Accepted",
+  declined: "Declined",
+  tentative: "Maybe",
+  needsAction: "No response",
+};
+
+function AttendeeList(props: {
+  attendees: Attendee[] | undefined;
+  isOrganizer: boolean;
+  onAdd: (email: string, name?: string) => void;
+  onRemove: (email: string) => void;
+  onRsvp: (status: "accepted" | "declined" | "tentative") => void;
+}) {
+  const [emailInput, setEmailInput] = createSignal("");
+  const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
+  const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
+  const selfAttendee = createMemo(() => props.attendees?.find(a => a.isSelf));
+  const canRsvp = createMemo(() => {
+    const self = selfAttendee();
+    return self && !self.isOrganizer;
+  });
+
+  function handleAddEmail(): void {
+    const email = emailInput().trim();
+    if (!email || !email.includes("@")) return;
+    props.onAdd(email);
+    setEmailInput("");
+  }
+
+  return (
+    <div class="space-y-0.5">
+      <div class="flex items-center gap-2 px-2 py-2">
+        <Users size={14} class="text-fg-muted shrink-0" />
+        <span class="text-sm text-fg-muted">
+          Participants{hasAttendees() ? ` (${props.attendees!.length})` : ""}
+        </span>
+      </div>
+      <Show when={hasAttendees()}>
+        <div class="max-h-52 overflow-y-auto">
+          <For each={sorted()}>
+            {(attendee) => (
+              <div
+                class="group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded hover:bg-surface-hover transition-colors"
+                role="listitem"
+                aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
+              >
+                <ResponseStatusIcon status={attendee.responseStatus} />
+                <span
+                  class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium text-fg" : "text-fg"}`}
+                >
+                  {attendee.isSelf
+                    ? (attendee.name ? `${attendee.name} (You)` : "You")
+                    : (attendee.name || attendee.email)}
+                </span>
+                <Show when={attendee.isOrganizer}>
+                  <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
+                </Show>
+                <Show when={props.isOrganizer && !attendee.isSelf}>
+                  <button
+                    class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
+                    onClick={() => props.onRemove(attendee.email)}
+                    aria-label={`Remove ${attendee.name || attendee.email}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+        <Show when={canRsvp()}>
+          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
+        </Show>
+      </Show>
+      <Show when={props.isOrganizer}>
+        <div class="flex items-center gap-2 pl-[30px] pr-2">
+          <input
+            type="email"
+            placeholder="Add participant email"
+            aria-label="Add participant email"
+            value={emailInput()}
+            onInput={(e) => setEmailInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAddEmail();
+              }
+            }}
+            onBlur={() => handleAddEmail()}
+            class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
+          />
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp: (status: "accepted" | "declined" | "tentative") => void }) {
+  const buttonClass = (status: string) => {
+    const isActive = props.currentStatus === status;
+    return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
+      isActive
+        ? "bg-fg text-surface font-medium"
+        : "bg-surface-hover text-fg-muted hover:text-fg"
+    }`;
+  };
+
+  return (
+    <div
+      class="flex gap-1 pl-[30px] pr-2 pt-1"
+      role="group"
+      aria-label="Your response"
+    >
+      <button
+        class={buttonClass("accepted")}
+        aria-pressed={props.currentStatus === "accepted"}
+        onClick={() => props.onRsvp("accepted")}
+      >
+        Accept
+      </button>
+      <button
+        class={buttonClass("tentative")}
+        aria-pressed={props.currentStatus === "tentative"}
+        onClick={() => props.onRsvp("tentative")}
+      >
+        Maybe
+      </button>
+      <button
+        class={buttonClass("declined")}
+        aria-pressed={props.currentStatus === "declined"}
+        onClick={() => props.onRsvp("declined")}
+      >
+        Decline
+      </button>
     </div>
   );
 }

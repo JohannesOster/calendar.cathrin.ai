@@ -28,6 +28,8 @@ import {
   setDraftConferencing,
   draftTimeZone,
   setDraftTimeZone,
+  draftAttendees,
+  setDraftAttendees,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -41,7 +43,7 @@ import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import { dragActiveEventId } from "../../stores/event-drag";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
@@ -68,6 +70,7 @@ export function useEventFormState() {
   const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
   const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
   const [editTimeZone, setEditTimeZone] = createSignal<string | undefined>(undefined);
+  const [editAttendees, setEditAttendees] = createSignal<Attendee[]>([]);
   const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
@@ -86,6 +89,10 @@ export function useEventFormState() {
   let pendingRollback: EventPatch = {};
   /** Debounce timer for reminder add/remove so rapid changes batch into one PATCH. */
   let reminderFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Debounce timer for RSVP so rapid status toggles batch into one PATCH. */
+  let rsvpTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Original attendees before the first RSVP click in a debounce window (for rollback). */
+  let rsvpOriginalAttendees: Attendee[] | null = null;
   /** Last selected event ID — survives signal disposal for onCleanup. */
   let activeEditEventId: string | null = null;
 
@@ -121,6 +128,7 @@ export function useEventFormState() {
   // already null by the time <Show> disposes this component.
   onCleanup(() => {
     if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+    if (rsvpTimer) { clearTimeout(rsvpTimer); rsvpTimer = null; rsvpOriginalAttendees = null; }
     flushSave();
   });
 
@@ -157,6 +165,7 @@ export function useEventFormState() {
     setEditColorId(event.colorId ?? null);
     setEditConferencing(event.conferencing ?? null);
     setEditTimeZone(event.timeZone);
+    setEditAttendees(event.attendees ?? []);
     setConferencingLoading(false);
     savedTimedStart = null;
     savedTimedEnd = null;
@@ -308,6 +317,89 @@ export function useEventFormState() {
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
 
+  const attendees = () => mode() === "create" ? (draftAttendees().length > 0 ? draftAttendees() : undefined) : (editAttendees().length > 0 ? editAttendees() : undefined);
+
+  /** Whether the current user is the organizer (can add/remove attendees) */
+  const isOrganizer = createMemo(() => {
+    if (mode() === "create") return true;
+    const event = selectedEvent();
+    if (!event) return false;
+    if (event.isReadOnly) return false;
+    // If there are attendees, check if self is the organizer
+    const self = event.attendees?.find(a => a.isSelf);
+    if (self) return !!self.isOrganizer;
+    // No attendees yet — user owns this event
+    return true;
+  });
+
+  function addAttendee(email: string, name?: string): void {
+    const current = mode() === "create" ? draftAttendees() : editAttendees();
+    if (current.some(a => a.email.toLowerCase() === email.toLowerCase())) return;
+    const newAttendee: Attendee = { email, name, responseStatus: "needsAction" };
+    const updated = [...current, newAttendee];
+    if (mode() === "create") {
+      setDraftAttendees(updated);
+    } else {
+      setEditAttendees(updated);
+      setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated } : e));
+      scheduleSave({ attendees: updated });
+      flushSave();
+    }
+  }
+
+  function removeAttendee(email: string): void {
+    const current = mode() === "create" ? draftAttendees() : editAttendees();
+    const updated = current.filter(a => a.email.toLowerCase() !== email.toLowerCase());
+    if (mode() === "create") {
+      setDraftAttendees(updated);
+    } else {
+      setEditAttendees(updated);
+      setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated.length > 0 ? updated : undefined } : e));
+      scheduleSave({ attendees: updated.length > 0 ? updated : null });
+      flushSave();
+    }
+  }
+
+  /** RSVP: optimistic update immediately, debounced API call. */
+  function rsvpAttendee(responseStatus: Attendee["responseStatus"]): void {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const event = events().find((e) => e.id === eventId);
+    if (!event?.attendees) return;
+
+    // Capture original attendees only on first click in a debounce window
+    if (!rsvpOriginalAttendees) {
+      rsvpOriginalAttendees = event.attendees;
+    }
+
+    // Optimistic: update both local form signal and global events signal
+    const updated = editAttendees().map(a => a.isSelf ? { ...a, responseStatus } : a);
+    setEditAttendees(updated);
+    setEvents((prev) =>
+      prev.map((e) => e.id === eventId ? { ...e, attendees: updated } : e)
+    );
+
+    // Debounce the API call so rapid toggles only send once
+    if (rsvpTimer) clearTimeout(rsvpTimer);
+    const googleEventId = event.googleEventId;
+    const original = rsvpOriginalAttendees;
+    rsvpTimer = setTimeout(() => {
+      rsvpTimer = null;
+      rsvpOriginalAttendees = null;
+      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ responseStatus }),
+      }).catch((err) => {
+        console.error(`[rsvp] Failed:`, err);
+        // Roll back both signals to the pre-debounce-window state
+        setEditAttendees(original);
+        setEvents((prev) =>
+          prev.map((e) => e.id === eventId ? { ...e, attendees: original } : e)
+        );
+      });
+    }, 300);
+  }
+
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
   const setTimeZone = (v: string | undefined) => {
     const oldTz = timeZone() || SYSTEM_TIMEZONE;
@@ -349,9 +441,11 @@ export function useEventFormState() {
     } else {
       const eventId = selectedEventId();
       if (!eventId) return;
+      const event = events().find(e => e.id === eventId);
+      if (!event) return;
       setConferencingLoading(true);
       // PATCH the event with a Meet request
-      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(eventId)}`, {
+      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.googleEventId)}`, {
         method: "PATCH",
         body: JSON.stringify({ conferencing: { type: "meet" } }),
       })
@@ -584,6 +678,11 @@ export function useEventFormState() {
     addReminder,
     removeReminder,
     conferencing,
+    attendees,
+    isOrganizer,
+    addAttendee,
+    removeAttendee,
+    rsvpAttendee,
     timeZone,
     setTimeZone,
     conferencingLoading,

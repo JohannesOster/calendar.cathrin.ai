@@ -1,4 +1,4 @@
-import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendar, ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
 const GOOGLE_CALENDAR_LIST_URL =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
@@ -92,6 +92,16 @@ interface GoogleEvent {
     overrides?: { method: string; minutes: number }[];
   };
   conferenceData?: GoogleConferenceData;
+  attendees?: {
+    email: string;
+    displayName?: string;
+    responseStatus?: string;
+    organizer?: boolean;
+    self?: boolean;
+    optional?: boolean;
+    resource?: boolean;
+    comment?: string;
+  }[];
 }
 
 interface EventsListResponse {
@@ -119,6 +129,7 @@ export interface GoogleEventPatch {
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
   colorId?: string | null;
   conferenceData?: GoogleConferenceData | null;
+  attendees?: { email: string; responseStatus?: string; self?: boolean; organizer?: boolean }[];
 }
 
 /**
@@ -292,11 +303,16 @@ export class GoogleCalendarService {
       reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
       colorId?: string;
       conferenceData?: GoogleConferenceData;
-    }
+      attendees?: { email: string; displayName?: string }[];
+    },
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
   ): Promise<GoogleEvent> {
     const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`);
     if (event.conferenceData) {
       url.searchParams.set("conferenceDataVersion", "1");
+    }
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
     }
 
     const response = await fetch(url.toString(), {
@@ -323,11 +339,15 @@ export class GoogleCalendarService {
   async patchEvent(
     calendarId: string,
     eventId: string,
-    patch: GoogleEventPatch
+    patch: GoogleEventPatch,
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
   ): Promise<GoogleEvent> {
     const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
     if (patch.conferenceData !== undefined) {
       url.searchParams.set("conferenceDataVersion", "1");
+    }
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
     }
 
     const response = await fetch(url.toString(), {
@@ -347,10 +367,17 @@ export class GoogleCalendarService {
   /**
    * Delete an event from a Google Calendar
    */
-  async deleteEvent(calendarId: string, eventId: string): Promise<void> {
-    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+  async deleteEvent(
+    calendarId: string,
+    eventId: string,
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
+  ): Promise<void> {
+    const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
+    }
 
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -470,6 +497,17 @@ export class GoogleCalendarService {
       ? { uri: videoEntryPoint.uri, label: event.conferenceData?.conferenceSolution?.name }
       : undefined;
 
+    // Map attendees, filtering out room resources
+    const attendees: Attendee[] | undefined = event.attendees
+      ?.filter(a => !a.resource)
+      .map(a => ({
+        email: a.email,
+        name: a.displayName || undefined,
+        responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+        isOrganizer: a.organizer || undefined,
+        isSelf: a.self || undefined,
+      }));
+
     return {
       id: event.id,
       calendarId,
@@ -489,6 +527,7 @@ export class GoogleCalendarService {
       colorId: event.colorId || undefined,
       conferencing,
       timeZone: timeZone || undefined,
+      attendees: attendees && attendees.length > 0 ? attendees : undefined,
     };
   }
 

@@ -11,6 +11,7 @@ import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
+import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
 import { initAuth } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
 import {
@@ -162,6 +163,7 @@ function App() {
   return (
     <>
       <UndoToastProvider />
+      <DeleteConfirmDialog />
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}

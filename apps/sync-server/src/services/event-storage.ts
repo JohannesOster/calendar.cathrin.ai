@@ -30,6 +30,7 @@ function buildEventValues(
     colorId: event.colorId ?? null,
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
+    attendees: event.attendees ?? null,
     status: "confirmed" as const,
     isReadOnly: event.isReadOnly,
     readOnlyReason: event.readOnlyReason ?? null,
@@ -56,6 +57,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     colorId: event.colorId ?? null,
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
+    attendees: event.attendees ?? null,
     updatedAt: new Date(),
   };
 }
@@ -112,6 +114,7 @@ export async function upsertServerEvents(
         colorId: sql`excluded.color_id`,
         conferencing: sql`excluded.conferencing`,
         timeZone: sql`excluded.time_zone`,
+        attendees: sql`excluded.attendees`,
         updatedAt: new Date(),
       },
     });

@@ -1,4 +1,5 @@
-import { Show, onMount, onCleanup } from "solid-js";
+import { Show, onMount, onCleanup, createMemo } from "solid-js";
+import { Users } from "lucide-solid";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
@@ -36,6 +37,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   const isSelected = () => selectedEventId() === props.event.id;
   const isDragging = () => dragActiveEventId() === props.event.id;
+  const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
 
   const hasTimes = () => !props.event.isAllDay;
 
@@ -174,6 +176,8 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       class={`all-day-chip absolute flex items-center px-1.5 text-xs truncate transition-[background-color] ${props.event.isReadOnly ? "cursor-default" : "cursor-pointer"}`}
       classList={{
         "all-day-chip--selected": isSelected() || isDragging(),
+        "all-day-chip--needs-action": selfResponse() === "needsAction",
+        "all-day-chip--tentative": selfResponse() === "tentative",
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
       onPointerDown={handlePointerDown}
@@ -206,6 +210,15 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       <Show when={hasTimes()}>
         <span class="shrink-0 text-2xs opacity-50 ml-1">
           {formatChipTimeRange(props.event.start, props.event.end)}
+        </span>
+      </Show>
+      <Show when={props.event.attendees && props.event.attendees.length > 1}>
+        <span
+          class="shrink-0 inline-flex items-center gap-0.5 text-2xs opacity-50 ml-1"
+          aria-label={`${props.event.attendees!.length} participants`}
+        >
+          <Users size={10} aria-hidden="true" />
+          {props.event.attendees!.length}
         </span>
       </Show>
     </div>

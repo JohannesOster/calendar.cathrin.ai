@@ -14,6 +14,17 @@
  */
 export type Provider = "google" | "outlook" | "caldav";
 
+/**
+ * A participant in a calendar event
+ */
+export type Attendee = {
+  email: string;
+  name?: string;
+  responseStatus: "needsAction" | "declined" | "tentative" | "accepted";
+  isOrganizer?: boolean;
+  isSelf?: boolean;
+};
+
 // =============================================================================
 // API Contract Types (for sync server communication)
 // =============================================================================
@@ -44,6 +55,7 @@ export interface ApiCalendarEvent {
   conferencing?: { uri: string; label?: string } | null;
   /** IANA timezone identifier, e.g. "America/New_York" */
   timeZone?: string;
+  attendees?: Attendee[];
 }
 
 /**

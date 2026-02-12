@@ -91,8 +91,17 @@ export async function startServerOAuth(): Promise<void> {
 
   try {
     // Step 1: Create a pending state on the server
+    // If already authenticated, pass the token so the server links the new
+    // account to the existing user instead of creating a new one
+    const headers: Record<string, string> = {};
+    const currentToken = sessionToken();
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
     const stateResponse = await fetch(`${SYNC_SERVER_URL}/auth/state`, {
       method: "POST",
+      headers,
     });
 
     if (!stateResponse.ok) {

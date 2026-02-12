@@ -100,6 +100,7 @@ export const serverEvents = pgTable(
     colorId: text("color_id"), // Google colorId "1"-"11" for per-event color override
     conferencing: jsonb("conferencing"), // { uri, label } or null
     timeZone: text("time_zone"), // IANA timezone identifier, e.g. "America/New_York"
+    attendees: jsonb("attendees"), // Array of { email, name?, responseStatus, isOrganizer?, isSelf? }
     status: text("status"), // confirmed, tentative, cancelled
     isReadOnly: boolean("is_read_only").default(false),
     readOnlyReason: text("read_only_reason"),
@@ -151,6 +152,7 @@ export const oauthPendingTokens = pgTable(
   "oauth_pending_tokens",
   {
     state: text("state").primaryKey(),
+    userId: text("user_id"), // Existing user ID for "add account" flow
     token: text("token"),
     error: text("error"),
     expiresAt: timestamp("expires_at").notNull(),

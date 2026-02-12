@@ -57,15 +57,24 @@ export async function resolveCalendarOwner(
 
 /**
  * Find an event by googleEventId owned by one of the given accounts.
+ * When calendarId is provided, narrows to the specific calendar copy
+ * (critical for cross-account events where the same googleEventId exists
+ * on multiple accounts with different permissions).
  * Returns the full event row or null.
  */
-export async function findUserEvent(accountIds: string[], googleEventId: string) {
+export async function findUserEvent(accountIds: string[], googleEventId: string, calendarId?: string) {
   if (!db || accountIds.length === 0) return null;
 
+  const conditions = [
+    inArray(serverEvents.accountId, accountIds),
+    eq(serverEvents.googleEventId, googleEventId),
+  ];
+
+  if (calendarId) {
+    conditions.push(eq(serverEvents.calendarId, calendarId));
+  }
+
   return db.query.serverEvents.findFirst({
-    where: and(
-      inArray(serverEvents.accountId, accountIds),
-      eq(serverEvents.googleEventId, googleEventId)
-    ),
+    where: and(...conditions),
   });
 }
