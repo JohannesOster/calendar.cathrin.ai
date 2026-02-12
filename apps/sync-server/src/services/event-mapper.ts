@@ -26,5 +26,6 @@ export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
     reminders: (event.reminders as { method: string; minutes: number }[]) || undefined,
     colorId: event.colorId || undefined,
     conferencing: (event.conferencing as { uri: string; label?: string }) || undefined,
+    timeZone: event.timeZone || undefined,
   };
 }

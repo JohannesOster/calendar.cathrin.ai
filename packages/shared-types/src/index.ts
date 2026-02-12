@@ -42,6 +42,8 @@ export interface ApiCalendarEvent {
   reminders?: { method: string; minutes: number }[];
   colorId?: string;
   conferencing?: { uri: string; label?: string } | null;
+  /** IANA timezone identifier, e.g. "America/New_York" */
+  timeZone?: string;
 }
 
 /**

@@ -7,7 +7,7 @@ import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
-import { formatCompactTime, formatTimeRange } from "../../lib/format-utils";
+import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
 // Shared signal: all segments of the focused event highlight together
 export const [focusedEventId, setFocusedEventId] = createSignal<string | null>(null);
@@ -25,6 +25,7 @@ import {
   FOCUSED_Z_INDEX,
   MS_PER_HOUR,
   TOTAL_GRID_HEIGHT_PX,
+  SYSTEM_TIMEZONE,
 } from "../../constants/calendar";
 
 interface CalendarEventProps {
@@ -205,6 +206,13 @@ export function CalendarEvent(props: CalendarEventProps) {
   const getZIndex = () => (isFocused() || isSelected() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
   const hasOverlap = () => props.layout?.overlaps ?? false;
 
+  const showTzIndicator = () =>
+    !props.event.isAllDay && !!props.event.timeZone && props.event.timeZone !== SYSTEM_TIMEZONE;
+
+  const tzAbbr = createMemo(() =>
+    showTzIndicator() ? getTimezoneAbbr(props.event.start, props.event.timeZone!) : ""
+  );
+
   return (
     // Outer wrapper - positioned, not clipped
     <div
@@ -228,7 +236,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         }}
         tabIndex={0}
         role="button"
-        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${props.event.isReadOnly ? ", view only" : ""}`}
+        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${showTzIndicator() ? ` ${tzAbbr()}` : ""}${props.event.isReadOnly ? ", view only" : ""}`}
         aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
@@ -265,8 +273,15 @@ export function CalendarEvent(props: CalendarEventProps) {
                 {props.event.title}
               </div>
               <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
-                {getHeight() < SHORT_TIME_THRESHOLD_PX ? formatCompactTime(props.event.start) : formatTimeRange(props.event.start, props.event.end)}
+                {getHeight() < SHORT_TIME_THRESHOLD_PX
+                  ? formatCompactTime(props.event.start, props.event.timeZone)
+                  : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
               </div>
+              <Show when={showTzIndicator()}>
+                <div class="text-2xs font-light opacity-60">
+                  {tzAbbr()}
+                </div>
+              </Show>
             </Show>
           </div>
         </div>

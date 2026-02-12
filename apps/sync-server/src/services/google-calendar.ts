@@ -112,8 +112,8 @@ export interface GoogleEventPatch {
   summary?: string;
   description?: string;
   location?: string;
-  start?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
-  end?: { dateTime: string; date?: null } | { date: string; dateTime?: null };
+  start?: { dateTime: string; date?: null; timeZone?: string } | { date: string; dateTime?: null };
+  end?: { dateTime: string; date?: null; timeZone?: string } | { date: string; dateTime?: null };
   transparency?: string;
   visibility?: string;
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
@@ -283,8 +283,8 @@ export class GoogleCalendarService {
     calendarId: string,
     event: {
       summary: string;
-      start: { dateTime?: string; date?: string };
-      end: { dateTime?: string; date?: string };
+      start: { dateTime?: string; date?: string; timeZone?: string };
+      end: { dateTime?: string; date?: string; timeZone?: string };
       location?: string;
       description?: string;
       transparency?: string;
@@ -449,6 +449,7 @@ export class GoogleCalendarService {
   ): ApiCalendarEvent | null {
     const start = event.start.dateTime || event.start.date;
     const end = event.end.dateTime || event.end.date;
+    const timeZone = event.start.timeZone;
 
     if (!start || !end) {
       console.warn(
@@ -487,6 +488,7 @@ export class GoogleCalendarService {
       reminders: event.reminders?.overrides || undefined,
       colorId: event.colorId || undefined,
       conferencing,
+      timeZone: timeZone || undefined,
     };
   }
 

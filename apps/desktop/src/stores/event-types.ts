@@ -23,6 +23,7 @@ export interface CalendarEvent {
   reminders?: { method: "popup"; minutes: number }[];
   colorId?: CathrinColorKey;
   conferencing?: { uri: string; label?: string } | null;
+  timeZone?: string;
 }
 
 export type EventPatch = {
@@ -37,6 +38,7 @@ export type EventPatch = {
   reminders?: { method: "popup"; minutes: number }[] | null;
   colorId?: CathrinColorKey | null;
   conferencing?: { uri: string; label?: string } | null;
+  timeZone?: string;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
@@ -58,5 +60,6 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     reminders: event.reminders as CalendarEvent["reminders"],
     colorId: cathrinKey,
     conferencing: event.conferencing ?? undefined,
+    timeZone: event.timeZone,
   };
 }
