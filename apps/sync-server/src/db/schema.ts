@@ -99,6 +99,7 @@ export const serverEvents = pgTable(
     reminders: jsonb("reminders"), // Array of { method, minutes }
     colorId: text("color_id"), // Google colorId "1"-"11" for per-event color override
     conferencing: jsonb("conferencing"), // { uri, label } or null
+    timeZone: text("time_zone"), // IANA timezone identifier, e.g. "America/New_York"
     status: text("status"), // confirmed, tentative, cancelled
     isReadOnly: boolean("is_read_only").default(false),
     readOnlyReason: text("read_only_reason"),

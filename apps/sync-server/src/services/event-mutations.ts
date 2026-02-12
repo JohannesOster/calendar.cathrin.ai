@@ -31,15 +31,16 @@ export async function createEventViaGoogle(
   visibility?: string,
   reminders?: { method: string; minutes: number }[],
   colorId?: string,
-  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null
+  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null,
+  timeZone?: string
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
 
   const googleEvent = await service.insertEvent(calendarId, {
     summary: title,
-    start: isAllDay ? { date: start.slice(0, 10) } : { dateTime: start },
-    end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end },
+    start: isAllDay ? { date: start.slice(0, 10) } : { dateTime: start, ...(timeZone && { timeZone }) },
+    end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end, ...(timeZone && { timeZone }) },
     location,
     description,
     transparency,
@@ -92,6 +93,7 @@ export async function createEventViaGoogle(
     reminders: googleEvent.reminders?.overrides || reminders || undefined,
     colorId: googleEvent.colorId || colorId || undefined,
     conferencing: conferencingResult,
+    timeZone: timeZone || undefined,
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -119,6 +121,7 @@ export async function updateEventViaGoogle(
     reminders?: { method: string; minutes: number }[] | null;
     colorId?: string | null;
     conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
+    timeZone?: string;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -151,15 +154,20 @@ export async function updateEventViaGoogle(
   }
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
+  const patchTimeZone = !useDate ? patch.timeZone : undefined;
   if (patch.start !== undefined) {
     googlePatch.start = useDate
       ? { date: patch.start.slice(0, 10), dateTime: null }
-      : { dateTime: patch.start, date: null };
+      : { dateTime: patch.start, date: null, ...(patchTimeZone && { timeZone: patchTimeZone }) };
+  } else if (patchTimeZone) {
+    googlePatch.start = { dateTime: existingEvent.start.toISOString(), date: null, timeZone: patchTimeZone };
   }
   if (patch.end !== undefined) {
     googlePatch.end = useDate
       ? { date: patch.end.slice(0, 10), dateTime: null }
-      : { dateTime: patch.end, date: null };
+      : { dateTime: patch.end, date: null, ...(patchTimeZone && { timeZone: patchTimeZone }) };
+  } else if (patchTimeZone) {
+    googlePatch.end = { dateTime: existingEvent.end.toISOString(), date: null, timeZone: patchTimeZone };
   }
 
   console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
@@ -204,6 +212,9 @@ export async function updateEventViaGoogle(
           return existingEvent.conferencing;
         })(),
       }),
+      ...(patch.timeZone !== undefined && {
+        timeZone: patch.timeZone || null,
+      }),
       updatedAt: new Date(),
     })
     .where(eq(serverEvents.id, existingEvent.id));
@@ -244,6 +255,9 @@ export async function updateEventViaGoogle(
       : ((updated.reminders?.overrides || existingEvent.reminders) as { method: string; minutes: number }[] | undefined),
     colorId: updated.colorId || undefined,
     conferencing: conferencingResult,
+    timeZone: patch.timeZone !== undefined
+      ? (patch.timeZone || undefined)
+      : (existingEvent.timeZone || undefined),
   };
 }
 
