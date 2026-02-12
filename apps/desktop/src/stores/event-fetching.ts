@@ -46,7 +46,6 @@ const DAYS_AFTER = 30;
 // =============================================================================
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
 const inflightWeeks = new Set<string>(); // Synchronous dedup (signals batch updates)
-let currentRequestId = 0;
 
 // =============================================================================
 // Helpers
@@ -251,31 +250,7 @@ export function getStaleWeeks(weekIds: string[]): string[] {
 }
 
 export function updateVisibleWeeks(weeks: string[]): void {
-  const newVisible = new Set(weeks);
-  const fetching = fetchingWeeks();
-  const staleFetches: string[] = [];
-
-  for (const week of fetching) {
-    if (!newVisible.has(week)) {
-      staleFetches.push(week);
-    }
-  }
-
-  if (staleFetches.length > 0) {
-    console.log(`[events] Cancelling stale fetches:`, staleFetches);
-    currentRequestId++;
-    setFetchingWeeks((prev) => {
-      const next = new Set<string>();
-      for (const week of prev) {
-        if (newVisible.has(week)) {
-          next.add(week);
-        }
-      }
-      return next;
-    });
-  }
-
-  getSetVisibleWeeksForPolling()?.(newVisible);
+  getSetVisibleWeeksForPolling()?.(new Set(weeks));
 }
 
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
@@ -294,11 +269,11 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
   }
 
   if (isFetched && stale) {
-    getRevalidateWeeksForDates()?.(new Date());
+    const { start } = getWeekBounds(weekId);
+    getRevalidateWeeksForDates()?.(start);
     return;
   }
 
-  const requestId = currentRequestId;
   inflightWeeks.add(weekId);
   setFetchingWeeks((prev) => new Set([...prev, weekId]));
   console.log(`[events] Fetching ${weekId}...`);
@@ -308,11 +283,6 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const apiEvents = await apiFetch<ApiCalendarEvent[]>(
       `/api/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`
     );
-
-    if (requestId !== currentRequestId) {
-      console.log(`[events] Discarding stale fetch for ${weekId}`);
-      return;
-    }
 
     const newEvents = apiEvents.map(convertApiEvent);
     recordWeekAccess(weekId);

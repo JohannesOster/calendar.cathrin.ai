@@ -59,6 +59,12 @@ export const eventsRoute = new Hono()
 
     const calendarsToCheck = await getCalendarsToCheck(accountIds, calendarIds);
 
+    if (calendarsToCheck.length === 0) {
+      console.log(
+        `[events] No calendars found for on-demand sync (accounts: ${accountIds.length}, weeks: ${weeksNeeded.join(", ")})`
+      );
+    }
+
     await Promise.all(
       calendarsToCheck.map((cal) =>
         ensureWeeksFetched(cal.accountId, cal.calendarId, cal.color, weeksNeeded, cal.accessRole)
