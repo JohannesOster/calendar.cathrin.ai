@@ -63,7 +63,7 @@ export async function createEventViaGoogle(
     ...(attendees && attendees.length > 0 && {
       attendees: attendees.map(a => ({ email: a.email, displayName: a.name })),
     }),
-  });
+  }, attendees && attendees.length > 0 ? { sendUpdates: "all" } : undefined);
 
   // Extract conferencing from Google response
   const videoEntryPoint = googleEvent.conferenceData?.entryPoints
@@ -192,7 +192,10 @@ export async function updateEventViaGoogle(
   console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  const updated = await service.patchEvent(calendarId, googleEventId, googlePatch);
+  const updated = await service.patchEvent(
+    calendarId, googleEventId, googlePatch,
+    patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
+  );
 
   const updatedStart = updated.start.dateTime
     ? new Date(updated.start.dateTime)
@@ -309,11 +312,12 @@ export async function deleteEventViaGoogle(
   accountId: string,
   calendarId: string,
   googleEventId: string,
-  eventDbId: string
+  eventDbId: string,
+  sendUpdates?: "all" | "none"
 ): Promise<void> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  await service.deleteEvent(calendarId, googleEventId);
+  await service.deleteEvent(calendarId, googleEventId, sendUpdates ? { sendUpdates } : undefined);
 
   await db!
     .delete(serverEvents)

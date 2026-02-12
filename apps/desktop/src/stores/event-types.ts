@@ -8,6 +8,7 @@ import type { CathrinColorKey } from "../lib/color-mapping";
  */
 export interface CalendarEvent {
   id: string;
+  googleEventId: string;
   calendarId: string;
   title: string;
   start: Date;
@@ -46,7 +47,8 @@ export type EventPatch = {
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
   const cathrinKey = event.colorId ? googleColorIdToCathrinKey(event.colorId) : undefined;
   return {
-    id: event.id,
+    id: `${event.calendarId}/${event.id}`,
+    googleEventId: event.id,
     calendarId: event.calendarId,
     title: event.title,
     start: new Date(event.start),

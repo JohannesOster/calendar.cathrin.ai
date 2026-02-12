@@ -304,11 +304,15 @@ export class GoogleCalendarService {
       colorId?: string;
       conferenceData?: GoogleConferenceData;
       attendees?: { email: string; displayName?: string }[];
-    }
+    },
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
   ): Promise<GoogleEvent> {
     const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`);
     if (event.conferenceData) {
       url.searchParams.set("conferenceDataVersion", "1");
+    }
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
     }
 
     const response = await fetch(url.toString(), {
@@ -363,10 +367,17 @@ export class GoogleCalendarService {
   /**
    * Delete an event from a Google Calendar
    */
-  async deleteEvent(calendarId: string, eventId: string): Promise<void> {
-    const url = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+  async deleteEvent(
+    calendarId: string,
+    eventId: string,
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
+  ): Promise<void> {
+    const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
+    }
 
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${this.accessToken}`,

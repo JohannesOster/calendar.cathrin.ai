@@ -197,7 +197,7 @@ export async function updateEvent(
   }
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(eventId)}`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}`, {
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
@@ -241,7 +241,7 @@ export async function moveEvent(
   );
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(eventId)}/move`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/move`, {
       method: "POST",
       body: JSON.stringify({ targetCalendarId }),
     });
@@ -287,7 +287,7 @@ export async function rsvpEvent(
   );
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(eventId)}/rsvp`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/rsvp`, {
       method: "PATCH",
       body: JSON.stringify({ responseStatus }),
     });

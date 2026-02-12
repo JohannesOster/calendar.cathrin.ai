@@ -396,9 +396,11 @@ export function useEventFormState() {
     } else {
       const eventId = selectedEventId();
       if (!eventId) return;
+      const event = events().find(e => e.id === eventId);
+      if (!event) return;
       setConferencingLoading(true);
       // PATCH the event with a Meet request
-      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(eventId)}`, {
+      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.googleEventId)}`, {
         method: "PATCH",
         body: JSON.stringify({ conferencing: { type: "meet" } }),
       })

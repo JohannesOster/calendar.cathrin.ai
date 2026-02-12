@@ -199,6 +199,7 @@ export const eventsRoute = new Hono()
 
     const userId = c.get("userId");
     const googleEventId = c.req.param("eventId");
+    const sendUpdates = c.req.query("sendUpdates") as "all" | "none" | undefined;
 
     const accountIds = await getUserAccountIds(userId);
     if (accountIds.length === 0) {
@@ -211,7 +212,7 @@ export const eventsRoute = new Hono()
     }
 
     try {
-      await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id);
+      await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id, sendUpdates);
       return c.json({ success: true });
     } catch (error) {
       const errorResponse = handleGoogleApiError(error, c);

@@ -239,6 +239,7 @@ export function commitCreation(): boolean {
   // Optimistic insert
   addLocalEvent({
     id: tempId,
+    googleEventId: "",
     calendarId: calId,
     title,
     start: eventStart,
@@ -291,7 +292,8 @@ export function commitCreation(): boolean {
           e.id === tempId
             ? {
                 ...e,
-                id: serverEvent.id,
+                id: `${calId}/${serverEvent.id}`,
+                googleEventId: serverEvent.id,
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
                 end: new Date(serverEvent.end),
