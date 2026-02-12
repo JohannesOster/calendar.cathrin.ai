@@ -141,9 +141,9 @@ export function handleOnline(): void {
 export function revalidateWeeksForDates(...dates: Date[]): void {
   const weekIds = new Set(dates.map((d) => getWeekId(d)));
   for (const weekId of weekIds) {
-    if (fetchedWeeks().has(weekId)) {
-      revalidateWeekBackground(weekId);
-    }
+    // Revalidate regardless of whether the week is in fetchedWeeks —
+    // a cross-week move might target an unfetched week that needs fetching.
+    revalidateWeekBackground(weekId);
   }
 }
 

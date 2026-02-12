@@ -9,11 +9,40 @@ import { upsertServerEvents } from "./event-storage.js";
 // Weeks fetched more than this ago are re-fetched from Google on client request
 const SERVER_STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
 
+// In-memory lock per (accountId, calendarId) to prevent duplicate Google API calls
+// when two concurrent client requests need the same stale week.
+const syncLocks = new Map<string, Promise<void>>();
+
 /**
  * Ensure all weeks in the given range are fetched for a specific calendar.
  * Fetches missing OR stale weeks from Google on-demand.
  */
 export async function ensureWeeksFetched(
+  accountId: string,
+  calendarId: string,
+  calendarColor: string,
+  weeksNeeded: string[],
+  calendarAccessRole?: string
+): Promise<void> {
+  if (!db) return;
+
+  const lockKey = `${accountId}:${calendarId}`;
+
+  // Wait for any in-progress sync for this calendar to finish first
+  while (syncLocks.has(lockKey)) {
+    await syncLocks.get(lockKey);
+  }
+
+  const promise = doEnsureWeeksFetched(accountId, calendarId, calendarColor, weeksNeeded, calendarAccessRole);
+  syncLocks.set(lockKey, promise);
+  try {
+    await promise;
+  } finally {
+    syncLocks.delete(lockKey);
+  }
+}
+
+async function doEnsureWeeksFetched(
   accountId: string,
   calendarId: string,
   calendarColor: string,

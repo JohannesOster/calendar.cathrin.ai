@@ -45,6 +45,7 @@ const DAYS_AFTER = 30;
 // Signals (private to this module)
 // =============================================================================
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
+const inflightWeeks = new Set<string>(); // Synchronous dedup (signals batch updates)
 let currentRequestId = 0;
 
 // =============================================================================
@@ -279,7 +280,7 @@ export function updateVisibleWeeks(weeks: string[]): void {
 
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
   if (!isAuthenticated()) return;
-  if (fetchingWeeks().has(weekId)) {
+  if (inflightWeeks.has(weekId)) {
     console.log(`[events] Skipping ${weekId} - already fetching`);
     return;
   }
@@ -298,6 +299,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
   }
 
   const requestId = currentRequestId;
+  inflightWeeks.add(weekId);
   setFetchingWeeks((prev) => new Set([...prev, weekId]));
   console.log(`[events] Fetching ${weekId}...`);
 
@@ -326,6 +328,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
       console.error(`[events] Failed to fetch week ${weekId}:`, error);
     }
   } finally {
+    inflightWeeks.delete(weekId);
     setFetchingWeeks((prev) => {
       const updated = new Set(prev);
       updated.delete(weekId);
