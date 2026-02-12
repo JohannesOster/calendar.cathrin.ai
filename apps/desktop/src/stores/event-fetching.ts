@@ -33,6 +33,7 @@ import {
   getSetVisibleWeeksForPolling,
 } from "./events";
 import { dragActiveEventId } from "./event-drag";
+import { centerDate } from "./calendar-navigation";
 
 // =============================================================================
 // Configuration
@@ -44,19 +45,20 @@ const DAYS_AFTER = 30;
 // Signals (private to this module)
 // =============================================================================
 const [fetchingWeeks, setFetchingWeeks] = createSignal<Set<string>>(new Set());
-let currentRequestId = 0;
+const inflightWeeks = new Set<string>(); // Synchronous dedup (signals batch updates)
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
 function getTimeWindow(): { timeMin: string; timeMax: string } {
-  const now = new Date();
-  const min = new Date(now);
+  // Use the current center date (restored from last session or today)
+  const center = centerDate();
+  const min = new Date(center);
   min.setDate(min.getDate() - DAYS_BEFORE);
   min.setHours(0, 0, 0, 0);
 
-  const max = new Date(now);
+  const max = new Date(center);
   max.setDate(max.getDate() + DAYS_AFTER);
   max.setHours(23, 59, 59, 999);
 
@@ -138,28 +140,39 @@ function evictStaleWeeks(): void {
 // Public API
 // =============================================================================
 
-export async function refreshEvents(window?: { start: Date; end: Date }): Promise<void> {
+export async function refreshEvents(
+  window?: { start: Date; end: Date },
+  skipDiskLoad?: boolean,
+): Promise<void> {
   if (!isAuthenticated()) {
     setEvents([]);
     return;
   }
 
+  console.log("[events] Refreshing in background...");
+
   const { timeMin, timeMax } = window
     ? { timeMin: window.start.toISOString(), timeMax: window.end.toISOString() }
     : getTimeWindow();
 
-  // Show cached events immediately (stale-while-revalidate)
-  const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
-  if (cachedEvents.length > 0) {
-    setEvents(processEvents(cachedEvents, events()));
-  }
-
-  if (!window && cachedEvents.length === 0) {
-    setIsLoading(true);
-  }
   setEventsError(null);
+  let hasCachedData = events().length > 0;
 
   try {
+    // Show cached events immediately (stale-while-revalidate).
+    // Skip disk load when caller already loaded cache (e.g. initializeEvents).
+    if (!skipDiskLoad) {
+      const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
+      if (cachedEvents.length > 0) {
+        setEvents(processEvents(cachedEvents, events()));
+        hasCachedData = true;
+      }
+    }
+
+    if (!window && !hasCachedData) {
+      setIsLoading(true);
+    }
+
     const apiEvents = await apiFetch<ApiCalendarEvent[]>(
       `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`
     );
@@ -189,7 +202,7 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     setLastRefreshed(now);
     await replaceEventsOnDisk(timeMin, timeMax, apiEvents);
   } catch (error) {
-    if (cachedEvents.length === 0) {
+    if (!hasCachedData) {
       if (error instanceof AuthError) {
         setEventsError("Please reconnect your account");
       } else {
@@ -214,7 +227,9 @@ export async function initializeEvents(): Promise<void> {
       setEvents(processEvents(cached, []));
     }
 
-    refreshEvents();
+    refreshEvents(undefined, true).catch((error) => {
+      console.error("[events] Background refresh failed:", error);
+    });
   }
 }
 
@@ -235,36 +250,12 @@ export function getStaleWeeks(weekIds: string[]): string[] {
 }
 
 export function updateVisibleWeeks(weeks: string[]): void {
-  const newVisible = new Set(weeks);
-  const fetching = fetchingWeeks();
-  const staleFetches: string[] = [];
-
-  for (const week of fetching) {
-    if (!newVisible.has(week)) {
-      staleFetches.push(week);
-    }
-  }
-
-  if (staleFetches.length > 0) {
-    console.log(`[events] Cancelling stale fetches:`, staleFetches);
-    currentRequestId++;
-    setFetchingWeeks((prev) => {
-      const next = new Set<string>();
-      for (const week of prev) {
-        if (newVisible.has(week)) {
-          next.add(week);
-        }
-      }
-      return next;
-    });
-  }
-
-  getSetVisibleWeeksForPolling()?.(newVisible);
+  getSetVisibleWeeksForPolling()?.(new Set(weeks));
 }
 
 export async function fetchEventsForWeek(weekId: string): Promise<void> {
   if (!isAuthenticated()) return;
-  if (fetchingWeeks().has(weekId)) {
+  if (inflightWeeks.has(weekId)) {
     console.log(`[events] Skipping ${weekId} - already fetching`);
     return;
   }
@@ -278,11 +269,12 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
   }
 
   if (isFetched && stale) {
-    getRevalidateWeeksForDates()?.(new Date());
+    const { start } = getWeekBounds(weekId);
+    getRevalidateWeeksForDates()?.(start);
     return;
   }
 
-  const requestId = currentRequestId;
+  inflightWeeks.add(weekId);
   setFetchingWeeks((prev) => new Set([...prev, weekId]));
   console.log(`[events] Fetching ${weekId}...`);
 
@@ -291,11 +283,6 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
     const apiEvents = await apiFetch<ApiCalendarEvent[]>(
       `/api/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`
     );
-
-    if (requestId !== currentRequestId) {
-      console.log(`[events] Discarding stale fetch for ${weekId}`);
-      return;
-    }
 
     const newEvents = apiEvents.map(convertApiEvent);
     recordWeekAccess(weekId);
@@ -311,6 +298,7 @@ export async function fetchEventsForWeek(weekId: string): Promise<void> {
       console.error(`[events] Failed to fetch week ${weekId}:`, error);
     }
   } finally {
+    inflightWeeks.delete(weekId);
     setFetchingWeeks((prev) => {
       const updated = new Set(prev);
       updated.delete(weekId);

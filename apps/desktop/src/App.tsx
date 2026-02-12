@@ -12,7 +12,7 @@ import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
-import { initAuth } from "./stores/auth";
+import { initAuth, isAuthenticated } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
 import {
   initializeEvents,
@@ -28,6 +28,7 @@ import {
   handleVisibilityChange,
   handleOnline,
 } from "./stores/event-polling";
+import { connectWebSocket, disconnectWebSocket } from "./services/websocket";
 import { getNextWeek, getPreviousWeek, getWeekBounds } from "./lib/date-utils";
 
 // Debounce delay for fetch trigger (ms)
@@ -45,13 +46,13 @@ function App() {
   };
 
   onMount(async () => {
-    // Initialize auth first to load session token
+    // Load session token (fast IPC) and set optimistic auth.
+    // Validation runs in background — if invalid, apiFetch handles 401.
     await initAuth();
-    // Then load accounts and events (both check isAuthenticated)
-    await initializeAccounts();
-    await initializeEvents();
+    // Load accounts and events in parallel (both check isAuthenticated)
+    await Promise.all([initializeAccounts(), initializeEvents()]);
 
-    // Start polling for visible week updates
+    // Start polling for visible week updates (fallback for WebSocket)
     startPolling();
 
     // Listen for visibility changes to pause/resume polling
@@ -70,6 +71,7 @@ function App() {
       clearTimeout(debounceTimer);
     }
     stopPolling();
+    disconnectWebSocket();
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     window.removeEventListener("online", handleOnline);
     document.removeEventListener("keydown", handleKeyDown);
@@ -95,7 +97,7 @@ function App() {
     on(activeVisibleWeeks, (weeks) => {
       if (weeks.length === 0) return;
 
-      // Update visible weeks immediately (triggers cancellation of non-visible fetches)
+      // Update visible weeks immediately
       updateVisibleWeeks(weeks);
 
       // Clear any pending debounce
@@ -158,6 +160,17 @@ function App() {
           .catch((error) => console.error("[App] Failed to fetch deferred weeks:", error));
       }
     }, { defer: true })
+  );
+
+  // Manage WebSocket lifecycle based on auth state
+  createEffect(
+    on(isAuthenticated, (authed) => {
+      if (authed) {
+        connectWebSocket();
+      } else {
+        disconnectWebSocket();
+      }
+    })
   );
 
   return (

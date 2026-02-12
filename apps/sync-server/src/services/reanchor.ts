@@ -19,7 +19,7 @@ import { upsertServerEvents } from "./event-storage.js";
 // Reanchoring configuration
 const EDGE_THRESHOLD_WEEKS = 8; // ~2 months - trigger reanchoring when this close to edge
 const EXTENSION_WEEKS = 26; // 6 months - how much to extend when reanchoring
-const REANCHOR_INTERVAL_HOURS = 24; // Only check once per day per account
+const REANCHOR_INTERVAL_HOURS = 4; // Check every 4 hours per account
 
 /**
  * Check if reanchoring should run for an account

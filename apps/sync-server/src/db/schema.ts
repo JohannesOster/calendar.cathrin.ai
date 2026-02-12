@@ -8,6 +8,7 @@ import {
   boolean,
   jsonb,
   serial,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -188,5 +189,28 @@ export const fetchedWeeks = pgTable(
       table.calendarId,
       table.weekId
     ),
+  ]
+);
+
+/**
+ * Tracks Google Calendar push notification watch channels.
+ * One channel per (account, calendar) pair.
+ */
+export const watchChannels = pgTable(
+  "watch_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    calendarId: text("calendar_id").notNull(),
+    channelId: text("channel_id").notNull().unique(), // UUID sent to Google
+    resourceId: text("resource_id").notNull(),         // Returned by Google
+    expiration: timestamp("expiration", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    unique("watch_channels_account_calendar").on(table.accountId, table.calendarId),
+    index("watch_channels_expiration_idx").on(table.expiration),
   ]
 );

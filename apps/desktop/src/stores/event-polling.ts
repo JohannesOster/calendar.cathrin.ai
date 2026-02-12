@@ -13,6 +13,7 @@ import {
 } from "./events";
 import { getStaleWeeks, replaceEventsInRange } from "./event-fetching";
 import { convertApiEvent } from "./event-types";
+import { onWsWeeksChanged } from "../services/websocket";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 
 // =============================================================================
@@ -140,9 +141,9 @@ export function handleOnline(): void {
 export function revalidateWeeksForDates(...dates: Date[]): void {
   const weekIds = new Set(dates.map((d) => getWeekId(d)));
   for (const weekId of weekIds) {
-    if (fetchedWeeks().has(weekId)) {
-      revalidateWeekBackground(weekId);
-    }
+    // Revalidate regardless of whether the week is in fetchedWeeks —
+    // a cross-week move might target an unfetched week that needs fetching.
+    revalidateWeekBackground(weekId);
   }
 }
 
@@ -159,4 +160,13 @@ export function setVisibleWeeksForPolling(weeks: Set<string>): void {
 _registerPollingFns({
   revalidateWeeksForDates,
   setVisibleWeeksForPolling,
+});
+
+// Register WebSocket handler — immediately fetch affected weeks when server pushes changes
+onWsWeeksChanged((weekIds) => {
+  if (!isAuthenticated()) return;
+  console.log(`[events] WebSocket: fetching ${weekIds.length} changed weeks`);
+  for (const weekId of weekIds) {
+    revalidateWeekBackground(weekId);
+  }
 });

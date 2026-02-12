@@ -1,8 +1,12 @@
 import { sessionToken, logout } from "../stores/auth";
 
+// Unique identifier for this client instance — used to skip revalidation
+// of own mutations when the server broadcasts weeks_changed via WebSocket
+export const CLIENT_ID = crypto.randomUUID();
+
 // Server URL from environment — use VITE_SYNC_PORT for dev convenience,
 // VITE_SYNC_SERVER_URL for full override (e.g. production)
-const API_BASE =
+export const API_BASE =
   import.meta.env.VITE_SYNC_SERVER_URL ||
   (import.meta.env.VITE_SYNC_PORT
     ? `http://localhost:${import.meta.env.VITE_SYNC_PORT}`
@@ -55,6 +59,7 @@ export async function apiFetch<T>(
     ...options,
     headers: {
       "Content-Type": "application/json",
+      "X-Client-ID": CLIENT_ID,
       ...options.headers,
       Authorization: `Bearer ${token}`,
     },

@@ -1,28 +1,31 @@
 import { eq, or, and } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { accounts, calendarSyncState } from "../db/schema.js";
+import { accounts, calendarSyncState, watchChannels } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
+import { notifyUser } from "./ws-manager.js";
+import { isWatchEnabled, renewExpiringChannels, createWatchChannelsForAccount } from "./watch-manager.js";
 
 // =============================================================================
 // Sync Timing Configuration
 // =============================================================================
-// Server syncs with Google every 5 minutes using incremental sync (syncTokens).
-// This is slower than client polling (3 minutes) to reduce Google API quota usage.
-//
-// Combined with client-side staleness (3 min) and polling (3 min), changes in
-// Google Calendar propagate to the UI within approximately 3-8 minutes.
+// With watch channels: Google pushes changes → webhook → incremental sync.
+// Background sync acts as safety net only (hourly). Without watch channels
+// (e.g. no WEBHOOK_BASE_URL), poll every 2 minutes as before.
 // =============================================================================
 
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes - sync with Google
+const SYNC_INTERVAL_POLLING_MS = 2 * 60 * 1000;  // 2 min - active polling fallback
+const SYNC_INTERVAL_SAFETY_MS = 60 * 60 * 1000;  // 1 hour - safety net when watch active
+const CHANNEL_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours - check channel renewals
 const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts (rate limiting)
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after startup
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - consider account stuck
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let renewalInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 let recoveryRan = false; // Ensure recovery only runs once per server lifetime
 
@@ -36,8 +39,11 @@ export function startBackgroundSync(): void {
     return;
   }
 
+  const watchActive = isWatchEnabled();
+  const intervalMs = watchActive ? SYNC_INTERVAL_SAFETY_MS : SYNC_INTERVAL_POLLING_MS;
+
   console.log(
-    `[background-sync] Starting (interval: ${SYNC_INTERVAL_MS / 1000}s)`
+    `[background-sync] Starting (interval: ${intervalMs / 1000}s, watch: ${watchActive ? "active" : "polling"})`
   );
 
   // Schedule periodic sync
@@ -45,12 +51,29 @@ export function startBackgroundSync(): void {
     runSyncCycle().catch((err) => {
       console.error("[background-sync] Sync cycle failed:", err);
     });
-  }, SYNC_INTERVAL_MS);
+  }, intervalMs);
+
+  // Schedule watch channel renewal checks (only when watch is active)
+  if (watchActive) {
+    renewalInterval = setInterval(() => {
+      renewExpiringChannels().catch((err) => {
+        console.error("[background-sync] Channel renewal failed:", err);
+      });
+    }, CHANNEL_RENEWAL_INTERVAL_MS);
+  }
 
   // Run recovery and first sync after short delay
   setTimeout(async () => {
     // Recover stuck accounts before first sync cycle
     await recoverStuckAccounts();
+
+    // Bootstrap watch channels for existing accounts that don't have them yet
+    // (e.g. accounts that completed initial sync before watch channels were deployed)
+    if (watchActive) {
+      bootstrapWatchChannels().catch((err) => {
+        console.error("[background-sync] Watch channel bootstrap failed:", err);
+      });
+    }
 
     runSyncCycle().catch((err) => {
       console.error("[background-sync] Initial sync cycle failed:", err);
@@ -65,8 +88,12 @@ export function stopBackgroundSync(): void {
   if (syncInterval) {
     clearInterval(syncInterval);
     syncInterval = null;
-    console.log("[background-sync] Stopped");
   }
+  if (renewalInterval) {
+    clearInterval(renewalInterval);
+    renewalInterval = null;
+  }
+  console.log("[background-sync] Stopped");
 }
 
 /**
@@ -167,6 +194,36 @@ async function recoverStuckAccounts(): Promise<void> {
 }
 
 /**
+ * Create watch channels for accounts that completed initial sync
+ * but don't have watch channels yet (e.g. deployed after initial sync ran).
+ */
+async function bootstrapWatchChannels(): Promise<void> {
+  if (!db) return;
+
+  try {
+    const completeAccounts = await db.query.accounts.findMany({
+      where: eq(accounts.syncStatus, "complete"),
+      columns: { id: true, email: true },
+    });
+
+    for (const account of completeAccounts) {
+      // Check if this account already has any watch channels
+      const existing = await db.query.watchChannels.findFirst({
+        where: eq(watchChannels.accountId, account.id),
+      });
+
+      if (!existing) {
+        console.log(`[watch] Bootstrapping channels for ${account.email}`);
+        await createWatchChannelsForAccount(account.id);
+        await sleep(ACCOUNT_STAGGER_MS);
+      }
+    }
+  } catch (error) {
+    console.error("[watch] Bootstrap failed:", error);
+  }
+}
+
+/**
  * Run a complete sync cycle for all eligible accounts
  */
 async function runSyncCycle(): Promise<void> {
@@ -211,6 +268,15 @@ async function runSyncCycle(): Promise<void> {
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
         accountsSucceeded++;
+
+        // Push changed weeks to connected clients via WebSocket
+        if (result.affectedWeekIds.length > 0) {
+          notifyUser(account.userId, {
+            type: "weeks_changed",
+            weekIds: result.affectedWeekIds,
+            source: "sync",
+          });
+        }
 
         // Check if reanchoring is needed (once per day per account)
         if (shouldCheckReanchor(account.lastReanchorAt)) {
@@ -261,7 +327,7 @@ async function runSyncCycle(): Promise<void> {
 async function syncAccount(
   accountId: string,
   email: string
-): Promise<{ updated: number; deleted: number }> {
+): Promise<{ updated: number; deleted: number; affectedWeekIds: string[] }> {
   if (!db) {
     throw new Error("Database not configured");
   }
@@ -275,11 +341,12 @@ async function syncAccount(
     // No calendars synced yet - fetch calendar list and set up sync state
     console.log(`[background-sync] No calendars for ${email}, fetching list`);
     await initializeCalendarSyncState(accountId);
-    return { updated: 0, deleted: 0 };
+    return { updated: 0, deleted: 0, affectedWeekIds: [] };
   }
 
   let totalUpdated = 0;
   let totalDeleted = 0;
+  const allAffectedWeekIds = new Set<string>();
 
   // Get calendar colors and access roles for events
   const accessToken = await getAccessToken(accountId);
@@ -316,6 +383,9 @@ async function syncAccount(
         );
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
+        for (const weekId of result.affectedWeekIds) {
+          allAffectedWeekIds.add(weekId);
+        }
       } else {
         // No syncToken - need full sync for this calendar
         console.log(
@@ -346,7 +416,7 @@ async function syncAccount(
     }
   }
 
-  return { updated: totalUpdated, deleted: totalDeleted };
+  return { updated: totalUpdated, deleted: totalDeleted, affectedWeekIds: Array.from(allAffectedWeekIds) };
 }
 
 /**

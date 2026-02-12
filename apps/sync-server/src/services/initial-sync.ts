@@ -9,6 +9,7 @@ import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { getWeeksInRange } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
+import { createWatchChannelsForAccount } from "./watch-manager.js";
 
 // Initial sync window: ±6 months
 const INITIAL_SYNC_MONTHS_BEFORE = 6;
@@ -188,6 +189,14 @@ export async function performInitialSync(accountId: string): Promise<void> {
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, accountId));
+
+    // Create watch channels for push notifications (non-blocking)
+    createWatchChannelsForAccount(accountId).catch((error) => {
+      console.error(
+        `[initial-sync] Failed to create watch channels for ${accountId}:`,
+        error
+      );
+    });
 
     console.log(
       `[initial-sync] Completed for account ${accountId}: ${totalEvents} events synced`

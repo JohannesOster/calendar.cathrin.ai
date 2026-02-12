@@ -23,7 +23,7 @@ export async function syncCalendarIncremental(
   calendarId: string,
   calendarColor: string,
   calendarAccessRole?: string
-): Promise<{ updated: number; deleted: number }> {
+): Promise<{ updated: number; deleted: number; affectedWeekIds: string[] }> {
   if (!db) {
     throw new Error("Database not configured");
   }
@@ -105,7 +105,7 @@ export async function syncCalendarIncremental(
       })
       .where(eq(calendarSyncState.id, state.id));
 
-    return { updated, deleted };
+    return { updated, deleted, affectedWeekIds: Array.from(affectedWeekIds) };
   } catch (error) {
     if (error instanceof SyncTokenExpiredError) {
       // Clear syncToken to trigger full resync on next run

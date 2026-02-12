@@ -37,6 +37,8 @@ export const [defaultCalendarId, setDefaultCalendarId] = createSignal<
 let _fetchAccountsFromServer: (() => Promise<CalendarAccount[]>) | null = null;
 let _loadOrderingPreferences: ((accounts: CalendarAccount[]) => void) | null = null;
 let _setCalendarVisibilityLocal: ((calendarId: string, visible: boolean) => void) | null = null;
+let _getCachedAccounts: (() => CalendarAccount[] | null) | null = null;
+let _syncAccountsToCache: (() => void) | null = null;
 
 /** Called by account-sync.ts to share its fetch function. */
 export function _registerAccountSyncFn(fn: () => Promise<CalendarAccount[]>): void {
@@ -50,6 +52,15 @@ export function _registerOrderingFns(fns: {
 }): void {
   _loadOrderingPreferences = fns.loadOrderingPreferences;
   _setCalendarVisibilityLocal = fns.setCalendarVisibilityLocal;
+}
+
+/** Called by account-sync.ts to share cache functions. */
+export function _registerAccountCacheFns(fns: {
+  getCached: () => CalendarAccount[] | null;
+  syncToCache: () => void;
+}): void {
+  _getCachedAccounts = fns.getCached;
+  _syncAccountsToCache = fns.syncToCache;
 }
 
 // Flag to track if accounts have been initialized
@@ -68,14 +79,21 @@ export async function initializeAccounts(): Promise<void> {
     return;
   }
 
-  try {
-    // Load existing accounts from server
-    const accounts = await _fetchAccountsFromServer!();
+  // Load from cache first for instant sidebar render
+  const cached = _getCachedAccounts?.();
+  if (cached && cached.length > 0) {
+    setConnectedAccounts(cached);
+    _loadOrderingPreferences?.(cached);
+  }
+
+  // Fetch fresh data from server in background
+  _fetchAccountsFromServer!().then((accounts) => {
     setConnectedAccounts(accounts);
     _loadOrderingPreferences?.(accounts);
-  } catch (error) {
+  }).catch((error) => {
     console.error("Failed to load accounts:", error);
-  }
+    // Cached data keeps sidebar functional
+  });
 }
 
 /**
@@ -105,6 +123,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
   try {
     await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
     setConnectedAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    _syncAccountsToCache?.();
   } catch (error) {
     console.error("Failed to remove account:", error);
     throw error;

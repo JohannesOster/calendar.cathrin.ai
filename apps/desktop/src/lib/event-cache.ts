@@ -9,7 +9,7 @@ const HOT_ZONE_DAYS = 30; // Days each direction from today - never evicted
 const MAX_LRU_WEEKS = 50; // Maximum weeks to keep in LRU cache (excluding hot zone)
 
 // Staleness: How long before cached data is considered stale
-export const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+export const STALE_THRESHOLD_MS = 1 * 60 * 1000; // 1 minute
 
 // =============================================================================
 // LRU Tracking

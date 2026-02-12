@@ -14,6 +14,8 @@ import {
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
 import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle, rsvpEventViaGoogle } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
+import { notifyUser } from "../services/ws-manager.js";
+import { getWeekId } from "../lib/week-utils.js";
 
 const querySchema = z
   .object({
@@ -56,6 +58,12 @@ export const eventsRoute = new Hono()
     const weeksNeeded = getWeeksInRange(fromDate, toDate);
 
     const calendarsToCheck = await getCalendarsToCheck(accountIds, calendarIds);
+
+    if (calendarsToCheck.length === 0) {
+      console.log(
+        `[events] No calendars found for on-demand sync (accounts: ${accountIds.length}, weeks: ${weeksNeeded.join(", ")})`
+      );
+    }
 
     await Promise.all(
       calendarsToCheck.map((cal) =>
@@ -130,6 +138,16 @@ export const eventsRoute = new Hono()
         const apiEvent = await createEventViaGoogle(
           owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees
         );
+
+        // Notify connected clients — skip the originating client (already has optimistic state)
+        const clientId = c.req.header("X-Client-ID");
+        const weekId = getWeekId(new Date(apiEvent.start));
+        notifyUser(userId, {
+          type: "weeks_changed",
+          weekIds: [weekId],
+          source: "mutation",
+        }, clientId);
+
         return c.json(apiEvent, 201);
       } catch (error) {
         const errorResponse = handleGoogleApiError(error, c);
@@ -185,6 +203,18 @@ export const eventsRoute = new Hono()
         const apiEvent = await updateEventViaGoogle(
           event.accountId, event.calendarId, googleEventId, patch, event
         );
+
+        // Notify connected clients — include both old and new weeks if event moved
+        const clientId = c.req.header("X-Client-ID");
+        const weekIds = new Set<string>();
+        weekIds.add(getWeekId(event.start));
+        weekIds.add(getWeekId(new Date(apiEvent.start)));
+        notifyUser(userId, {
+          type: "weeks_changed",
+          weekIds: Array.from(weekIds),
+          source: "mutation",
+        }, clientId);
+
         return c.json(apiEvent);
       } catch (error) {
         const errorResponse = handleGoogleApiError(error, c);
@@ -215,6 +245,16 @@ export const eventsRoute = new Hono()
 
     try {
       await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id, sendUpdates);
+
+      // Notify connected clients — skip the originating client
+      const clientId = c.req.header("X-Client-ID");
+      const weekId = getWeekId(event.start);
+      notifyUser(userId, {
+        type: "weeks_changed",
+        weekIds: [weekId],
+        source: "mutation",
+      }, clientId);
+
       return c.json({ success: true });
     } catch (error) {
       const errorResponse = handleGoogleApiError(error, c);
@@ -254,6 +294,14 @@ export const eventsRoute = new Hono()
         const apiEvent = await rsvpEventViaGoogle(
           event.accountId, event.calendarId, googleEventId, responseStatus, event
         );
+
+        const clientId = c.req.header("X-Client-ID");
+        notifyUser(userId, {
+          type: "weeks_changed",
+          weekIds: [getWeekId(event.start)],
+          source: "mutation",
+        }, clientId);
+
         return c.json(apiEvent);
       } catch (error) {
         const errorResponse = handleGoogleApiError(error, c);
@@ -304,6 +352,14 @@ export const eventsRoute = new Hono()
           event.accountId, event.calendarId, targetCalendarId,
           googleEventId, event.id, targetOwner.color
         );
+
+        const clientId = c.req.header("X-Client-ID");
+        notifyUser(userId, {
+          type: "weeks_changed",
+          weekIds: [getWeekId(event.start)],
+          source: "mutation",
+        }, clientId);
+
         return c.json(apiEvent);
       } catch (error) {
         const errorResponse = handleGoogleApiError(error, c);
