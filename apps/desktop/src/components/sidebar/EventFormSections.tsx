@@ -233,9 +233,12 @@ export function DetailsSection(props: SectionProps) {
 
   return (
     <div class="px-3 py-3 border-t border-border space-y-2">
-      <Show when={s.attendees()?.length}>
-        <AttendeeList attendees={s.attendees()!} />
-      </Show>
+      <AttendeeList
+        attendees={s.attendees()}
+        isOrganizer={s.isOrganizer()}
+        onAdd={(email, name) => s.addAttendee(email, name)}
+        onRemove={(email) => s.removeAttendee(email)}
+      />
       <ConferencingField state={s} />
       <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <MapPin size={14} class="text-fg-muted shrink-0" />
@@ -631,47 +634,91 @@ const STATUS_LABELS: Record<string, string> = {
   needsAction: "No response",
 };
 
-function AttendeeList(props: { attendees: Attendee[] }) {
-  const sorted = createMemo(() => sortAttendees(props.attendees));
-  const selfAttendee = createMemo(() => props.attendees.find(a => a.isSelf));
+function AttendeeList(props: {
+  attendees: Attendee[] | undefined;
+  isOrganizer: boolean;
+  onAdd: (email: string, name?: string) => void;
+  onRemove: (email: string) => void;
+}) {
+  const [emailInput, setEmailInput] = createSignal("");
+  const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
+  const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
+  const selfAttendee = createMemo(() => props.attendees?.find(a => a.isSelf));
   const canRsvp = createMemo(() => {
     const self = selfAttendee();
     return self && !self.isOrganizer;
   });
+
+  function handleAddEmail(): void {
+    const email = emailInput().trim();
+    if (!email || !email.includes("@")) return;
+    props.onAdd(email);
+    setEmailInput("");
+  }
 
   return (
     <div class="space-y-0.5">
       <div class="flex items-center gap-2 px-2 py-2">
         <Users size={14} class="text-fg-muted shrink-0" />
         <span class="text-sm text-fg-muted">
-          Participants ({props.attendees.length})
+          Participants{hasAttendees() ? ` (${props.attendees!.length})` : ""}
         </span>
       </div>
-      <div class="max-h-52 overflow-y-auto">
-        <For each={sorted()}>
-          {(attendee) => (
-            <div
-              class="flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded"
-              role="listitem"
-              aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
-            >
-              <ResponseStatusIcon status={attendee.responseStatus} />
-              <span
-                class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium text-fg" : "text-fg"}`}
+      <Show when={hasAttendees()}>
+        <div class="max-h-52 overflow-y-auto">
+          <For each={sorted()}>
+            {(attendee) => (
+              <div
+                class="group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded hover:bg-surface-hover transition-colors"
+                role="listitem"
+                aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
               >
-                {attendee.isSelf
-                  ? (attendee.name ? `${attendee.name} (You)` : "You")
-                  : (attendee.name || attendee.email)}
-              </span>
-              <Show when={attendee.isOrganizer}>
-                <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
-              </Show>
-            </div>
-          )}
-        </For>
-      </div>
-      <Show when={canRsvp()}>
-        <RsvpButtons currentStatus={selfAttendee()!.responseStatus} />
+                <ResponseStatusIcon status={attendee.responseStatus} />
+                <span
+                  class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium text-fg" : "text-fg"}`}
+                >
+                  {attendee.isSelf
+                    ? (attendee.name ? `${attendee.name} (You)` : "You")
+                    : (attendee.name || attendee.email)}
+                </span>
+                <Show when={attendee.isOrganizer}>
+                  <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
+                </Show>
+                <Show when={props.isOrganizer && !attendee.isSelf}>
+                  <button
+                    class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
+                    onClick={() => props.onRemove(attendee.email)}
+                    aria-label={`Remove ${attendee.name || attendee.email}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+        <Show when={canRsvp()}>
+          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} />
+        </Show>
+      </Show>
+      <Show when={props.isOrganizer}>
+        <div class="flex items-center gap-2 pl-[30px] pr-2">
+          <input
+            type="email"
+            placeholder="Add participant email"
+            aria-label="Add participant email"
+            value={emailInput()}
+            onInput={(e) => setEmailInput(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAddEmail();
+              }
+            }}
+            onBlur={() => handleAddEmail()}
+            class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
+          />
+        </div>
       </Show>
     </div>
   );

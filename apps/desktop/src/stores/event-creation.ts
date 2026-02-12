@@ -7,7 +7,7 @@ import { apiFetch } from "../lib/api";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
 // =============================================================================
 // Signals
@@ -27,6 +27,7 @@ export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup
 export const [draftColorId, setDraftColorId] = createSignal<string | null>(null);
 export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
 export const [draftTimeZone, setDraftTimeZone] = createSignal<string | undefined>(undefined);
+export const [draftAttendees, setDraftAttendees] = createSignal<Attendee[]>([]);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -171,6 +172,7 @@ export function cancelCreation(): void {
   setDraftColorId(null);
   setDraftConferencing(null);
   setDraftTimeZone(undefined);
+  setDraftAttendees([]);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -202,6 +204,7 @@ export function commitCreation(): boolean {
   const reminders = draftReminders();
   const conferencing = draftConferencing();
   const timeZone = draftTimeZone() || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const attendees = draftAttendees();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -251,6 +254,7 @@ export function commitCreation(): boolean {
     colorId: colorKey ?? undefined,
     conferencing,
     timeZone,
+    attendees: attendees.length > 0 ? attendees : undefined,
   });
 
   // Reset creation state
@@ -277,6 +281,7 @@ export function commitCreation(): boolean {
           : { type: "meet" as const },
       }),
       timeZone,
+      ...(attendees.length > 0 && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
     }),
   })
     .then((serverEvent) => {

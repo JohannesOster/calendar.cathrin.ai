@@ -132,6 +132,7 @@ export async function updateEvent(
     ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
     ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
     ...(rollback?.timeZone !== undefined && { timeZone: rollback.timeZone }),
+    ...(rollback?.attendees !== undefined && { attendees: rollback.attendees ?? undefined }),
   };
 
   // Apply optimistic update
@@ -152,6 +153,7 @@ export async function updateEvent(
             ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
             ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
             ...(patch.timeZone !== undefined && { timeZone: patch.timeZone }),
+            ...(patch.attendees !== undefined && { attendees: patch.attendees ?? undefined }),
           }
         : e
     )
@@ -177,6 +179,11 @@ export async function updateEvent(
     }
   }
   if (patch.timeZone !== undefined) (apiPatch as Record<string, unknown>).timeZone = patch.timeZone;
+  if (patch.attendees !== undefined) {
+    (apiPatch as Record<string, unknown>).attendees = patch.attendees
+      ? patch.attendees.map(a => ({ email: a.email, name: a.name }))
+      : null;
+  }
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {
     apiPatch.start = isAllDay

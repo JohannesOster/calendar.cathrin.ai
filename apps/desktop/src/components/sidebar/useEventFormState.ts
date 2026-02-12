@@ -28,6 +28,8 @@ import {
   setDraftConferencing,
   draftTimeZone,
   setDraftTimeZone,
+  draftAttendees,
+  setDraftAttendees,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -41,7 +43,7 @@ import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import { dragActiveEventId } from "../../stores/event-drag";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
@@ -68,6 +70,7 @@ export function useEventFormState() {
   const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
   const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
   const [editTimeZone, setEditTimeZone] = createSignal<string | undefined>(undefined);
+  const [editAttendees, setEditAttendees] = createSignal<Attendee[]>([]);
   const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
@@ -157,6 +160,7 @@ export function useEventFormState() {
     setEditColorId(event.colorId ?? null);
     setEditConferencing(event.conferencing ?? null);
     setEditTimeZone(event.timeZone);
+    setEditAttendees(event.attendees ?? []);
     setConferencingLoading(false);
     savedTimedStart = null;
     savedTimedEnd = null;
@@ -308,12 +312,48 @@ export function useEventFormState() {
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
 
-  // Attendees are read-only — sourced from the selected event in edit mode
-  const attendees = createMemo(() => {
-    if (mode() === "create") return undefined;
+  const attendees = () => mode() === "create" ? (draftAttendees().length > 0 ? draftAttendees() : undefined) : (editAttendees().length > 0 ? editAttendees() : undefined);
+
+  /** Whether the current user is the organizer (can add/remove attendees) */
+  const isOrganizer = createMemo(() => {
+    if (mode() === "create") return true;
     const event = selectedEvent();
-    return event?.attendees;
+    if (!event) return false;
+    if (event.isReadOnly) return false;
+    // If there are attendees, check if self is the organizer
+    const self = event.attendees?.find(a => a.isSelf);
+    if (self) return !!self.isOrganizer;
+    // No attendees yet — user owns this event
+    return true;
   });
+
+  function addAttendee(email: string, name?: string): void {
+    const current = mode() === "create" ? draftAttendees() : editAttendees();
+    if (current.some(a => a.email.toLowerCase() === email.toLowerCase())) return;
+    const newAttendee: Attendee = { email, name, responseStatus: "needsAction" };
+    const updated = [...current, newAttendee];
+    if (mode() === "create") {
+      setDraftAttendees(updated);
+    } else {
+      setEditAttendees(updated);
+      setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated } : e));
+      scheduleSave({ attendees: updated });
+      flushSave();
+    }
+  }
+
+  function removeAttendee(email: string): void {
+    const current = mode() === "create" ? draftAttendees() : editAttendees();
+    const updated = current.filter(a => a.email.toLowerCase() !== email.toLowerCase());
+    if (mode() === "create") {
+      setDraftAttendees(updated);
+    } else {
+      setEditAttendees(updated);
+      setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated.length > 0 ? updated : undefined } : e));
+      scheduleSave({ attendees: updated.length > 0 ? updated : null });
+      flushSave();
+    }
+  }
 
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
   const setTimeZone = (v: string | undefined) => {
@@ -592,6 +632,9 @@ export function useEventFormState() {
     removeReminder,
     conferencing,
     attendees,
+    isOrganizer,
+    addAttendee,
+    removeAttendee,
     timeZone,
     setTimeZone,
     conferencingLoading,

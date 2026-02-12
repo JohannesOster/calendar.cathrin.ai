@@ -40,6 +40,7 @@ export type EventPatch = {
   colorId?: CathrinColorKey | null;
   conferencing?: { uri: string; label?: string } | null;
   timeZone?: string;
+  attendees?: Attendee[] | null;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
