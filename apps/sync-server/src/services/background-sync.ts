@@ -1,13 +1,13 @@
 import { eq, or, and } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { accounts, calendarSyncState } from "../db/schema.js";
+import { accounts, calendarSyncState, watchChannels } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
 import { notifyUser } from "./ws-manager.js";
-import { isWatchEnabled, renewExpiringChannels } from "./watch-manager.js";
+import { isWatchEnabled, renewExpiringChannels, createWatchChannelsForAccount } from "./watch-manager.js";
 
 // =============================================================================
 // Sync Timing Configuration
@@ -66,6 +66,14 @@ export function startBackgroundSync(): void {
   setTimeout(async () => {
     // Recover stuck accounts before first sync cycle
     await recoverStuckAccounts();
+
+    // Bootstrap watch channels for existing accounts that don't have them yet
+    // (e.g. accounts that completed initial sync before watch channels were deployed)
+    if (watchActive) {
+      bootstrapWatchChannels().catch((err) => {
+        console.error("[background-sync] Watch channel bootstrap failed:", err);
+      });
+    }
 
     runSyncCycle().catch((err) => {
       console.error("[background-sync] Initial sync cycle failed:", err);
@@ -182,6 +190,36 @@ async function recoverStuckAccounts(): Promise<void> {
     console.log(`[recovery] Recovery initiated for ${reallyStuck.length} accounts`);
   } catch (error) {
     console.error("[recovery] Recovery check failed:", error);
+  }
+}
+
+/**
+ * Create watch channels for accounts that completed initial sync
+ * but don't have watch channels yet (e.g. deployed after initial sync ran).
+ */
+async function bootstrapWatchChannels(): Promise<void> {
+  if (!db) return;
+
+  try {
+    const completeAccounts = await db.query.accounts.findMany({
+      where: eq(accounts.syncStatus, "complete"),
+      columns: { id: true, email: true },
+    });
+
+    for (const account of completeAccounts) {
+      // Check if this account already has any watch channels
+      const existing = await db.query.watchChannels.findFirst({
+        where: eq(watchChannels.accountId, account.id),
+      });
+
+      if (!existing) {
+        console.log(`[watch] Bootstrapping channels for ${account.email}`);
+        await createWatchChannelsForAccount(account.id);
+        await sleep(ACCOUNT_STAGGER_MS);
+      }
+    }
+  } catch (error) {
+    console.error("[watch] Bootstrap failed:", error);
   }
 }
 
