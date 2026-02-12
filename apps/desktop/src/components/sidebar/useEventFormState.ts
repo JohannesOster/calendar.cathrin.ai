@@ -38,22 +38,22 @@ import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { selectedEvent, selectedEventId } from "../../stores/event-selection";
 import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
+import { dragActiveEventId } from "../../stores/event-drag";
 import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
-import { toTimeText, parseTimeInput } from "../../lib/format-utils";
+import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
 
 export type FormMode = "create" | "edit";
+
+const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 export function useEventFormState() {
   // Remember timed start/end when switching to all-day so we can restore them
   let savedTimedStart: Date | null = null;
   let savedTimedEnd: Date | null = null;
 
-  const [editingTime, setEditingTime] = createSignal<"start" | "end" | null>(null);
-  const [startTimeText, setStartTimeText] = createSignal("");
-  const [endTimeText, setEndTimeText] = createSignal("");
 
   // Edit mode: local signals for editing fields
   const [editTitle, setEditTitle] = createSignal("");
@@ -162,6 +162,19 @@ export function useEventFormState() {
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
+
+  // Sync edit signals from events signal during drag so form times update live
+  createEffect(() => {
+    const activeId = dragActiveEventId();
+    const eventId = selectedEventId();
+    if (activeId && activeId === eventId) {
+      const event = events().find(e => e.id === activeId);
+      if (event) {
+        setEditStart(new Date(event.start));
+        setEditEnd(new Date(event.end));
+      }
+    }
+  });
 
   // Unified accessors — read from the right signal based on mode
   // In edit mode, setters also schedule an autosave
@@ -298,8 +311,35 @@ export function useEventFormState() {
 
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
   const setTimeZone = (v: string | undefined) => {
-    if (mode() === "create") { setDraftTimeZone(v); }
-    else { setEditTimeZone(v); scheduleSave({ timeZone: v }); flushSave(); }
+    const oldTz = timeZone() || SYSTEM_TIMEZONE;
+    const newTz = v || SYSTEM_TIMEZONE;
+
+    if (oldTz === newTz) {
+      if (mode() === "create") { setDraftTimeZone(v); }
+      else { setEditTimeZone(v); scheduleSave({ timeZone: v }); flushSave(); }
+      return;
+    }
+
+    if (mode() === "create") {
+      const s = draftStart();
+      const e = draftEnd();
+      setDraftTimeZone(v);
+      if (s) setDraftStart(reinterpretInTimezone(s, oldTz, newTz));
+      if (e) setDraftEnd(reinterpretInTimezone(e, oldTz, newTz));
+    } else {
+      const s = editStart();
+      const e = editEnd();
+      setEditTimeZone(v);
+      const newStart = s ? reinterpretInTimezone(s, oldTz, newTz) : null;
+      const newEnd = e ? reinterpretInTimezone(e, oldTz, newTz) : null;
+      if (newStart) setEditStart(newStart);
+      if (newEnd) setEditEnd(newEnd);
+      const patch: EventPatch = { timeZone: v };
+      if (newStart) patch.start = newStart;
+      if (newEnd) patch.end = newEnd;
+      scheduleSave(patch);
+      flushSave();
+    }
   };
 
   /** Add a Google Meet link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
@@ -384,36 +424,36 @@ export function useEventFormState() {
       setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
     }
 
-    if (which === "start") {
-      setStartTimeText(toTimeText(start()!));
-    } else {
-      setEndTimeText(toTimeText(end()!));
-    }
-    setEditingTime(which);
+    const tz = timeZone();
   }
 
   /** Apply parsed time to the draft/edit, updating the event chip position live */
-  function applyTimeLive(which: "start" | "end", value: string): void {
-    const parsed = parseTimeInput(value);
+  function applyTimeLive(which: "start" | "end", value: string, referenceHour?: number): void {
+    const parsed = parseTimeInput(value, referenceHour);
     if (!parsed) return;
 
     const baseDate = which === "start" ? start()! : end()!;
-    const newDate = new Date(baseDate);
-    newDate.setHours(parsed.hours, parsed.minutes, 0, 0);
+    const tz = timeZone();
+
+    let newDate: Date;
+    if (tz) {
+      newDate = setTimeInTimezone(baseDate, parsed.hours, parsed.minutes, tz);
+    } else {
+      newDate = new Date(baseDate);
+      newDate.setHours(parsed.hours, parsed.minutes, 0, 0);
+    }
 
     if (which === "start") {
       setStart(newDate);
       // Auto-adjust end if it's now before or equal to start
       if (end()! <= newDate) {
-        const adjusted = new Date(newDate);
-        adjusted.setHours(adjusted.getHours() + 1);
+        const adjusted = new Date(newDate.getTime() + 3600000);
         setEnd(adjusted);
       }
     } else {
       // If end is before start, auto-adjust to start + 1 hour
       if (newDate <= start()!) {
-        const adjusted = new Date(start()!);
-        adjusted.setHours(adjusted.getHours() + 1);
+        const adjusted = new Date(start()!.getTime() + 3600000);
         setEnd(adjusted);
       } else {
         setEnd(newDate);
@@ -421,23 +461,15 @@ export function useEventFormState() {
     }
   }
 
-  function handleTimeInput(which: "start" | "end", value: string): void {
-    if (which === "start") {
-      setStartTimeText(value);
-    } else {
-      setEndTimeText(value);
-    }
-    applyTimeLive(which, value);
+  function handleTimeInput(which: "start" | "end", value: string, referenceHour?: number): void {
+    applyTimeLive(which, value, referenceHour);
   }
 
   function finishTimeEdit(): void {
-    batch(() => {
-      setEditingTime(null);
-      if (mode() === "create") {
-        setShadowStart(null);
-        setShadowEnd(null);
-      }
-    });
+    if (mode() === "create") {
+      setShadowStart(null);
+      setShadowEnd(null);
+    }
     // Flush time changes immediately on blur
     if (mode() === "edit") flushSave();
   }
@@ -450,7 +482,6 @@ export function useEventFormState() {
       batch(() => {
         if (origStart) setDraftStart(origStart);
         if (origEnd) setDraftEnd(origEnd);
-        setEditingTime(null);
         setShadowStart(null);
         setShadowEnd(null);
       });
@@ -461,17 +492,6 @@ export function useEventFormState() {
         setEditStart(new Date(event.start));
         setEditEnd(new Date(event.end));
       }
-      setEditingTime(null);
-    }
-  }
-
-  function handleTimeKeyDown(e: KeyboardEvent): void {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      finishTimeEdit();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      revertTimeEdit();
     }
   }
 
@@ -558,13 +578,9 @@ export function useEventFormState() {
     setCalId,
     calendarColor,
     eventColor,
-    editingTime,
-    startTimeText,
-    endTimeText,
     beginTimeEdit,
     handleTimeInput,
     finishTimeEdit,
-    handleTimeKeyDown,
     transparency,
     setTransparency,
     visibility,
@@ -581,6 +597,7 @@ export function useEventFormState() {
     addMeetConferencing,
     setManualConferencing,
     removeConferencing,
+    revertTimeEdit,
     flushSave,
     allCalendars,
     canMoveCalendar,

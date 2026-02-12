@@ -237,7 +237,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         }}
         tabIndex={0}
         role="button"
-        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}${showTzIndicator() ? ` ${tzAbbr()}` : ""}${props.event.isReadOnly ? ", view only" : ""}`}
+        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${showTzIndicator() ? ` ${tzAbbr()}` : ""}${props.event.isReadOnly ? ", view only" : ""}`}
         aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
@@ -275,12 +275,14 @@ export function CalendarEvent(props: CalendarEventProps) {
               </div>
               <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
                 {getHeight() < SHORT_TIME_THRESHOLD_PX
-                  ? formatCompactTime(props.event.start, props.event.timeZone)
-                  : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
-                <Show when={showTzIndicator()}>
-                  {" "}{tzAbbr()}
-                </Show>
+                  ? formatCompactTime(props.event.start)
+                  : formatTimeRange(props.event.start, props.event.end)}
               </div>
+              <Show when={showTzIndicator()}>
+                <div class="text-2xs font-light opacity-60">
+                  {tzAbbr()}
+                </div>
+              </Show>
             </Show>
           </div>
         </div>

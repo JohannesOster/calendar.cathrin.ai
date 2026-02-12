@@ -1123,11 +1123,21 @@ function getTimezoneItems(): { value: string; label: string }[] {
 
 function TimezoneSelector(props: { state: EventFormState }) {
   const s = props.state;
+  let inputRef: HTMLInputElement | undefined;
+  let contentRef: HTMLElement | undefined;
   const displayTz = () => s.timeZone() || SYSTEM_TIMEZONE;
   const displayLabel = () => formatTimezoneLabel(displayTz());
 
   const [inputValue, setInputValue] = createSignal(displayLabel());
+  const [query, setQuery] = createSignal("");
   const [isEditing, setIsEditing] = createSignal(false);
+  const [highlighted, setHighlighted] = createSignal<string | null>(null);
+  // Only mirror highlighted item into input when user explicitly navigated
+  // (hover or arrow keys), not when autohighlight fires after typing.
+  let userNavigated = false;
+  // Zag's setFinalFocus refocuses the input after commit, which would
+  // re-trigger onFocus and clear the display. This flag skips that refocus.
+  let skipNextFocus = false;
 
   // Sync display when timezone changes externally
   createEffect(() => {
@@ -1139,12 +1149,23 @@ function TimezoneSelector(props: { state: EventFormState }) {
 
   const filtered = createMemo(() => {
     if (!isEditing()) return allTimezones;
-    const query = inputValue().toLowerCase().trim();
-    if (!query) return allTimezones;
-    return allTimezones.filter(tz =>
-      tz.value.toLowerCase().replace(/_/g, " ").includes(query) ||
-      tz.label.toLowerCase().includes(query)
-    );
+    const q = query().toLowerCase().trim();
+    if (!q) return allTimezones;
+    // Rank: city prefix > label prefix > substring match
+    const prefixMatches: typeof allTimezones = [];
+    const substringMatches: typeof allTimezones = [];
+    for (const tz of allTimezones) {
+      const city = tz.value.split("/").pop()!.toLowerCase().replace(/_/g, " ");
+      if (city.startsWith(q) || tz.label.toLowerCase().startsWith(q)) {
+        prefixMatches.push(tz);
+      } else if (
+        tz.value.toLowerCase().replace(/_/g, " ").includes(q) ||
+        tz.label.toLowerCase().includes(q)
+      ) {
+        substringMatches.push(tz);
+      }
+    }
+    return [...prefixMatches, ...substringMatches];
   });
 
   const collection = createMemo(() =>
@@ -1155,25 +1176,62 @@ function TimezoneSelector(props: { state: EventFormState }) {
     })
   );
 
+  function commit(): void {
+    if (!isEditing()) return;
+    setIsEditing(false);
+    setInputValue(displayLabel());
+    setQuery("");
+    // Zag's setFinalFocus will refocus the input on the next frame.
+    // Skip the resulting onFocus so it doesn't clear our display.
+    skipNextFocus = true;
+  }
+
   return (
     <Combobox.Root
       collection={collection()}
+      allowCustomValue
       openOnClick
       closeOnSelect
       selectionBehavior="clear"
       inputBehavior="autohighlight"
+      highlightedValue={highlighted()}
+      onHighlightChange={(d) => {
+        if (d.highlightedValue != null) {
+          setHighlighted(d.highlightedValue);
+          // Mirror highlight into input only on explicit navigation (hover/arrow),
+          // not on autohighlight after typing
+          if (userNavigated) {
+            const item = filtered().find(i => i.value === d.highlightedValue);
+            if (item) setInputValue(item.label);
+          }
+        }
+      }}
       inputValue={inputValue()}
       onInputValueChange={(d) => {
-        if (isEditing()) setInputValue(d.inputValue);
+        if (!isEditing()) return;
+        if (!d.inputValue) return;
+        // User typed — reset navigation flag so autohighlight doesn't mirror
+        userNavigated = false;
+        setInputValue(d.inputValue);
+        setQuery(d.inputValue);
       }}
       onValueChange={(d) => {
         const tz = d.value[0];
-        if (tz) s.setTimeZone(tz);
+        if (tz && allTimezones.some(t => t.value === tz)) {
+          s.setTimeZone(tz);
+        }
+        commit();
+        inputRef?.blur();
       }}
       onOpenChange={(d) => {
-        if (!d.open) {
-          setIsEditing(false);
-          setInputValue(displayLabel());
+        if (d.open) {
+          // Scroll to current timezone once the dropdown renders
+          requestAnimationFrame(() => {
+            const el = contentRef?.querySelector("[data-highlighted]") as HTMLElement | null;
+            el?.scrollIntoView({ block: "start" });
+          });
+        } else {
+          commit();
         }
       }}
       positioning={{ placement: "bottom-start" }}
@@ -1181,12 +1239,26 @@ function TimezoneSelector(props: { state: EventFormState }) {
       <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <Globe size={14} class="text-fg-muted shrink-0" />
         <Combobox.Input
+          ref={(el) => { inputRef = el; }}
           placeholder="Search timezone…"
           aria-label="Timezone"
           onFocus={(e) => {
+            if (skipNextFocus) {
+              skipNextFocus = false;
+              return;
+            }
             setIsEditing(true);
             setInputValue("");
+            setQuery("");
+            // Pre-highlight current timezone so it's scrolled-to when dropdown opens
+            setHighlighted(displayTz());
             requestAnimationFrame(() => e.currentTarget?.select());
+          }}
+          onBlur={() => commit()}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              userNavigated = true;
+            }
           }}
           class={`flex-1 text-sm bg-transparent outline-none border-none cursor-text placeholder-fg-disabled ${
             isEditing() ? "text-fg" : "text-fg-muted"
@@ -1194,12 +1266,16 @@ function TimezoneSelector(props: { state: EventFormState }) {
         />
       </Combobox.Control>
       <Combobox.Positioner>
-        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto min-w-[220px]">
+        <Combobox.Content
+          ref={(el) => { contentRef = el; }}
+          class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto min-w-[220px]"
+          onPointerMove={() => { userNavigated = true; }}
+        >
           <For each={filtered()}>
             {(item) => (
               <Combobox.Item
                 item={item}
-                class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer data-[highlighted]:bg-surface-hover outline-none"
               >
                 <Combobox.ItemText>{item.label}</Combobox.ItemText>
               </Combobox.Item>
