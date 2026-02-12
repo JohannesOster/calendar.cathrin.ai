@@ -12,6 +12,7 @@ export { sessionToken, isAuthenticated, isAuthLoading, authError };
 
 // Callback for when auth completes (used by accounts store to reload)
 let onAuthCompleteCallback: (() => void) | null = null;
+let onLogoutCallback: (() => void) | null = null;
 
 /**
  * Register a callback to be called when auth completes (after OAuth callback)
@@ -19,6 +20,13 @@ let onAuthCompleteCallback: (() => void) | null = null;
  */
 export function onAuthComplete(callback: () => void): void {
   onAuthCompleteCallback = callback;
+}
+
+/**
+ * Register a callback to be called on logout (e.g., clear caches)
+ */
+export function onLogout(callback: () => void): void {
+  onLogoutCallback = callback;
 }
 
 // Server URL from environment — use VITE_SYNC_PORT for dev convenience,
@@ -206,6 +214,7 @@ export async function logout(): Promise<void> {
     // Clear local state first
     setSessionToken(null);
     setIsAuthenticated(false);
+    onLogoutCallback?.();
     await invoke("clear_session_token");
 
     // Try to invalidate session on server (best effort)

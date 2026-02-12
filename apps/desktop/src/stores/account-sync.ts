@@ -1,11 +1,13 @@
 import { apiFetch } from "../lib/api";
 import { mapProviderColor } from "../lib/color-mapping";
 
-import { isAuthenticated, onAuthComplete } from "./auth";
-import { connectedAccounts, setConnectedAccounts, _registerAccountSyncFn, type CalendarAccount } from "./accounts";
+import { isAuthenticated, onAuthComplete, onLogout } from "./auth";
+import { connectedAccounts, setConnectedAccounts, _registerAccountSyncFn, _registerAccountCacheFns, type CalendarAccount } from "./accounts";
 import { getCalendarVisibility, loadOrderingPreferences } from "./account-ordering";
 import { refreshEvents } from "./event-fetching";
 import type { ApiAccount, ApiCalendar } from "@cathrin/shared-types";
+
+const ACCOUNTS_CACHE_KEY = "cached-accounts";
 
 /**
  * Response format from the calendars API
@@ -14,6 +16,37 @@ interface AccountCalendarsResult {
   accountId: string;
   calendars: ApiCalendar[];
   error?: string;
+}
+
+/**
+ * Read cached accounts from localStorage, re-applying current visibility.
+ */
+function getCachedAccounts(): CalendarAccount[] | null {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_CACHE_KEY);
+    if (!raw) return null;
+    const accounts: CalendarAccount[] = JSON.parse(raw);
+    // Re-apply visibility from localStorage (may have changed since cache was written)
+    for (const account of accounts) {
+      for (const cal of account.calendars) {
+        cal.visible = getCalendarVisibility(cal.id);
+      }
+    }
+    return accounts;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write current accounts signal to localStorage cache.
+ */
+function syncAccountsToCache(): void {
+  try {
+    localStorage.setItem(ACCOUNTS_CACHE_KEY, JSON.stringify(connectedAccounts()));
+  } catch {
+    // localStorage full or unavailable — non-critical
+  }
 }
 
 /**
@@ -42,12 +75,21 @@ export async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
   }
 
   // Merge accounts with calendars
-  return accounts.map((account) => ({
+  const result = accounts.map((account) => ({
     id: account.id,
     email: account.email,
     calendars: calendarsByAccount.get(account.id) || [],
     syncStatus: account.syncStatus ?? "pending",
   }));
+
+  // Cache for instant startup next time
+  try {
+    localStorage.setItem(ACCOUNTS_CACHE_KEY, JSON.stringify(result));
+  } catch {
+    // non-critical
+  }
+
+  return result;
 }
 
 /**
@@ -119,9 +161,13 @@ async function pollUntilSyncComplete(): Promise<void> {
   refreshEvents();
 }
 
-// Register with accounts.ts so it can call our function without importing us
+// Register with accounts.ts so it can call our functions without importing us
 // (breaking the circular dependency: account-sync -> accounts -> account-sync).
 _registerAccountSyncFn(fetchAccountsFromServer);
+_registerAccountCacheFns({ getCached: getCachedAccounts, syncToCache: syncAccountsToCache });
+
+// Clear account cache on logout so no stale data persists
+onLogout(() => localStorage.removeItem(ACCOUNTS_CACHE_KEY));
 
 // Register callback to reload accounts when auth completes
 // This handles both initial login and adding additional accounts
