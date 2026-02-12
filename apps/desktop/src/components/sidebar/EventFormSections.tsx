@@ -469,27 +469,67 @@ const REMINDER_PRESETS = [
 
 function formatReminderValue(minutes: number): string {
   if (minutes >= 10080 && minutes % 10080 === 0) return `${minutes / 10080} wk`;
-  if (minutes >= 1440 && minutes % 1440 === 0) return `${minutes / 1440} day`;
-  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}hr`;
+  if (minutes >= 1440) {
+    const d = Math.floor(minutes / 1440);
+    const remainder = minutes % 1440;
+    if (remainder === 0) return `${d} day`;
+    return `${d} day ${formatReminderValue(remainder)}`;
+  }
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (m === 0) return `${h}hr`;
+    return `${h}hr ${m}min`;
+  }
   return `${minutes}min`;
 }
 
-function parseReminderInput(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
-  if (!trimmed) return null;
-  const match = trimmed.match(
-    /^(\d+)\s*(min|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks)?/,
-  );
-  if (!match) return null;
-  const num = parseInt(match[1], 10);
+/** Detect a unit hint from an alpha-only string. */
+function detectUnit(alpha: string): string | null {
+  // Multi-char patterns first (more specific, avoids false positives)
+  if (/we|wk/.test(alpha)) return "w";
+  if (/ho|hr/.test(alpha)) return "h";
+  if (/da/.test(alpha)) return "d";
+  if (/mi/.test(alpha)) return "m";
+  // Single char only when it's the only letter (e.g. "2h", "5d")
+  if (alpha.length === 1 && /[mhdw]/.test(alpha)) return alpha;
+  return null;
+}
+
+const UNIT_TO_MINUTES: Record<string, number> = { m: 1, h: 60, d: 1440, w: 10080 };
+
+/**
+ * Extract a number and optional unit from fuzzy input.
+ * Handles single ("30omin", "2h") and compound ("1h30m", "1h 30") expressions.
+ */
+function extractReminderParts(text: string): { num: number; unit: string | null; compound: boolean } | null {
+  const groups = [...text.matchAll(/(\d+)\s*([a-z]*)/g)];
+  if (groups.length === 0) return null;
+
+  // Compound: "1h30m", "1h 30", "2d 12h" — requires at least one explicit unit
+  if (groups.length >= 2 && groups.some(([, , u]) => detectUnit(u) !== null)) {
+    let total = 0;
+    for (const [, digits, unitText] of groups) {
+      const n = parseInt(digits, 10);
+      if (isNaN(n) || n <= 0) continue;
+      const u = detectUnit(unitText) ?? "m";
+      total += n * (UNIT_TO_MINUTES[u] ?? 1);
+    }
+    return total > 0 ? { num: total, unit: "m", compound: true } : null;
+  }
+
+  // Single expression: first contiguous digit run + fuzzy unit from all alpha chars
+  const num = parseInt(groups[0][1], 10);
   if (num <= 0 || isNaN(num)) return null;
-  const unit = match[2];
-  let minutes: number;
-  if (!unit) minutes = num; // bare number → minutes
-  else if (unit.startsWith("h")) minutes = num * 60;
-  else if (unit.startsWith("d")) minutes = num * 1440;
-  else if (unit.startsWith("w")) minutes = num * 10080;
-  else minutes = num;
+  const alpha = text.replace(/[^a-z]/g, "");
+  return { num, unit: detectUnit(alpha), compound: false };
+}
+
+function parseReminderInput(input: string): number | null {
+  const parts = extractReminderParts(input.trim().toLowerCase());
+  if (!parts) return null;
+  const { num, unit, compound } = parts;
+  const minutes = compound ? num : num * (UNIT_TO_MINUTES[unit ?? "m"] ?? 1);
   return minutes > MAX_REMINDER_MINUTES ? null : minutes;
 }
 
@@ -768,46 +808,66 @@ function ColorSelect(props: { state: EventFormState }) {
 
 function ReminderCombobox(props: { state: EventFormState }) {
   const s = props.state;
+  let inputRef: HTMLInputElement | undefined;
   const [inputValue, setInputValue] = createSignal("");
+  const [query, setQuery] = createSignal("");
+  // Only mirror highlighted item into input on explicit navigation (hover/arrow),
+  // not when autohighlight fires after typing.
+  let userNavigated = false;
 
   const suggestions = createMemo(() => {
-    const existing = s.reminders().map((r) => r.minutes);
-    const text = inputValue().trim();
-    const num = parseInt(text, 10);
+    const parts = extractReminderParts(query().trim().toLowerCase());
 
-    if (num > 0 && !isNaN(num)) {
-      const items: { value: string; label: string }[] = [];
-      const candidates = [
-        { minutes: num, label: `${num} min before` },
-        { minutes: num * 60, label: `${num} hour${num !== 1 ? "s" : ""} before` },
-        { minutes: num * 1440, label: `${num} day${num !== 1 ? "s" : ""} before` },
-        { minutes: num * 10080, label: `${num} week${num !== 1 ? "s" : ""} before` },
-      ];
-      for (const c of candidates) {
-        if (c.minutes <= MAX_REMINDER_MINUTES && !existing.includes(c.minutes))
-          items.push({ value: String(c.minutes), label: c.label });
+    if (parts) {
+      const { num, unit, compound } = parts;
+
+      // Compound expression — already resolved to total minutes
+      if (compound) {
+        return num <= MAX_REMINDER_MINUTES
+          ? [{ value: String(num), label: formatReminderValue(num) }]
+          : [];
       }
-      return items;
+
+      const allCandidates = [
+        { minutes: num, label: `${num} min`, u: "m" },
+        { minutes: num * 60, label: `${num} hour${num !== 1 ? "s" : ""}`, u: "h" },
+        { minutes: num * 1440, label: `${num} day${num !== 1 ? "s" : ""}`, u: "d" },
+        { minutes: num * 10080, label: `${num} week${num !== 1 ? "s" : ""}`, u: "w" },
+      ];
+
+      // If a unit was detected, narrow to just that match
+      const candidates = unit
+        ? allCandidates.filter((c) => c.u === unit)
+        : allCandidates;
+
+      return candidates
+        .filter((c) => c.minutes <= MAX_REMINDER_MINUTES)
+        .map((c) => ({ value: String(c.minutes), label: c.label }));
     }
 
-    return REMINDER_PRESETS.filter((p) => !existing.includes(p.minutes)).map(
-      (p) => ({ value: String(p.minutes), label: `${p.label} before` }),
+    return REMINDER_PRESETS.map(
+      (p) => ({ value: String(p.minutes), label: p.label }),
     );
   });
 
-  const collection = createMemo(() =>
-    createListCollection({
+  // Ark UI's combobox internally filters items via `itemToString().includes(input)`.
+  // Since we already compute the right suggestions ourselves, prepend the raw query
+  // so every item passes Ark's matching — prevents it from hiding our pre-filtered items.
+  const collection = createMemo(() => {
+    const q = query().toLowerCase();
+    return createListCollection({
       items: suggestions(),
       itemToValue: (item) => item.value,
-      itemToString: (item) => item.label,
-    }),
-  );
+      itemToString: (item) => q ? `${q} ${item.label}` : item.label,
+    });
+  });
 
   function handleAdd(minutes: number): void {
     if (minutes > 0 && !s.reminders().some((r) => r.minutes === minutes)) {
       s.addReminder(minutes);
     }
     setInputValue("");
+    setQuery("");
   }
 
   return (
@@ -818,8 +878,23 @@ function ReminderCombobox(props: { state: EventFormState }) {
       closeOnSelect
       selectionBehavior="clear"
       inputBehavior="autohighlight"
+      onHighlightChange={(d) => {
+        if (d.highlightedValue != null && userNavigated) {
+          const item = suggestions().find((i) => i.value === d.highlightedValue);
+          if (item) {
+            setInputValue(item.label);
+            requestAnimationFrame(() => inputRef?.select());
+          }
+        }
+      }}
       inputValue={inputValue()}
-      onInputValueChange={(details) => setInputValue(details.inputValue)}
+      onInputValueChange={(d) => {
+        // User typed — reset navigation flag so autohighlight doesn't mirror
+        userNavigated = false;
+
+        setInputValue(d.inputValue);
+        setQuery(d.inputValue);
+      }}
       onValueChange={(details) => {
         const val = details.value[0];
         if (!val) return;
@@ -831,20 +906,29 @@ function ReminderCombobox(props: { state: EventFormState }) {
       <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <Bell size={14} class="text-fg-muted shrink-0" />
         <Combobox.Input
+          ref={(el) => { inputRef = el; }}
           placeholder="Reminders"
           aria-label="Reminders"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") userNavigated = true;
+          }}
           class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none cursor-text"
         />
       </Combobox.Control>
       <Combobox.Positioner>
-        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
+        <Combobox.Content
+          class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]"
+          onPointerMove={() => { userNavigated = true; }}
+        >
           <For each={suggestions()}>
             {(item) => (
               <Combobox.Item
                 item={item}
                 class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
               >
-                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                <Combobox.ItemText>
+                  {item.label}<span class="text-fg-disabled"> before</span>
+                </Combobox.ItemText>
               </Combobox.Item>
             )}
           </For>
