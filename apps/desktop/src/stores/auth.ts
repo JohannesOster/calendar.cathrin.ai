@@ -42,16 +42,22 @@ export async function initAuth(): Promise<void> {
     const token = await invoke<string | null>("get_session_token");
 
     if (token) {
-      // Validate token with server
-      const isValid = await validateSession(token);
+      // Set authenticated optimistically so accounts/events can load in parallel.
+      // If invalid, apiFetch() handles 401 → logout(). Background validation is
+      // a secondary safety net for edge cases where no API call is made.
+      setSessionToken(token);
+      setIsAuthenticated(true);
 
-      if (isValid) {
-        setSessionToken(token);
-        setIsAuthenticated(true);
-      } else {
-        // Token invalid, clear it
-        await invoke("clear_session_token");
-      }
+      validateSession(token).then((isValid) => {
+        if (!isValid) {
+          console.warn("[auth] Session invalid, clearing");
+          setSessionToken(null);
+          setIsAuthenticated(false);
+          invoke("clear_session_token").catch(() => {});
+        }
+      }).catch(() => {
+        // Network error — stay authenticated for offline use
+      });
     }
   } catch (error) {
     console.error("Failed to initialize auth:", error);

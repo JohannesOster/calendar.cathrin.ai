@@ -45,11 +45,11 @@ function App() {
   };
 
   onMount(async () => {
-    // Initialize auth first to load session token
+    // Load session token (fast IPC) and set optimistic auth.
+    // Validation runs in background — if invalid, apiFetch handles 401.
     await initAuth();
-    // Then load accounts and events (both check isAuthenticated)
-    await initializeAccounts();
-    await initializeEvents();
+    // Load accounts and events in parallel (both check isAuthenticated)
+    await Promise.all([initializeAccounts(), initializeEvents()]);
 
     // Start polling for visible week updates
     startPolling();
