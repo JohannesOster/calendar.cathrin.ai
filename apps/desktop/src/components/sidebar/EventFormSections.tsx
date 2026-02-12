@@ -31,8 +31,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
-import { rsvpEvent } from "../../stores/events";
-import { selectedEventId } from "../../stores/event-selection";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
 import type { EventFormState } from "./useEventFormState";
 
@@ -238,6 +236,7 @@ export function DetailsSection(props: SectionProps) {
         isOrganizer={s.isOrganizer()}
         onAdd={(email, name) => s.addAttendee(email, name)}
         onRemove={(email) => s.removeAttendee(email)}
+        onRsvp={(status) => s.rsvpAttendee(status)}
       />
       <ConferencingField state={s} />
       <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
@@ -639,6 +638,7 @@ function AttendeeList(props: {
   isOrganizer: boolean;
   onAdd: (email: string, name?: string) => void;
   onRemove: (email: string) => void;
+  onRsvp: (status: "accepted" | "declined" | "tentative") => void;
 }) {
   const [emailInput, setEmailInput] = createSignal("");
   const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
@@ -698,7 +698,7 @@ function AttendeeList(props: {
           </For>
         </div>
         <Show when={canRsvp()}>
-          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} />
+          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
         </Show>
       </Show>
       <Show when={props.isOrganizer}>
@@ -724,25 +724,14 @@ function AttendeeList(props: {
   );
 }
 
-function RsvpButtons(props: { currentStatus: Attendee["responseStatus"] }) {
-  const [loading, setLoading] = createSignal(false);
-
-  function handleRsvp(status: "accepted" | "declined" | "tentative"): void {
-    const eventId = selectedEventId();
-    if (!eventId || loading()) return;
-    setLoading(true);
-    rsvpEvent(eventId, status)
-      .catch((err) => console.error("[rsvp] Failed:", err))
-      .finally(() => setLoading(false));
-  }
-
+function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp: (status: "accepted" | "declined" | "tentative") => void }) {
   const buttonClass = (status: string) => {
     const isActive = props.currentStatus === status;
     return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
       isActive
         ? "bg-fg text-surface font-medium"
         : "bg-surface-hover text-fg-muted hover:text-fg"
-    } ${loading() ? "opacity-50 pointer-events-none" : ""}`;
+    }`;
   };
 
   return (
@@ -754,24 +743,21 @@ function RsvpButtons(props: { currentStatus: Attendee["responseStatus"] }) {
       <button
         class={buttonClass("accepted")}
         aria-pressed={props.currentStatus === "accepted"}
-        onClick={() => handleRsvp("accepted")}
-        disabled={loading()}
+        onClick={() => props.onRsvp("accepted")}
       >
         Accept
       </button>
       <button
         class={buttonClass("tentative")}
         aria-pressed={props.currentStatus === "tentative"}
-        onClick={() => handleRsvp("tentative")}
-        disabled={loading()}
+        onClick={() => props.onRsvp("tentative")}
       >
         Maybe
       </button>
       <button
         class={buttonClass("declined")}
         aria-pressed={props.currentStatus === "declined"}
-        onClick={() => handleRsvp("declined")}
-        disabled={loading()}
+        onClick={() => props.onRsvp("declined")}
       >
         Decline
       </button>

@@ -89,6 +89,10 @@ export function useEventFormState() {
   let pendingRollback: EventPatch = {};
   /** Debounce timer for reminder add/remove so rapid changes batch into one PATCH. */
   let reminderFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Debounce timer for RSVP so rapid status toggles batch into one PATCH. */
+  let rsvpTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Original attendees before the first RSVP click in a debounce window (for rollback). */
+  let rsvpOriginalAttendees: Attendee[] | null = null;
   /** Last selected event ID — survives signal disposal for onCleanup. */
   let activeEditEventId: string | null = null;
 
@@ -124,6 +128,7 @@ export function useEventFormState() {
   // already null by the time <Show> disposes this component.
   onCleanup(() => {
     if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+    if (rsvpTimer) { clearTimeout(rsvpTimer); rsvpTimer = null; rsvpOriginalAttendees = null; }
     flushSave();
   });
 
@@ -353,6 +358,46 @@ export function useEventFormState() {
       scheduleSave({ attendees: updated.length > 0 ? updated : null });
       flushSave();
     }
+  }
+
+  /** RSVP: optimistic update immediately, debounced API call. */
+  function rsvpAttendee(responseStatus: Attendee["responseStatus"]): void {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const event = events().find((e) => e.id === eventId);
+    if (!event?.attendees) return;
+
+    // Capture original attendees only on first click in a debounce window
+    if (!rsvpOriginalAttendees) {
+      rsvpOriginalAttendees = event.attendees;
+    }
+
+    // Optimistic: update both local form signal and global events signal
+    const updated = editAttendees().map(a => a.isSelf ? { ...a, responseStatus } : a);
+    setEditAttendees(updated);
+    setEvents((prev) =>
+      prev.map((e) => e.id === eventId ? { ...e, attendees: updated } : e)
+    );
+
+    // Debounce the API call so rapid toggles only send once
+    if (rsvpTimer) clearTimeout(rsvpTimer);
+    const googleEventId = event.googleEventId;
+    const original = rsvpOriginalAttendees;
+    rsvpTimer = setTimeout(() => {
+      rsvpTimer = null;
+      rsvpOriginalAttendees = null;
+      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp`, {
+        method: "PATCH",
+        body: JSON.stringify({ responseStatus }),
+      }).catch((err) => {
+        console.error(`[rsvp] Failed:`, err);
+        // Roll back both signals to the pre-debounce-window state
+        setEditAttendees(original);
+        setEvents((prev) =>
+          prev.map((e) => e.id === eventId ? { ...e, attendees: original } : e)
+        );
+      });
+    }, 300);
   }
 
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
@@ -637,6 +682,7 @@ export function useEventFormState() {
     isOrganizer,
     addAttendee,
     removeAttendee,
+    rsvpAttendee,
     timeZone,
     setTimeZone,
     conferencingLoading,

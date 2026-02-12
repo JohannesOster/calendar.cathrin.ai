@@ -1,8 +1,9 @@
-import { Show, For, createMemo, createSignal } from "solid-js";
+import { Show, For, createMemo, onCleanup } from "solid-js";
 import { Clock, MapPin, AlignLeft, Users, Check, X, HelpCircle, Circle } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
-import { rsvpEvent } from "../../stores/events";
+import { setEvents, events } from "../../stores/events";
+import { apiFetch } from "../../lib/api";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
 
@@ -184,14 +185,39 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
 }
 
 function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["responseStatus"] }) {
-  const [loading, setLoading] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let originalAttendees: Attendee[] | null = null;
+
+  onCleanup(() => { if (timer) { clearTimeout(timer); timer = null; } });
 
   function handleRsvp(status: "accepted" | "declined" | "tentative"): void {
-    if (loading()) return;
-    setLoading(true);
-    rsvpEvent(props.eventId, status)
-      .catch((err) => console.error("[rsvp] Failed:", err))
-      .finally(() => setLoading(false));
+    const event = events().find((e) => e.id === props.eventId);
+    if (!event?.attendees) return;
+
+    if (!originalAttendees) originalAttendees = event.attendees;
+
+    const updated = event.attendees.map(a => a.isSelf ? { ...a, responseStatus: status } : a);
+    setEvents((prev) =>
+      prev.map((e) => e.id === props.eventId ? { ...e, attendees: updated } : e)
+    );
+
+    if (timer) clearTimeout(timer);
+    const eventId = props.eventId;
+    const googleEventId = event.googleEventId;
+    const rollback = originalAttendees;
+    timer = setTimeout(() => {
+      timer = null;
+      originalAttendees = null;
+      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp`, {
+        method: "PATCH",
+        body: JSON.stringify({ responseStatus: status }),
+      }).catch((err) => {
+        console.error("[rsvp] Failed:", err);
+        setEvents((prev) =>
+          prev.map((e) => e.id === eventId ? { ...e, attendees: rollback } : e)
+        );
+      });
+    }, 300);
   }
 
   const buttonClass = (status: string) => {
@@ -200,7 +226,7 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
       isActive
         ? "bg-fg text-surface font-medium"
         : "bg-surface-hover text-fg-muted hover:text-fg"
-    } ${loading() ? "opacity-50 pointer-events-none" : ""}`;
+    }`;
   };
 
   return (
@@ -213,7 +239,6 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
         class={buttonClass("accepted")}
         aria-pressed={props.currentStatus === "accepted"}
         onClick={() => handleRsvp("accepted")}
-        disabled={loading()}
       >
         Accept
       </button>
@@ -221,7 +246,6 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
         class={buttonClass("tentative")}
         aria-pressed={props.currentStatus === "tentative"}
         onClick={() => handleRsvp("tentative")}
-        disabled={loading()}
       >
         Maybe
       </button>
@@ -229,7 +253,6 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
         class={buttonClass("declined")}
         aria-pressed={props.currentStatus === "declined"}
         onClick={() => handleRsvp("declined")}
-        disabled={loading()}
       >
         Decline
       </button>
