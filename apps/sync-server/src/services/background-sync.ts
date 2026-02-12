@@ -11,13 +11,11 @@ import { performInitialSync } from "./initial-sync.js";
 // Sync Timing Configuration
 // =============================================================================
 // Server syncs with Google every 5 minutes using incremental sync (syncTokens).
-// This is slower than client polling (3 minutes) to reduce Google API quota usage.
-//
-// Combined with client-side staleness (3 min) and polling (3 min), changes in
-// Google Calendar propagate to the UI within approximately 3-8 minutes.
+// Combined with client-side staleness (1 min) and polling (1 min), changes in
+// Google Calendar propagate to the UI within approximately 1-3 minutes.
 // =============================================================================
 
-const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes - sync with Google
+const SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes - sync with Google
 const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts (rate limiting)
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after startup
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - consider account stuck
