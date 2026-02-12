@@ -98,7 +98,7 @@ export const eventsRoute = new Hono()
         description: z.string().optional(),
         transparency: z.enum(["opaque", "transparent"]).optional(),
         visibility: z.enum(["default", "public", "private"]).optional(),
-        reminders: z.array(z.object({ method: z.string(), minutes: z.number() })).max(5).optional(),
+        reminders: z.array(z.object({ method: z.string(), minutes: z.number().min(0).max(40320) })).max(5).optional(),
         colorId: z.string().optional(),
         conferencing: z.union([
           z.object({ type: z.literal("meet") }),
@@ -150,7 +150,7 @@ export const eventsRoute = new Hono()
         isAllDay: z.boolean().optional(),
         transparency: z.enum(["opaque", "transparent"]).optional(),
         visibility: z.enum(["default", "public", "private"]).optional(),
-        reminders: z.array(z.object({ method: z.string(), minutes: z.number() })).max(5).nullable().optional(),
+        reminders: z.array(z.object({ method: z.string(), minutes: z.number().min(0).max(40320) })).max(5).nullable().optional(),
         colorId: z.string().nullable().optional(),
         conferencing: z.union([
           z.object({ type: z.literal("meet") }),

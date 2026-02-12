@@ -25,9 +25,8 @@ import {
   FOCUSED_Z_INDEX,
   MS_PER_HOUR,
   TOTAL_GRID_HEIGHT_PX,
+  SYSTEM_TIMEZONE,
 } from "../../constants/calendar";
-
-const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 interface CalendarEventProps {
   event: CalendarEventData;
@@ -275,8 +274,8 @@ export function CalendarEvent(props: CalendarEventProps) {
               </div>
               <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
                 {getHeight() < SHORT_TIME_THRESHOLD_PX
-                  ? formatCompactTime(props.event.start)
-                  : formatTimeRange(props.event.start, props.event.end)}
+                  ? formatCompactTime(props.event.start, props.event.timeZone)
+                  : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
               </div>
               <Show when={showTzIndicator()}>
                 <div class="text-2xs font-light opacity-60">

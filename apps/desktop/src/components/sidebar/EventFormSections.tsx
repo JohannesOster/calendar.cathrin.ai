@@ -456,6 +456,8 @@ export function CalendarSection(props: SectionProps) {
   );
 }
 
+const MAX_REMINDER_MINUTES = 40320; // 4 weeks — Google Calendar API limit
+
 const REMINDER_PRESETS = [
   { minutes: 5, label: "5 min" },
   { minutes: 10, label: "10 min" },
@@ -466,8 +468,9 @@ const REMINDER_PRESETS = [
 ];
 
 function formatReminderValue(minutes: number): string {
-  if (minutes >= 1440) return `${minutes / 1440} day`;
-  if (minutes >= 60) return `${minutes / 60}hr`;
+  if (minutes >= 10080 && minutes % 10080 === 0) return `${minutes / 10080} wk`;
+  if (minutes >= 1440 && minutes % 1440 === 0) return `${minutes / 1440} day`;
+  if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60}hr`;
   return `${minutes}min`;
 }
 
@@ -475,16 +478,19 @@ function parseReminderInput(input: string): number | null {
   const trimmed = input.trim().toLowerCase();
   if (!trimmed) return null;
   const match = trimmed.match(
-    /^(\d+)\s*(min|minute|minutes|h|hr|hrs|hour|hours|d|day|days)?/,
+    /^(\d+)\s*(min|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks)?/,
   );
   if (!match) return null;
   const num = parseInt(match[1], 10);
   if (num <= 0 || isNaN(num)) return null;
   const unit = match[2];
-  if (!unit) return num; // bare number → minutes
-  if (unit.startsWith("h")) return num * 60;
-  if (unit.startsWith("d")) return num * 1440;
-  return num;
+  let minutes: number;
+  if (!unit) minutes = num; // bare number → minutes
+  else if (unit.startsWith("h")) minutes = num * 60;
+  else if (unit.startsWith("d")) minutes = num * 1440;
+  else if (unit.startsWith("w")) minutes = num * 10080;
+  else minutes = num;
+  return minutes > MAX_REMINDER_MINUTES ? null : minutes;
 }
 
 export function RemindersSection(props: SectionProps) {
@@ -771,18 +777,16 @@ function ReminderCombobox(props: { state: EventFormState }) {
 
     if (num > 0 && !isNaN(num)) {
       const items: { value: string; label: string }[] = [];
-      if (!existing.includes(num))
-        items.push({ value: String(num), label: `${num} min before` });
-      if (!existing.includes(num * 60))
-        items.push({
-          value: String(num * 60),
-          label: `${num} hour${num !== 1 ? "s" : ""} before`,
-        });
-      if (!existing.includes(num * 1440))
-        items.push({
-          value: String(num * 1440),
-          label: `${num} day${num !== 1 ? "s" : ""} before`,
-        });
+      const candidates = [
+        { minutes: num, label: `${num} min before` },
+        { minutes: num * 60, label: `${num} hour${num !== 1 ? "s" : ""} before` },
+        { minutes: num * 1440, label: `${num} day${num !== 1 ? "s" : ""} before` },
+        { minutes: num * 10080, label: `${num} week${num !== 1 ? "s" : ""} before` },
+      ];
+      for (const c of candidates) {
+        if (c.minutes <= MAX_REMINDER_MINUTES && !existing.includes(c.minutes))
+          items.push({ value: String(c.minutes), label: c.label });
+      }
       return items;
     }
 
@@ -1005,12 +1009,13 @@ function TimeCombobox(props: {
       inputValue={inputValue()}
       onInputValueChange={(d) => {
         if (!isEditing()) return;
-        if (!d.inputValue) return;
         // User typed — reset navigation flag so autohighlight doesn't mirror
         userNavigated = false;
         setInputValue(d.inputValue);
         setQuery(d.inputValue);
-        s.handleTimeInput(props.which, d.inputValue, props.referenceHour());
+        if (d.inputValue) {
+          s.handleTimeInput(props.which, d.inputValue, props.referenceHour());
+        }
       }}
       onValueChange={(d) => {
         const val = d.value[0];
@@ -1029,7 +1034,7 @@ function TimeCombobox(props: {
           onFocus={(e) => {
             setIsEditing(true);
             setQuery(displayTime());
-            s.beginTimeEdit(props.which);
+            s.beginTimeEdit();
             const items = filtered();
             if (items.length > 0) setHighlighted(items[0].value);
             const el = e.currentTarget;
@@ -1077,7 +1082,7 @@ function TimeCombobox(props: {
 // Timezone selector
 // =============================================================================
 
-const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
 /** Day offset between local and event timezone: +1 = local is one day ahead (flight-style). */
 function getLocalDayOffset(date: Date, eventTz: string): number {
@@ -1111,7 +1116,7 @@ function formatTimezoneLabel(tz: string): string {
 let _timezoneCache: { value: string; label: string }[] | null = null;
 function getTimezoneItems(): { value: string; label: string }[] {
   if (_timezoneCache) return _timezoneCache;
-  _timezoneCache = (Intl as { supportedValuesOf(key: string): string[] }).supportedValuesOf("timeZone")
+  _timezoneCache = Intl.supportedValuesOf("timeZone")
     .map(tz => ({ value: tz, label: formatTimezoneLabel(tz) }))
     .sort((a, b) => {
       const cityA = a.value.split("/").pop()!;
@@ -1209,7 +1214,6 @@ function TimezoneSelector(props: { state: EventFormState }) {
       inputValue={inputValue()}
       onInputValueChange={(d) => {
         if (!isEditing()) return;
-        if (!d.inputValue) return;
         // User typed — reset navigation flag so autohighlight doesn't mirror
         userNavigated = false;
         setInputValue(d.inputValue);

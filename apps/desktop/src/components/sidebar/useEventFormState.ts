@@ -44,10 +44,9 @@ import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
+import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
 export type FormMode = "create" | "edit";
-
-const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 export function useEventFormState() {
   // Remember timed start/end when switching to all-day so we can restore them
@@ -417,18 +416,16 @@ export function useEventFormState() {
     return calendarColor();
   });
 
-  function beginTimeEdit(which: "start" | "end"): void {
+  function beginTimeEdit(): void {
     if (mode() === "create") {
       // Store shadow position (original time before editing)
       setShadowStart(draftStart() ? new Date(draftStart()!) : null);
       setShadowEnd(draftEnd() ? new Date(draftEnd()!) : null);
     }
-
-    const tz = timeZone();
   }
 
   /** Apply parsed time to the draft/edit, updating the event chip position live */
-  function applyTimeLive(which: "start" | "end", value: string, referenceHour?: number): void {
+  function handleTimeInput(which: "start" | "end", value: string, referenceHour?: number): void {
     const parsed = parseTimeInput(value, referenceHour);
     if (!parsed) return;
 
@@ -459,10 +456,6 @@ export function useEventFormState() {
         setEnd(newDate);
       }
     }
-  }
-
-  function handleTimeInput(which: "start" | "end", value: string, referenceHour?: number): void {
-    applyTimeLive(which, value, referenceHour);
   }
 
   function finishTimeEdit(): void {

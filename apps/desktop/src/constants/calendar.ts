@@ -129,6 +129,9 @@ export const SNAP_TRACK_RANGE = 90;
 /** Extra days to render off-screen for smooth scrolling */
 export const VISIBLE_BUFFER_DAYS = 5;
 
+/** The user's system IANA timezone (e.g. "America/New_York") */
+export const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 /** Hours before current time to show on initial load */
 export const INITIAL_SCROLL_OFFSET_HOURS = 2;
 
