@@ -253,9 +253,9 @@ export function TimeSection(props: SectionProps) {
           </Switch.Control>
           <Switch.HiddenInput />
         </Switch.Root>
-        <button class="text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
-          Time zone
-        </button>
+        <Show when={!s.isAllDay()}>
+          <TimezoneSelector state={s} />
+        </Show>
         <button class="text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
           Repeat
         </button>
@@ -876,6 +876,135 @@ function ReminderCombobox(props: { state: EventFormState }) {
       <Combobox.Positioner>
         <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 min-w-[160px]">
           <For each={suggestions()}>
+            {(item) => (
+              <Combobox.Item
+                item={item}
+                class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+              >
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+              </Combobox.Item>
+            )}
+          </For>
+        </Combobox.Content>
+      </Combobox.Positioner>
+    </Combobox.Root>
+  );
+}
+
+// =============================================================================
+// Timezone selector
+// =============================================================================
+
+const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function formatTimezoneLabel(tz: string): string {
+  const city = tz.split("/").pop()!.replace(/_/g, " ");
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const offset = parts.find(p => p.type === "timeZoneName")?.value ?? "GMT";
+    return `${city} (${offset})`;
+  } catch {
+    return city;
+  }
+}
+
+let _timezoneCache: { value: string; label: string }[] | null = null;
+function getTimezoneItems(): { value: string; label: string }[] {
+  if (_timezoneCache) return _timezoneCache;
+  _timezoneCache = (Intl as { supportedValuesOf(key: string): string[] }).supportedValuesOf("timeZone")
+    .map(tz => ({ value: tz, label: formatTimezoneLabel(tz) }))
+    .sort((a, b) => {
+      const cityA = a.value.split("/").pop()!;
+      const cityB = b.value.split("/").pop()!;
+      return cityA.localeCompare(cityB);
+    });
+  return _timezoneCache;
+}
+
+function TimezoneSelector(props: { state: EventFormState }) {
+  const s = props.state;
+  const [showSearch, setShowSearch] = createSignal(false);
+
+  const displayTz = () => s.timeZone() || SYSTEM_TIMEZONE;
+
+  return (
+    <Show
+      when={showSearch()}
+      fallback={
+        <button
+          class="text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors"
+          onClick={() => setShowSearch(true)}
+        >
+          {formatTimezoneLabel(displayTz())}
+        </button>
+      }
+    >
+      <TimezoneCombobox
+        onSelect={(tz) => s.setTimeZone(tz)}
+        onClose={() => setShowSearch(false)}
+      />
+    </Show>
+  );
+}
+
+function TimezoneCombobox(props: {
+  onSelect: (tz: string) => void;
+  onClose: () => void;
+}) {
+  const [inputValue, setInputValue] = createSignal("");
+
+  const allTimezones = getTimezoneItems();
+
+  const filtered = createMemo(() => {
+    const query = inputValue().toLowerCase().trim();
+    if (!query) return allTimezones;
+    return allTimezones.filter(tz =>
+      tz.value.toLowerCase().replace(/_/g, " ").includes(query) ||
+      tz.label.toLowerCase().includes(query)
+    );
+  });
+
+  const collection = createMemo(() =>
+    createListCollection({
+      items: filtered(),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
+  return (
+    <Combobox.Root
+      collection={collection()}
+      defaultOpen
+      closeOnSelect
+      selectionBehavior="clear"
+      inputBehavior="autohighlight"
+      inputValue={inputValue()}
+      onInputValueChange={(d) => setInputValue(d.inputValue)}
+      onValueChange={(d) => {
+        const tz = d.value[0];
+        if (tz) props.onSelect(tz);
+      }}
+      onOpenChange={(d) => {
+        if (!d.open) props.onClose();
+      }}
+      positioning={{ placement: "bottom-start" }}
+    >
+      <Combobox.Control>
+        <Combobox.Input
+          placeholder="Search timezone..."
+          aria-label="Timezone"
+          ref={(el) => requestAnimationFrame(() => { el.focus(); el.select(); })}
+          class="text-xs text-fg bg-surface-input rounded px-2 py-2 outline-none border-none cursor-text w-32 hover:bg-surface-hover focus:bg-surface-hover transition-colors placeholder-fg-disabled"
+        />
+      </Combobox.Control>
+      <Combobox.Positioner>
+        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto min-w-[220px]">
+          <For each={filtered()}>
             {(item) => (
               <Combobox.Item
                 item={item}

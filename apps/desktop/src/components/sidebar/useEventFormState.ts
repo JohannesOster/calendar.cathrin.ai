@@ -26,6 +26,8 @@ import {
   setDraftColorId,
   draftConferencing,
   setDraftConferencing,
+  draftTimeZone,
+  setDraftTimeZone,
   getDraftColor,
   shadowStart,
   setShadowStart,
@@ -66,6 +68,7 @@ export function useEventFormState() {
   const [editReminders, setEditReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
   const [editColorId, setEditColorId] = createSignal<CathrinColorKey | null>(null);
   const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
+  const [editTimeZone, setEditTimeZone] = createSignal<string | undefined>(undefined);
   const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
@@ -154,6 +157,7 @@ export function useEventFormState() {
     setEditReminders(event.reminders ?? []);
     setEditColorId(event.colorId ?? null);
     setEditConferencing(event.conferencing ?? null);
+    setEditTimeZone(event.timeZone);
     setConferencingLoading(false);
     savedTimedStart = null;
     savedTimedEnd = null;
@@ -291,6 +295,12 @@ export function useEventFormState() {
   };
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
+
+  const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
+  const setTimeZone = (v: string | undefined) => {
+    if (mode() === "create") { setDraftTimeZone(v); }
+    else { setEditTimeZone(v); scheduleSave({ timeZone: v }); flushSave(); }
+  };
 
   /** Add a Google Meet link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
   function addMeetConferencing(): void {
@@ -565,6 +575,8 @@ export function useEventFormState() {
     addReminder,
     removeReminder,
     conferencing,
+    timeZone,
+    setTimeZone,
     conferencingLoading,
     addMeetConferencing,
     setManualConferencing,

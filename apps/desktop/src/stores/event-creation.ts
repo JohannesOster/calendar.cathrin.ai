@@ -26,6 +26,7 @@ export const [draftVisibility, setDraftVisibility] = createSignal<"default" | "p
 export const [draftReminders, setDraftReminders] = createSignal<{ method: "popup"; minutes: number }[]>([]);
 export const [draftColorId, setDraftColorId] = createSignal<string | null>(null);
 export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
+export const [draftTimeZone, setDraftTimeZone] = createSignal<string | undefined>(undefined);
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -169,6 +170,7 @@ export function cancelCreation(): void {
   setDraftReminders([]);
   setDraftColorId(null);
   setDraftConferencing(null);
+  setDraftTimeZone(undefined);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -199,6 +201,7 @@ export function commitCreation(): boolean {
   const visibility = draftVisibility();
   const reminders = draftReminders();
   const conferencing = draftConferencing();
+  const timeZone = draftTimeZone() || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (!title || !start || !end || !calId) return false;
 
@@ -247,6 +250,7 @@ export function commitCreation(): boolean {
     reminders: reminders.length > 0 ? reminders : undefined,
     colorId: colorKey ?? undefined,
     conferencing,
+    timeZone,
   });
 
   // Reset creation state
@@ -272,6 +276,7 @@ export function commitCreation(): boolean {
           ? { type: "manual" as const, uri: conferencing.uri }
           : { type: "meet" as const },
       }),
+      timeZone,
     }),
   })
     .then((serverEvent) => {
