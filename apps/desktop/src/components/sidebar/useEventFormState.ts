@@ -308,6 +308,13 @@ export function useEventFormState() {
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
 
+  // Attendees are read-only — sourced from the selected event in edit mode
+  const attendees = createMemo(() => {
+    if (mode() === "create") return undefined;
+    const event = selectedEvent();
+    return event?.attendees;
+  });
+
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
   const setTimeZone = (v: string | undefined) => {
     const oldTz = timeZone() || SYSTEM_TIMEZONE;
@@ -584,6 +591,7 @@ export function useEventFormState() {
     addReminder,
     removeReminder,
     conferencing,
+    attendees,
     timeZone,
     setTimeZone,
     conferencingLoading,

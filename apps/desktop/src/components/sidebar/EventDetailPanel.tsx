@@ -1,11 +1,49 @@
-import { Show, createMemo } from "solid-js";
-import { Clock, MapPin, AlignLeft } from "lucide-solid";
+import { Show, For, createMemo } from "solid-js";
+import { Clock, MapPin, AlignLeft, Users, Check, X, HelpCircle, Circle } from "lucide-solid";
+import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
 
 interface EventDetailPanelProps {
   event: CalendarEvent;
+}
+
+const DETAIL_STATUS_ORDER: Record<string, number> = {
+  accepted: 0,
+  tentative: 1,
+  needsAction: 2,
+  declined: 3,
+};
+
+const DETAIL_STATUS_LABELS: Record<string, string> = {
+  accepted: "Accepted",
+  declined: "Declined",
+  tentative: "Maybe",
+  needsAction: "No response",
+};
+
+function sortDetailAttendees(attendees: Attendee[]): Attendee[] {
+  return [...attendees].sort((a, b) => {
+    if (a.isOrganizer && !b.isOrganizer) return -1;
+    if (!a.isOrganizer && b.isOrganizer) return 1;
+    const aOrder = DETAIL_STATUS_ORDER[a.responseStatus] ?? 4;
+    const bOrder = DETAIL_STATUS_ORDER[b.responseStatus] ?? 4;
+    return aOrder - bOrder;
+  });
+}
+
+function DetailStatusIcon(props: { status: Attendee["responseStatus"] }) {
+  switch (props.status) {
+    case "accepted":
+      return <span class="text-green-600" aria-hidden="true"><Check size={12} /></span>;
+    case "declined":
+      return <span class="text-red-500" aria-hidden="true"><X size={12} /></span>;
+    case "tentative":
+      return <span class="text-amber-500" aria-hidden="true"><HelpCircle size={12} /></span>;
+    default:
+      return <span class="text-fg-disabled" aria-hidden="true"><Circle size={12} /></span>;
+  }
 }
 
 export function EventDetailPanel(props: EventDetailPanelProps) {
@@ -77,6 +115,37 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
             <div class="flex items-start gap-2 text-sm text-fg">
               <AlignLeft size={14} class="text-fg-muted shrink-0 mt-0.5" />
               <p class="break-words whitespace-pre-wrap">{props.event.description}</p>
+            </div>
+          </div>
+        </Show>
+
+        {/* Attendees */}
+        <Show when={props.event.attendees?.length}>
+          <div class="px-3 py-2 border-t border-border">
+            <div class="flex items-center gap-2 text-sm text-fg-muted mb-1.5">
+              <Users size={14} class="shrink-0" />
+              <span>Participants ({props.event.attendees!.length})</span>
+            </div>
+            <div class="max-h-52 overflow-y-auto">
+              <For each={sortDetailAttendees(props.event.attendees!)}>
+                {(attendee) => (
+                  <div
+                    class="flex items-center gap-2 pl-[22px] py-1.5"
+                    role="listitem"
+                    aria-label={`${attendee.name || attendee.email}, ${DETAIL_STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
+                  >
+                    <DetailStatusIcon status={attendee.responseStatus} />
+                    <span class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium" : ""}`}>
+                      {attendee.isSelf
+                        ? (attendee.name ? `${attendee.name} (You)` : "You")
+                        : (attendee.name || attendee.email)}
+                    </span>
+                    <Show when={attendee.isOrganizer}>
+                      <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
+                    </Show>
+                  </div>
+                )}
+              </For>
             </div>
           </div>
         </Show>
