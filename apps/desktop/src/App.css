@@ -54,6 +54,13 @@
   --radius-xl: 8px;
 }
 
+/* Suppress transitions on initial load to prevent layout shift */
+.preload *,
+.preload *::before,
+.preload *::after {
+  transition-duration: 0s !important;
+}
+
 html,
 body {
   max-height: 100vh;

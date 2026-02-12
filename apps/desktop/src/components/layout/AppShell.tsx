@@ -12,8 +12,17 @@ interface AppShellProps {
 }
 
 // Create signals for sidebar state (exported for use by other components)
-export const [leftSidebarOpen, setLeftSidebarOpen] = createSignal(true);
-export const [rightSidebarOpen, setRightSidebarOpen] = createSignal(true);
+// Read localStorage synchronously to avoid flash-of-wrong-layout on load
+function readStoredBool(key: string, fallback: boolean): boolean {
+  const stored = localStorage.getItem(key);
+  return stored !== null ? stored === "true" : fallback;
+}
+export const [leftSidebarOpen, setLeftSidebarOpen] = createSignal(
+  readStoredBool(STORAGE_KEYS.LEFT_SIDEBAR_OPEN, true),
+);
+export const [rightSidebarOpen, setRightSidebarOpen] = createSignal(
+  readStoredBool(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN, true),
+);
 
 // Toggle functions for sidebar state
 export function toggleLeftSidebar() {
@@ -34,13 +43,8 @@ export function AppShell(props: AppShellProps) {
   let unlistenTransitionStart: (() => void) | undefined;
   let unlistenFocusChanged: (() => void) | undefined;
 
-  // Initialize from localStorage and set up fullscreen detection on mount
+  // Set up fullscreen detection on mount
   onMount(async () => {
-    const savedLeft = localStorage.getItem(STORAGE_KEYS.LEFT_SIDEBAR_OPEN);
-    const savedRight = localStorage.getItem(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN);
-    if (savedLeft !== null) setLeftSidebarOpen(savedLeft === "true");
-    if (savedRight !== null) setRightSidebarOpen(savedRight === "true");
-
     // Fullscreen detection - listen to Rust event for faster updates
     const appWindow = getCurrentWindow();
     setIsFullscreen(await appWindow.isFullscreen());
