@@ -7,21 +7,25 @@ import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
 import { notifyUser } from "./ws-manager.js";
+import { isWatchEnabled, renewExpiringChannels } from "./watch-manager.js";
 
 // =============================================================================
 // Sync Timing Configuration
 // =============================================================================
-// Server syncs with Google every 2 minutes using incremental sync (syncTokens).
-// When changes are detected, affected week IDs are pushed to clients via
-// WebSocket for immediate re-fetch (<5s). Polling (1 min) acts as fallback.
+// With watch channels: Google pushes changes → webhook → incremental sync.
+// Background sync acts as safety net only (hourly). Without watch channels
+// (e.g. no WEBHOOK_BASE_URL), poll every 2 minutes as before.
 // =============================================================================
 
-const SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes - sync with Google
+const SYNC_INTERVAL_POLLING_MS = 2 * 60 * 1000;  // 2 min - active polling fallback
+const SYNC_INTERVAL_SAFETY_MS = 60 * 60 * 1000;  // 1 hour - safety net when watch active
+const CHANNEL_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours - check channel renewals
 const ACCOUNT_STAGGER_MS = 1000; // 1 second between accounts (rate limiting)
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after startup
 const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes - consider account stuck
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let renewalInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 let recoveryRan = false; // Ensure recovery only runs once per server lifetime
 
@@ -35,8 +39,11 @@ export function startBackgroundSync(): void {
     return;
   }
 
+  const watchActive = isWatchEnabled();
+  const intervalMs = watchActive ? SYNC_INTERVAL_SAFETY_MS : SYNC_INTERVAL_POLLING_MS;
+
   console.log(
-    `[background-sync] Starting (interval: ${SYNC_INTERVAL_MS / 1000}s)`
+    `[background-sync] Starting (interval: ${intervalMs / 1000}s, watch: ${watchActive ? "active" : "polling"})`
   );
 
   // Schedule periodic sync
@@ -44,7 +51,16 @@ export function startBackgroundSync(): void {
     runSyncCycle().catch((err) => {
       console.error("[background-sync] Sync cycle failed:", err);
     });
-  }, SYNC_INTERVAL_MS);
+  }, intervalMs);
+
+  // Schedule watch channel renewal checks (only when watch is active)
+  if (watchActive) {
+    renewalInterval = setInterval(() => {
+      renewExpiringChannels().catch((err) => {
+        console.error("[background-sync] Channel renewal failed:", err);
+      });
+    }, CHANNEL_RENEWAL_INTERVAL_MS);
+  }
 
   // Run recovery and first sync after short delay
   setTimeout(async () => {
@@ -64,8 +80,12 @@ export function stopBackgroundSync(): void {
   if (syncInterval) {
     clearInterval(syncInterval);
     syncInterval = null;
-    console.log("[background-sync] Stopped");
   }
+  if (renewalInterval) {
+    clearInterval(renewalInterval);
+    renewalInterval = null;
+  }
+  console.log("[background-sync] Stopped");
 }
 
 /**

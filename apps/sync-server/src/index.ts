@@ -9,6 +9,7 @@ import { authRoute } from "./routes/auth.js";
 import { accountsRoute } from "./routes/accounts.js";
 import { calendarsRoute } from "./routes/calendars.js";
 import { eventsRoute } from "./routes/events.js";
+import { webhooksRoute } from "./routes/webhooks.js";
 import { closeDatabase } from "./db/index.js";
 import {
   startBackgroundSync,
@@ -121,7 +122,8 @@ const routes = app
   .route("/auth", authRoute)
   .route("/api/accounts", accountsRoute)
   .route("/api/calendars", calendarsRoute)
-  .route("/api/events", eventsRoute);
+  .route("/api/events", eventsRoute)
+  .route("/webhooks", webhooksRoute);
 
 // Export type for RPC client (future use)
 export type AppType = typeof routes;

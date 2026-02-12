@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
+import { cleanupAccountChannels } from "../services/watch-manager.js";
 import type { ApiAccount } from "@cathrin/shared-types";
 
 export const accountsRoute = new Hono()
@@ -45,6 +46,11 @@ export const accountsRoute = new Hono()
 
     const userId = c.get("userId");
     const accountId = c.req.param("id");
+
+    // Stop watch channels on Google's side before deleting (best effort)
+    await cleanupAccountChannels(accountId).catch((err) => {
+      console.error(`[accounts] Failed to cleanup watch channels for ${accountId}:`, err);
+    });
 
     const deleted = await db
       .delete(accounts)
