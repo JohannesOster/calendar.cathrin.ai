@@ -152,6 +152,7 @@ export const oauthPendingTokens = pgTable(
   "oauth_pending_tokens",
   {
     state: text("state").primaryKey(),
+    userId: text("user_id"), // Existing user ID for "add account" flow
     token: text("token"),
     error: text("error"),
     expiresAt: timestamp("expires_at").notNull(),

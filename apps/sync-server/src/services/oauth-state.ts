@@ -4,14 +4,16 @@ import { oauthPendingTokens } from "../db/schema.js";
 
 /**
  * Create a new OAuth state token and store it in DB.
+ * Optionally stores an existing userId for the "add account" flow.
  * Cleans up expired tokens as a side effect.
  */
-export async function createOAuthState(): Promise<string> {
+export async function createOAuthState(userId?: string): Promise<string> {
   const state = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
   await db!.insert(oauthPendingTokens).values({
     state,
+    userId: userId ?? null,
     expiresAt,
   });
 

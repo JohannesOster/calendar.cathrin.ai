@@ -27,17 +27,37 @@ export async function handleOAuthCallback(
 ): Promise<OAuthCallbackResult> {
   const { accessToken, refreshToken, googleUser, pendingState } = params;
 
+  // Check if this OAuth flow was initiated by an existing user (adding another account)
+  let existingUserId: string | null = null;
+  if (pendingState) {
+    const pendingRow = await db!.query.oauthPendingTokens.findFirst({
+      where: eq(oauthPendingTokens.state, pendingState),
+    });
+    existingUserId = pendingRow?.userId ?? null;
+  }
+
   // Find or create user
-  let user = await db!.query.users.findFirst({
-    where: eq(users.email, googleUser.email),
-  });
+  let user;
+  if (existingUserId) {
+    // "Add account" flow — link to the existing user
+    user = await db!.query.users.findFirst({
+      where: eq(users.id, existingUserId),
+    });
+  }
 
   if (!user) {
-    const [newUser] = await db!
-      .insert(users)
-      .values({ email: googleUser.email })
-      .returning();
-    user = newUser;
+    // First-time OAuth or fallback — find/create by Google email
+    user = await db!.query.users.findFirst({
+      where: eq(users.email, googleUser.email),
+    });
+
+    if (!user) {
+      const [newUser] = await db!
+        .insert(users)
+        .values({ email: googleUser.email })
+        .returning();
+      user = newUser;
+    }
   }
 
   // Check if account already exists

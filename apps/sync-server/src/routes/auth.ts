@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { googleAuth } from "@hono/oauth-providers/google";
-import { eq } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { sessions, users } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { renderOAuthSuccessPage } from "../lib/oauth-success-page.js";
 import { createOAuthState, validateOAuthState, pollOAuthState } from "../services/oauth-state.js";
 import { handleOAuthCallback } from "../services/oauth-callback.js";
+import { verifySessionToken } from "../lib/jwt.js";
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
@@ -38,7 +39,27 @@ export const authRoute = new Hono()
       return c.json({ error: "Database not configured" }, 500);
     }
 
-    const state = await createOAuthState();
+    // Optionally extract userId from auth header (for "add account" flow)
+    let userId: string | undefined;
+    const authHeader = c.req.header("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const payload = await verifySessionToken(authHeader.slice(7));
+        const session = await db.query.sessions.findFirst({
+          where: and(
+            eq(sessions.id, payload.sessionId),
+            gt(sessions.expiresAt, new Date())
+          ),
+        });
+        if (session) {
+          userId = payload.sub;
+        }
+      } catch {
+        // No valid auth — first-time OAuth, proceed without userId
+      }
+    }
+
+    const state = await createOAuthState(userId);
     return c.json({ state });
   })
   .get("/poll", async (c) => {
