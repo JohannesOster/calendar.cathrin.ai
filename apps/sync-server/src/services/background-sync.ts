@@ -6,13 +6,14 @@ import { GoogleCalendarService } from "./google-calendar.js";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
+import { notifyUser } from "./ws-manager.js";
 
 // =============================================================================
 // Sync Timing Configuration
 // =============================================================================
-// Server syncs with Google every 5 minutes using incremental sync (syncTokens).
-// Combined with client-side staleness (1 min) and polling (1 min), changes in
-// Google Calendar propagate to the UI within approximately 1-3 minutes.
+// Server syncs with Google every 2 minutes using incremental sync (syncTokens).
+// When changes are detected, affected week IDs are pushed to clients via
+// WebSocket for immediate re-fetch (<5s). Polling (1 min) acts as fallback.
 // =============================================================================
 
 const SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes - sync with Google
@@ -210,6 +211,15 @@ async function runSyncCycle(): Promise<void> {
         totalDeleted += result.deleted;
         accountsSucceeded++;
 
+        // Push changed weeks to connected clients via WebSocket
+        if (result.affectedWeekIds.length > 0) {
+          notifyUser(account.userId, {
+            type: "weeks_changed",
+            weekIds: result.affectedWeekIds,
+            source: "sync",
+          });
+        }
+
         // Check if reanchoring is needed (once per day per account)
         if (shouldCheckReanchor(account.lastReanchorAt)) {
           try {
@@ -259,7 +269,7 @@ async function runSyncCycle(): Promise<void> {
 async function syncAccount(
   accountId: string,
   email: string
-): Promise<{ updated: number; deleted: number }> {
+): Promise<{ updated: number; deleted: number; affectedWeekIds: string[] }> {
   if (!db) {
     throw new Error("Database not configured");
   }
@@ -273,11 +283,12 @@ async function syncAccount(
     // No calendars synced yet - fetch calendar list and set up sync state
     console.log(`[background-sync] No calendars for ${email}, fetching list`);
     await initializeCalendarSyncState(accountId);
-    return { updated: 0, deleted: 0 };
+    return { updated: 0, deleted: 0, affectedWeekIds: [] };
   }
 
   let totalUpdated = 0;
   let totalDeleted = 0;
+  const allAffectedWeekIds = new Set<string>();
 
   // Get calendar colors and access roles for events
   const accessToken = await getAccessToken(accountId);
@@ -314,6 +325,9 @@ async function syncAccount(
         );
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
+        for (const weekId of result.affectedWeekIds) {
+          allAffectedWeekIds.add(weekId);
+        }
       } else {
         // No syncToken - need full sync for this calendar
         console.log(
@@ -344,7 +358,7 @@ async function syncAccount(
     }
   }
 
-  return { updated: totalUpdated, deleted: totalDeleted };
+  return { updated: totalUpdated, deleted: totalDeleted, affectedWeekIds: Array.from(allAffectedWeekIds) };
 }
 
 /**
