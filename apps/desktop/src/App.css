@@ -218,6 +218,40 @@ body.dragging * {
   background-color: var(--event-color);
 }
 
+/* Acceptance: not responded — dashed outline, lighter background */
+.calendar-event--needs-action {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 7%,
+    var(--color-surface)
+  );
+  border-style: dashed;
+  border-color: color-mix(
+    in srgb,
+    var(--event-color) 50%,
+    var(--color-border-light)
+  );
+}
+
+.calendar-event--needs-action:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 14%,
+    var(--color-surface)
+  );
+}
+
+/* Acceptance: tentative — dashed ribbon */
+.calendar-event--tentative .calendar-event__ribbon {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--event-color) 0px,
+    var(--event-color) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
 /* Border for visual separation - only applied to overlapping events */
 .calendar-event--overlapping {
   border: 1px solid var(--color-border);
@@ -314,6 +348,41 @@ body.dragging * {
     var(--color-surface)
   );
   color: var(--event-color);
+  border: 1px solid transparent;
+}
+
+/* Acceptance: not responded — dashed outline, lighter background */
+.all-day-chip--needs-action {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 6%,
+    var(--color-surface)
+  );
+  border-style: dashed;
+  border-color: color-mix(
+    in srgb,
+    var(--event-color) 50%,
+    var(--color-border-light)
+  );
+}
+
+.all-day-chip--needs-action:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 12%,
+    var(--color-surface)
+  );
+}
+
+/* Acceptance: tentative — dashed ribbon */
+.all-day-chip--tentative .all-day-chip__ribbon {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--event-color) 0px,
+    var(--event-color) 3px,
+    transparent 3px,
+    transparent 6px
+  );
 }
 
 .all-day-chip:hover {
@@ -328,6 +397,7 @@ body.dragging * {
 .all-day-chip--selected {
   outline: none;
   background-color: var(--event-color);
+  border-color: transparent;
 }
 
 .all-day-chip:focus span,
@@ -357,6 +427,21 @@ body.dragging * {
   );
   color: var(--event-color);
   border-left: 3px solid var(--event-color);
+}
+
+/* Acceptance: not responded — lighter, dashed left border */
+.month-event-chip--needs-action {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 6%,
+    var(--color-surface)
+  );
+  border-left-style: dashed;
+}
+
+/* Acceptance: tentative — dashed left border */
+.month-event-chip--tentative {
+  border-left-style: dashed;
 }
 
 /* Today column tint — subtle accent wash */
