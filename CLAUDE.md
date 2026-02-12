@@ -211,6 +211,10 @@ Key: use `use:sortable` directive (not `ref={sortable}`). Always include `DragOv
 
 Import from specific paths: `@ark-ui/solid/popover`
 
+### Date/Time Arithmetic — Always Use UTC
+
+Never subtract two local `Date.getTime()` values and divide by `MS_PER_DAY` — DST transitions add/remove an hour, causing `Math.floor` off-by-one errors. Use `Date.UTC(y, m, d)` for day-count arithmetic instead.
+
 ### Progressive Event Loading
 
 Week-based caching. ISO Week vs Calendar Week gotcha: calendar shows Sun-Sat, ISO weeks are Mon-Sun. Use mid-week dates to avoid boundary issues.
