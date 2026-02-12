@@ -1,4 +1,4 @@
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import type { serverEvents } from "../db/schema.js";
 import type { InferSelectModel } from "drizzle-orm";
 
@@ -27,5 +27,6 @@ export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
     colorId: event.colorId || undefined,
     conferencing: (event.conferencing as { uri: string; label?: string }) || undefined,
     timeZone: event.timeZone || undefined,
+    attendees: (event.attendees as Attendee[]) || undefined,
   };
 }

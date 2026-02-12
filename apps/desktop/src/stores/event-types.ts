@@ -1,4 +1,4 @@
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import { mapProviderColor, googleColorIdToCathrinKey, CATHRIN_PALETTE } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 
@@ -24,6 +24,7 @@ export interface CalendarEvent {
   colorId?: CathrinColorKey;
   conferencing?: { uri: string; label?: string } | null;
   timeZone?: string;
+  attendees?: Attendee[];
 }
 
 export type EventPatch = {
@@ -61,5 +62,6 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     colorId: cathrinKey,
     conferencing: event.conferencing ?? undefined,
     timeZone: event.timeZone,
+    attendees: event.attendees,
   };
 }

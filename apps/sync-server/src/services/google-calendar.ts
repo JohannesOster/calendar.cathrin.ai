@@ -1,4 +1,4 @@
-import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendar, ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
 const GOOGLE_CALENDAR_LIST_URL =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
@@ -92,6 +92,16 @@ interface GoogleEvent {
     overrides?: { method: string; minutes: number }[];
   };
   conferenceData?: GoogleConferenceData;
+  attendees?: {
+    email: string;
+    displayName?: string;
+    responseStatus?: string;
+    organizer?: boolean;
+    self?: boolean;
+    optional?: boolean;
+    resource?: boolean;
+    comment?: string;
+  }[];
 }
 
 interface EventsListResponse {
@@ -470,6 +480,17 @@ export class GoogleCalendarService {
       ? { uri: videoEntryPoint.uri, label: event.conferenceData?.conferenceSolution?.name }
       : undefined;
 
+    // Map attendees, filtering out room resources
+    const attendees: Attendee[] | undefined = event.attendees
+      ?.filter(a => !a.resource)
+      .map(a => ({
+        email: a.email,
+        name: a.displayName || undefined,
+        responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+        isOrganizer: a.organizer || undefined,
+        isSelf: a.self || undefined,
+      }));
+
     return {
       id: event.id,
       calendarId,
@@ -489,6 +510,7 @@ export class GoogleCalendarService {
       colorId: event.colorId || undefined,
       conferencing,
       timeZone: timeZone || undefined,
+      attendees: attendees && attendees.length > 0 ? attendees : undefined,
     };
   }
 
