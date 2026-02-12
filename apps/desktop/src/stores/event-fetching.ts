@@ -144,22 +144,27 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     return;
   }
 
+  console.log("[events] Refreshing in background...");
+
   const { timeMin, timeMax } = window
     ? { timeMin: window.start.toISOString(), timeMax: window.end.toISOString() }
     : getTimeWindow();
 
-  // Show cached events immediately (stale-while-revalidate)
-  const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
-  if (cachedEvents.length > 0) {
-    setEvents(processEvents(cachedEvents, events()));
-  }
-
-  if (!window && cachedEvents.length === 0) {
-    setIsLoading(true);
-  }
   setEventsError(null);
+  let hasCachedData = false;
 
   try {
+    // Show cached events immediately (stale-while-revalidate)
+    const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
+    if (cachedEvents.length > 0) {
+      setEvents(processEvents(cachedEvents, events()));
+      hasCachedData = true;
+    }
+
+    if (!window && !hasCachedData) {
+      setIsLoading(true);
+    }
+
     const apiEvents = await apiFetch<ApiCalendarEvent[]>(
       `/api/events?from=${encodeURIComponent(timeMin)}&to=${encodeURIComponent(timeMax)}`
     );
@@ -189,7 +194,7 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     setLastRefreshed(now);
     await replaceEventsOnDisk(timeMin, timeMax, apiEvents);
   } catch (error) {
-    if (cachedEvents.length === 0) {
+    if (!hasCachedData) {
       if (error instanceof AuthError) {
         setEventsError("Please reconnect your account");
       } else {
@@ -214,7 +219,9 @@ export async function initializeEvents(): Promise<void> {
       setEvents(processEvents(cached, []));
     }
 
-    refreshEvents();
+    refreshEvents().catch((error) => {
+      console.error("[events] Background refresh failed:", error);
+    });
   }
 }
 
