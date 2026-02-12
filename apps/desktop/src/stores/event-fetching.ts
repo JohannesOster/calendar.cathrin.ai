@@ -138,7 +138,10 @@ function evictStaleWeeks(): void {
 // Public API
 // =============================================================================
 
-export async function refreshEvents(window?: { start: Date; end: Date }): Promise<void> {
+export async function refreshEvents(
+  window?: { start: Date; end: Date },
+  skipDiskLoad?: boolean,
+): Promise<void> {
   if (!isAuthenticated()) {
     setEvents([]);
     return;
@@ -151,14 +154,17 @@ export async function refreshEvents(window?: { start: Date; end: Date }): Promis
     : getTimeWindow();
 
   setEventsError(null);
-  let hasCachedData = false;
+  let hasCachedData = events().length > 0;
 
   try {
-    // Show cached events immediately (stale-while-revalidate)
-    const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
-    if (cachedEvents.length > 0) {
-      setEvents(processEvents(cachedEvents, events()));
-      hasCachedData = true;
+    // Show cached events immediately (stale-while-revalidate).
+    // Skip disk load when caller already loaded cache (e.g. initializeEvents).
+    if (!skipDiskLoad) {
+      const cachedEvents = await loadEventsFromDisk(timeMin, timeMax);
+      if (cachedEvents.length > 0) {
+        setEvents(processEvents(cachedEvents, events()));
+        hasCachedData = true;
+      }
     }
 
     if (!window && !hasCachedData) {
@@ -219,7 +225,7 @@ export async function initializeEvents(): Promise<void> {
       setEvents(processEvents(cached, []));
     }
 
-    refreshEvents().catch((error) => {
+    refreshEvents(undefined, true).catch((error) => {
       console.error("[events] Background refresh failed:", error);
     });
   }
