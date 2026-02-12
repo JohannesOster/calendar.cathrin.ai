@@ -260,6 +260,35 @@ describe("getSundayOfWeek", () => {
   });
 });
 
+describe("getWeekId DST resilience", () => {
+  it("returns correct week ID for summer dates (past DST spring-forward)", () => {
+    // July 7, 2026 (Tuesday) — deep in summer time (UTC+2 in CET zones)
+    // DST spring-forward in March causes getTime()-based arithmetic to lose an hour
+    // if not using UTC, leading to off-by-one week IDs.
+    const date = new Date(2026, 6, 7);
+    expect(getWeekId(date)).toBe("2026-W28");
+  });
+
+  it("returns correct week ID near DST spring-forward boundary", () => {
+    // March 30, 2025 (Sunday, DST spring-forward day in CET)
+    const date = new Date(2025, 2, 30);
+    const weekId = getWeekId(date);
+    // Verify roundtrip: bounds of this week should contain the date
+    const { start, end } = getWeekBounds(weekId);
+    expect(date.getTime()).toBeGreaterThanOrEqual(start.getTime());
+    expect(date.getTime()).toBeLessThanOrEqual(end.getTime());
+  });
+
+  it("returns correct week ID near DST fall-back boundary", () => {
+    // October 26, 2025 (Sunday, DST fall-back day in CET)
+    const date = new Date(2025, 9, 26);
+    const weekId = getWeekId(date);
+    const { start, end } = getWeekBounds(weekId);
+    expect(date.getTime()).toBeGreaterThanOrEqual(start.getTime());
+    expect(date.getTime()).toBeLessThanOrEqual(end.getTime());
+  });
+});
+
 describe("Week calculation consistency", () => {
   it("consecutive days have consistent week boundaries (weeks change on Sunday)", () => {
     // Our calendar uses Sunday-Saturday weeks, so week IDs change on Sunday

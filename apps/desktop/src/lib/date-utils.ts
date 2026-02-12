@@ -79,11 +79,12 @@ export function getWeekId(date: Date): string {
   const thursday = new Date(adjustedDate);
   thursday.setDate(adjustedDate.getDate() - ((adjustedDate.getDay() + 6) % 7) + 3);
 
-  // Get January 1st of the Thursday's year
-  const jan1 = new Date(thursday.getFullYear(), 0, 1);
-
-  // Calculate week number
-  const dayOfYear = Math.floor((thursday.getTime() - jan1.getTime()) / MS_PER_DAY);
+  // Calculate week number using UTC to avoid DST off-by-one errors.
+  // Local timestamps can differ by ±1 hour across DST boundaries,
+  // causing Math.floor to land on the wrong day.
+  const thursdayUTC = Date.UTC(thursday.getFullYear(), thursday.getMonth(), thursday.getDate());
+  const jan1UTC = Date.UTC(thursday.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((thursdayUTC - jan1UTC) / MS_PER_DAY);
   const weekNum = Math.floor(dayOfYear / DAYS_PER_WEEK) + 1;
 
   return `${thursday.getFullYear()}-W${weekNum.toString().padStart(2, "0")}`;

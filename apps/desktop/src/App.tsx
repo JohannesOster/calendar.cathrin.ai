@@ -97,7 +97,7 @@ function App() {
     on(activeVisibleWeeks, (weeks) => {
       if (weeks.length === 0) return;
 
-      // Update visible weeks immediately (triggers cancellation of non-visible fetches)
+      // Update visible weeks immediately
       updateVisibleWeeks(weeks);
 
       // Clear any pending debounce
