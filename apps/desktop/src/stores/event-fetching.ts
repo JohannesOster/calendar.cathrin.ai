@@ -33,6 +33,7 @@ import {
   getSetVisibleWeeksForPolling,
 } from "./events";
 import { dragActiveEventId } from "./event-drag";
+import { centerDate } from "./calendar-navigation";
 
 // =============================================================================
 // Configuration
@@ -51,12 +52,13 @@ let currentRequestId = 0;
 // =============================================================================
 
 function getTimeWindow(): { timeMin: string; timeMax: string } {
-  const now = new Date();
-  const min = new Date(now);
+  // Use the current center date (restored from last session or today)
+  const center = centerDate();
+  const min = new Date(center);
   min.setDate(min.getDate() - DAYS_BEFORE);
   min.setHours(0, 0, 0, 0);
 
-  const max = new Date(now);
+  const max = new Date(center);
   max.setDate(max.getDate() + DAYS_AFTER);
   max.setHours(23, 59, 59, 999);
 

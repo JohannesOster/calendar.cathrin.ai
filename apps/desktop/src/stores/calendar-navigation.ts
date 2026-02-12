@@ -8,24 +8,60 @@ export const getDateKey = (date: Date): string =>
 // Helper to check if a date is a week start (Sunday)
 export const isWeekStart = (date: Date): boolean => date.getDay() === 0;
 
+// =============================================================================
+// Last-viewed date persistence
+// =============================================================================
+const LAST_VIEWED_DATE_KEY = "last-viewed-date";
+const MAX_RESTORE_DAYS = 60;
+
+function getSundayOf(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() - d.getDay());
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getRestoredDate(): Date | null {
+  try {
+    const saved = localStorage.getItem(LAST_VIEWED_DATE_KEY);
+    if (!saved) return null;
+    const date = new Date(saved);
+    if (isNaN(date.getTime())) return null;
+    const daysDiff = Math.abs(Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return daysDiff <= MAX_RESTORE_DAYS ? date : null;
+  } catch {
+    return null;
+  }
+}
+
 // Initial Reference Date (Anchor)
 // All positions are calculated relative to this date being at CENTER_OFFSET
 // This is now a signal so we can re-anchor when navigating far from current position
 export const getInitialAnchor = () => {
-  const today = new Date();
-  const d = new Date(today);
-  d.setDate(today.getDate() - today.getDay()); // Start with Sunday
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const restored = getRestoredDate();
+  return restored ? getSundayOf(restored) : getSundayOf(new Date());
 };
 
 export const [anchorDate, setAnchorDate] = createSignal(getInitialAnchor());
 
 // Export signals for external control
-// Initialize to anchor (Sunday of current week) for consistent startup
-export const [centerDate, setCenterDate] = createSignal(
-  new Date(getInitialAnchor()),
+// Initialize to restored date or anchor (Sunday of current week)
+const _restoredCenter = getRestoredDate();
+const [_centerDate, _setCenterDate] = createSignal(
+  _restoredCenter ?? new Date(getInitialAnchor()),
 );
+
+// Debounced persistence of center date
+let _persistTimer: ReturnType<typeof setTimeout> | undefined;
+
+export const centerDate = _centerDate;
+export function setCenterDate(date: Date): void {
+  _setCenterDate(date);
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    localStorage.setItem(LAST_VIEWED_DATE_KEY, date.toISOString());
+  }, 500);
+}
 // Flash highlight signal - set this to a date to trigger a flash animation on that day column
 export const [flashDate, setFlashDate] = createSignal<Date | null>(null);
 // The actual first visible day based on scroll position (updates with daily granularity)
