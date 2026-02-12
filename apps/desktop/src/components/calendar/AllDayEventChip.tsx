@@ -1,4 +1,5 @@
 import { Show, onMount, onCleanup } from "solid-js";
+import { Users } from "lucide-solid";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
@@ -206,6 +207,15 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
       <Show when={hasTimes()}>
         <span class="shrink-0 text-2xs opacity-50 ml-1">
           {formatChipTimeRange(props.event.start, props.event.end)}
+        </span>
+      </Show>
+      <Show when={props.event.attendees && props.event.attendees.length > 1}>
+        <span
+          class="shrink-0 inline-flex items-center gap-0.5 text-2xs opacity-50 ml-1"
+          aria-label={`${props.event.attendees!.length} participants`}
+        >
+          <Users size={10} aria-hidden="true" />
+          {props.event.attendees!.length}
         </span>
       </Show>
     </div>

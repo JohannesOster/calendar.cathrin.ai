@@ -7,6 +7,7 @@ import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
+import { Users } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
 // Shared signal: all segments of the focused event highlight together
@@ -272,10 +273,23 @@ export function CalendarEvent(props: CalendarEventProps) {
               >
                 {props.event.title}
               </div>
-              <div class="text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
-                {getHeight() < SHORT_TIME_THRESHOLD_PX
-                  ? formatCompactTime(props.event.start, props.event.timeZone)
-                  : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
+              <div class="flex items-center gap-1 text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
+                <span>
+                  {getHeight() < SHORT_TIME_THRESHOLD_PX
+                    ? formatCompactTime(props.event.start, props.event.timeZone)
+                    : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
+                </span>
+                <Show when={props.event.attendees && props.event.attendees.length > 1}>
+                  <span
+                    class="inline-flex items-center gap-0.5"
+                    aria-label={`${props.event.attendees!.length} participants`}
+                  >
+                    <Users size={10} aria-hidden="true" />
+                    <Show when={getHeight() >= SHORT_TIME_THRESHOLD_PX}>
+                      {props.event.attendees!.length}
+                    </Show>
+                  </span>
+                </Show>
               </div>
               <Show when={showTzIndicator()}>
                 <div class="text-2xs font-light opacity-60">
