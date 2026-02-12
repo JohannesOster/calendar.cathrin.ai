@@ -222,7 +222,7 @@ body.dragging * {
 .calendar-event--needs-action {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 7%,
+    var(--event-color) 3%,
     var(--color-surface)
   );
   border-style: dashed;
@@ -252,9 +252,10 @@ body.dragging * {
   );
 }
 
-/* Border for visual separation - only applied to overlapping events */
+/* Border for visual separation - only applied to overlapping events.
+   Use border-color only (not shorthand) to preserve border-style from acceptance modifiers. */
 .calendar-event--overlapping {
-  border: 1px solid var(--color-border);
+  border-color: var(--color-border);
 }
 
 .calendar-event:hover {
@@ -355,7 +356,7 @@ body.dragging * {
 .all-day-chip--needs-action {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 6%,
+    var(--event-color) 3%,
     var(--color-surface)
   );
   border-style: dashed;
@@ -433,7 +434,7 @@ body.dragging * {
 .month-event-chip--needs-action {
   background-color: color-mix(
     in srgb,
-    var(--event-color) 6%,
+    var(--event-color) 3%,
     var(--color-surface)
   );
   border-left-style: dashed;
