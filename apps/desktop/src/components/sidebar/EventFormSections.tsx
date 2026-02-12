@@ -31,6 +31,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
+import { rsvpEvent } from "../../stores/events";
+import { selectedEventId } from "../../stores/event-selection";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
 import type { EventFormState } from "./useEventFormState";
 
@@ -631,6 +633,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 function AttendeeList(props: { attendees: Attendee[] }) {
   const sorted = createMemo(() => sortAttendees(props.attendees));
+  const selfAttendee = createMemo(() => props.attendees.find(a => a.isSelf));
+  const canRsvp = createMemo(() => {
+    const self = selfAttendee();
+    return self && !self.isOrganizer;
+  });
 
   return (
     <div class="space-y-0.5">
@@ -663,6 +670,64 @@ function AttendeeList(props: { attendees: Attendee[] }) {
           )}
         </For>
       </div>
+      <Show when={canRsvp()}>
+        <RsvpButtons currentStatus={selfAttendee()!.responseStatus} />
+      </Show>
+    </div>
+  );
+}
+
+function RsvpButtons(props: { currentStatus: Attendee["responseStatus"] }) {
+  const [loading, setLoading] = createSignal(false);
+
+  function handleRsvp(status: "accepted" | "declined" | "tentative"): void {
+    const eventId = selectedEventId();
+    if (!eventId || loading()) return;
+    setLoading(true);
+    rsvpEvent(eventId, status)
+      .catch((err) => console.error("[rsvp] Failed:", err))
+      .finally(() => setLoading(false));
+  }
+
+  const buttonClass = (status: string) => {
+    const isActive = props.currentStatus === status;
+    return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
+      isActive
+        ? "bg-fg text-surface font-medium"
+        : "bg-surface-hover text-fg-muted hover:text-fg"
+    } ${loading() ? "opacity-50 pointer-events-none" : ""}`;
+  };
+
+  return (
+    <div
+      class="flex gap-1 pl-[30px] pr-2 pt-1"
+      role="group"
+      aria-label="Your response"
+    >
+      <button
+        class={buttonClass("accepted")}
+        aria-pressed={props.currentStatus === "accepted"}
+        onClick={() => handleRsvp("accepted")}
+        disabled={loading()}
+      >
+        Accept
+      </button>
+      <button
+        class={buttonClass("tentative")}
+        aria-pressed={props.currentStatus === "tentative"}
+        onClick={() => handleRsvp("tentative")}
+        disabled={loading()}
+      >
+        Maybe
+      </button>
+      <button
+        class={buttonClass("declined")}
+        aria-pressed={props.currentStatus === "declined"}
+        onClick={() => handleRsvp("declined")}
+        disabled={loading()}
+      >
+        Decline
+      </button>
     </div>
   );
 }

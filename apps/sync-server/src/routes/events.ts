@@ -12,7 +12,7 @@ import {
   getCalendarsToCheck,
 } from "../services/calendar-sync.js";
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
-import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle } from "../services/event-mutations.js";
+import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle, rsvpEventViaGoogle } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 
 const querySchema = z
@@ -217,6 +217,45 @@ export const eventsRoute = new Hono()
       throw error;
     }
   })
+  .patch(
+    "/:eventId/rsvp",
+    zValidator(
+      "json",
+      z.object({
+        responseStatus: z.enum(["accepted", "declined", "tentative"]),
+      })
+    ),
+    async (c) => {
+      if (!db) {
+        return c.json({ error: "Database not configured" }, 500);
+      }
+
+      const userId = c.get("userId");
+      const googleEventId = c.req.param("eventId");
+      const { responseStatus } = c.req.valid("json");
+
+      const accountIds = await getUserAccountIds(userId);
+      if (accountIds.length === 0) {
+        return c.json({ error: "No accounts found" }, 404);
+      }
+
+      const event = await findUserEvent(accountIds, googleEventId);
+      if (!event) {
+        return c.json({ error: "Event not found" }, 404);
+      }
+
+      try {
+        const apiEvent = await rsvpEventViaGoogle(
+          event.accountId, event.calendarId, googleEventId, responseStatus, event
+        );
+        return c.json(apiEvent);
+      } catch (error) {
+        const errorResponse = handleGoogleApiError(error, c);
+        if (errorResponse) return errorResponse;
+        throw error;
+      }
+    }
+  )
   .post(
     "/:eventId/move",
     zValidator(

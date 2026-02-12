@@ -129,6 +129,7 @@ export interface GoogleEventPatch {
   reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
   colorId?: string | null;
   conferenceData?: GoogleConferenceData | null;
+  attendees?: { email: string; responseStatus?: string; self?: boolean; organizer?: boolean }[];
 }
 
 /**
@@ -333,11 +334,15 @@ export class GoogleCalendarService {
   async patchEvent(
     calendarId: string,
     eventId: string,
-    patch: GoogleEventPatch
+    patch: GoogleEventPatch,
+    options?: { sendUpdates?: "all" | "externalOnly" | "none" }
   ): Promise<GoogleEvent> {
     const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
     if (patch.conferenceData !== undefined) {
       url.searchParams.set("conferenceDataVersion", "1");
+    }
+    if (options?.sendUpdates) {
+      url.searchParams.set("sendUpdates", options.sendUpdates);
     }
 
     const response = await fetch(url.toString(), {

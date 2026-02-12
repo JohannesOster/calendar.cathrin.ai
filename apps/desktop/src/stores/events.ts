@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { apiFetch } from "../lib/api";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
+import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent, EventPatch } from "./event-types";
 import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 
@@ -246,6 +247,49 @@ export async function moveEvent(
         e.id === eventId
           ? { ...e, calendarId: originalCalendarId, color: originalColor }
           : e
+      )
+    );
+    throw error;
+  }
+}
+
+// =============================================================================
+// RSVP
+// =============================================================================
+
+/**
+ * Update the current user's RSVP status on an event. Optimistic update with rollback.
+ */
+export async function rsvpEvent(
+  eventId: string,
+  responseStatus: Attendee["responseStatus"],
+): Promise<void> {
+  const event = events().find((e) => e.id === eventId);
+  if (!event?.attendees) return;
+
+  const originalAttendees = event.attendees;
+
+  // Optimistic: update the self attendee's responseStatus
+  const updatedAttendees = event.attendees.map(a =>
+    a.isSelf ? { ...a, responseStatus } : a
+  );
+  setEvents((prev) =>
+    prev.map((e) =>
+      e.id === eventId ? { ...e, attendees: updatedAttendees } : e
+    )
+  );
+
+  try {
+    await apiFetch(`/api/events/${encodeURIComponent(eventId)}/rsvp`, {
+      method: "PATCH",
+      body: JSON.stringify({ responseStatus }),
+    });
+  } catch (error) {
+    console.error(`[events] Failed to RSVP event ${eventId}:`, error);
+    // Rollback
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId ? { ...e, attendees: originalAttendees } : e
       )
     );
     throw error;

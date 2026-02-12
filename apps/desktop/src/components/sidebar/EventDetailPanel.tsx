@@ -1,7 +1,8 @@
-import { Show, For, createMemo } from "solid-js";
+import { Show, For, createMemo, createSignal } from "solid-js";
 import { Clock, MapPin, AlignLeft, Users, Check, X, HelpCircle, Circle } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
+import { rsvpEvent } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
 
@@ -121,33 +122,45 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
 
         {/* Attendees */}
         <Show when={props.event.attendees?.length}>
-          <div class="px-3 py-2 border-t border-border">
-            <div class="flex items-center gap-2 text-sm text-fg-muted mb-1.5">
-              <Users size={14} class="shrink-0" />
-              <span>Participants ({props.event.attendees!.length})</span>
-            </div>
-            <div class="max-h-52 overflow-y-auto">
-              <For each={sortDetailAttendees(props.event.attendees!)}>
-                {(attendee) => (
-                  <div
-                    class="flex items-center gap-2 pl-[22px] py-1.5"
-                    role="listitem"
-                    aria-label={`${attendee.name || attendee.email}, ${DETAIL_STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
-                  >
-                    <DetailStatusIcon status={attendee.responseStatus} />
-                    <span class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium" : ""}`}>
-                      {attendee.isSelf
-                        ? (attendee.name ? `${attendee.name} (You)` : "You")
-                        : (attendee.name || attendee.email)}
-                    </span>
-                    <Show when={attendee.isOrganizer}>
-                      <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
-                    </Show>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
+          {(_) => {
+            const selfAttendee = () => props.event.attendees!.find(a => a.isSelf);
+            const canRsvp = () => {
+              const self = selfAttendee();
+              return self && !self.isOrganizer;
+            };
+            return (
+              <div class="px-3 py-2 border-t border-border">
+                <div class="flex items-center gap-2 text-sm text-fg-muted mb-1.5">
+                  <Users size={14} class="shrink-0" />
+                  <span>Participants ({props.event.attendees!.length})</span>
+                </div>
+                <div class="max-h-52 overflow-y-auto">
+                  <For each={sortDetailAttendees(props.event.attendees!)}>
+                    {(attendee) => (
+                      <div
+                        class="flex items-center gap-2 pl-[22px] py-1.5"
+                        role="listitem"
+                        aria-label={`${attendee.name || attendee.email}, ${DETAIL_STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
+                      >
+                        <DetailStatusIcon status={attendee.responseStatus} />
+                        <span class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium" : ""}`}>
+                          {attendee.isSelf
+                            ? (attendee.name ? `${attendee.name} (You)` : "You")
+                            : (attendee.name || attendee.email)}
+                        </span>
+                        <Show when={attendee.isOrganizer}>
+                          <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+                <Show when={canRsvp()}>
+                  <DetailRsvpButtons eventId={props.event.id} currentStatus={selfAttendee()!.responseStatus} />
+                </Show>
+              </div>
+            );
+          }}
         </Show>
 
         {/* Calendar info */}
@@ -166,6 +179,60 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["responseStatus"] }) {
+  const [loading, setLoading] = createSignal(false);
+
+  function handleRsvp(status: "accepted" | "declined" | "tentative"): void {
+    if (loading()) return;
+    setLoading(true);
+    rsvpEvent(props.eventId, status)
+      .catch((err) => console.error("[rsvp] Failed:", err))
+      .finally(() => setLoading(false));
+  }
+
+  const buttonClass = (status: string) => {
+    const isActive = props.currentStatus === status;
+    return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
+      isActive
+        ? "bg-fg text-surface font-medium"
+        : "bg-surface-hover text-fg-muted hover:text-fg"
+    } ${loading() ? "opacity-50 pointer-events-none" : ""}`;
+  };
+
+  return (
+    <div
+      class="flex gap-1 pl-[22px] pr-2 pt-2"
+      role="group"
+      aria-label="Your response"
+    >
+      <button
+        class={buttonClass("accepted")}
+        aria-pressed={props.currentStatus === "accepted"}
+        onClick={() => handleRsvp("accepted")}
+        disabled={loading()}
+      >
+        Accept
+      </button>
+      <button
+        class={buttonClass("tentative")}
+        aria-pressed={props.currentStatus === "tentative"}
+        onClick={() => handleRsvp("tentative")}
+        disabled={loading()}
+      >
+        Maybe
+      </button>
+      <button
+        class={buttonClass("declined")}
+        aria-pressed={props.currentStatus === "declined"}
+        onClick={() => handleRsvp("declined")}
+        disabled={loading()}
+      >
+        Decline
+      </button>
     </div>
   );
 }

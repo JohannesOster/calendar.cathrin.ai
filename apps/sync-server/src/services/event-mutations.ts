@@ -8,7 +8,7 @@ import {
 } from "./google-calendar.js";
 import { upsertServerEvent } from "./event-storage.js";
 import { mapServerEventToApi } from "./event-mapper.js";
-import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import type { InferSelectModel } from "drizzle-orm";
 
 type ServerEvent = InferSelectModel<typeof serverEvents>;
@@ -323,4 +323,54 @@ export async function moveEventViaGoogle(
   });
 
   return mapServerEventToApi(updated!);
+}
+
+/**
+ * Update the current user's RSVP status on an event via Google Calendar API.
+ * Reads the attendees array from DB, updates the self entry's responseStatus,
+ * PATCHes to Google, and updates the local cache.
+ */
+export async function rsvpEventViaGoogle(
+  accountId: string,
+  calendarId: string,
+  googleEventId: string,
+  responseStatus: "accepted" | "declined" | "tentative",
+  existingEvent: ServerEvent
+): Promise<ApiCalendarEvent> {
+  const attendees = (existingEvent.attendees as Attendee[]) || [];
+  if (attendees.length === 0) {
+    throw new Error("Event has no attendees");
+  }
+
+  // Build the Google-format attendees array with updated self status
+  const googleAttendees = attendees.map(a => ({
+    email: a.email,
+    responseStatus: a.isSelf ? responseStatus : a.responseStatus,
+    ...(a.isOrganizer && { organizer: true }),
+    ...(a.isSelf && { self: true }),
+  }));
+
+  const accessToken = await getAccessToken(accountId);
+  const service = new GoogleCalendarService(accessToken);
+  await service.patchEvent(
+    calendarId,
+    googleEventId,
+    { attendees: googleAttendees },
+    { sendUpdates: "none" }
+  );
+
+  // Update attendees in local DB
+  const updatedAttendees = attendees.map(a =>
+    a.isSelf ? { ...a, responseStatus } : a
+  );
+
+  await db!
+    .update(serverEvents)
+    .set({ attendees: updatedAttendees, updatedAt: new Date() })
+    .where(eq(serverEvents.id, existingEvent.id));
+
+  return mapServerEventToApi({
+    ...existingEvent,
+    attendees: updatedAttendees,
+  } as ServerEvent);
 }
