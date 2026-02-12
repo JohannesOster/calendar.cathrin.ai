@@ -105,6 +105,7 @@ export const eventsRoute = new Hono()
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
+        attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).optional(),
       })
     ),
     async (c) => {
@@ -113,7 +114,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -127,7 +128,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await createEventViaGoogle(
-          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone
+          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees
         );
         return c.json(apiEvent, 201);
       } catch (error) {
@@ -157,6 +158,7 @@ export const eventsRoute = new Hono()
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
+        attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
       })
     ),
     async (c) => {

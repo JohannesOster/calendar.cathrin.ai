@@ -303,6 +303,7 @@ export class GoogleCalendarService {
       reminders?: { useDefault: boolean; overrides?: { method: string; minutes: number }[] };
       colorId?: string;
       conferenceData?: GoogleConferenceData;
+      attendees?: { email: string; displayName?: string }[];
     }
   ): Promise<GoogleEvent> {
     const url = new URL(`${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`);

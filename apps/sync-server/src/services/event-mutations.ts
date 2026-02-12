@@ -32,7 +32,8 @@ export async function createEventViaGoogle(
   reminders?: { method: string; minutes: number }[],
   colorId?: string,
   conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null,
-  timeZone?: string
+  timeZone?: string,
+  attendees?: { email: string; name?: string }[]
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -58,6 +59,9 @@ export async function createEventViaGoogle(
           conferenceSolutionKey: { type: "hangoutsMeet" },
         },
       },
+    }),
+    ...(attendees && attendees.length > 0 && {
+      attendees: attendees.map(a => ({ email: a.email, displayName: a.name })),
     }),
   });
 
@@ -94,6 +98,15 @@ export async function createEventViaGoogle(
     colorId: googleEvent.colorId || colorId || undefined,
     conferencing: conferencingResult,
     timeZone: timeZone || undefined,
+    attendees: googleEvent.attendees
+      ?.filter(a => !a.resource)
+      .map(a => ({
+        email: a.email,
+        name: a.displayName || undefined,
+        responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+        isOrganizer: a.organizer || undefined,
+        isSelf: a.self || undefined,
+      })),
   };
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
@@ -122,6 +135,7 @@ export async function updateEventViaGoogle(
     colorId?: string | null;
     conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
     timeZone?: string;
+    attendees?: { email: string; name?: string }[] | null;
   },
   existingEvent: ServerEvent
 ): Promise<ApiCalendarEvent> {
@@ -151,6 +165,11 @@ export async function updateEventViaGoogle(
       };
     }
     // Manual URLs don't go through Google's conferenceData — stored locally only
+  }
+  if (patch.attendees !== undefined) {
+    googlePatch.attendees = patch.attendees
+      ? patch.attendees.map(a => ({ email: a.email }))
+      : [];
   }
 
   const useDate = patch.isAllDay ?? existingEvent.isAllDay;
@@ -215,6 +234,17 @@ export async function updateEventViaGoogle(
       ...(patch.timeZone !== undefined && {
         timeZone: patch.timeZone || null,
       }),
+      ...(patch.attendees !== undefined && {
+        attendees: updated.attendees
+          ?.filter(a => !a.resource)
+          .map(a => ({
+            email: a.email,
+            name: a.displayName || undefined,
+            responseStatus: (a.responseStatus || "needsAction"),
+            isOrganizer: a.organizer || undefined,
+            isSelf: a.self || undefined,
+          })) ?? null,
+      }),
       updatedAt: new Date(),
     })
     .where(eq(serverEvents.id, existingEvent.id));
@@ -258,6 +288,17 @@ export async function updateEventViaGoogle(
     timeZone: patch.timeZone !== undefined
       ? (patch.timeZone || undefined)
       : (existingEvent.timeZone || undefined),
+    attendees: patch.attendees !== undefined
+      ? (updated.attendees
+          ?.filter(a => !a.resource)
+          .map(a => ({
+            email: a.email,
+            name: a.displayName || undefined,
+            responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
+            isOrganizer: a.organizer || undefined,
+            isSelf: a.self || undefined,
+          })) || undefined)
+      : (existingEvent.attendees as Attendee[] | undefined),
   };
 }
 
