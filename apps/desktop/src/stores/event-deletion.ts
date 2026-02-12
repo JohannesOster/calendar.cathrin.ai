@@ -78,7 +78,10 @@ export function onDeletion(fn: DeletionListener): () => void {
  * Fire the actual DELETE API call for an event.
  */
 function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void {
-  const url = `/api/events/${encodeURIComponent(event.googleEventId)}${sendUpdates ? `?sendUpdates=${sendUpdates}` : ""}`;
+  const params = new URLSearchParams();
+  params.set("calendarId", event.calendarId);
+  if (sendUpdates) params.set("sendUpdates", sendUpdates);
+  const url = `/api/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`;
   apiFetch<{ success: boolean }>(url, {
     method: "DELETE",
   })

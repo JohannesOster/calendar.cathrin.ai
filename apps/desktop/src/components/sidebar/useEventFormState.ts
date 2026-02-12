@@ -386,7 +386,7 @@ export function useEventFormState() {
     rsvpTimer = setTimeout(() => {
       rsvpTimer = null;
       rsvpOriginalAttendees = null;
-      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp`, {
+      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
         method: "PATCH",
         body: JSON.stringify({ responseStatus }),
       }).catch((err) => {

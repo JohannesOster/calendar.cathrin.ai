@@ -217,6 +217,8 @@ interface CachedEvent {
   is_all_day: boolean;
   color: string;
   provider: string;
+  is_read_only: boolean;
+  read_only_reason: string | null;
 }
 
 export async function loadEventsFromDisk(
@@ -236,7 +238,8 @@ export async function loadEventsFromDisk(
       end: new Date(event.end),
       isAllDay: event.is_all_day,
       color: event.color,
-      isReadOnly: false,
+      isReadOnly: event.is_read_only,
+      readOnlyReason: event.read_only_reason ?? undefined,
     }));
   } catch (error) {
     console.warn("[event-cache] Failed to load from cache:", error);
@@ -253,6 +256,8 @@ interface ApiEventForCache {
   isAllDay: boolean;
   color: string;
   provider: string;
+  isReadOnly: boolean;
+  readOnlyReason?: string;
 }
 
 export async function saveEventsToDisk(events: ApiEventForCache[]): Promise<void> {
@@ -266,6 +271,8 @@ export async function saveEventsToDisk(events: ApiEventForCache[]): Promise<void
       is_all_day: event.isAllDay,
       color: event.color,
       provider: event.provider,
+      is_read_only: event.isReadOnly,
+      read_only_reason: event.readOnlyReason ?? null,
     }));
     await invoke("cache_events_locally", { events: cached });
   } catch (error) {
@@ -301,6 +308,8 @@ export async function restoreCachedEventToDisk(event: {
   end: Date;
   isAllDay: boolean;
   color: string;
+  isReadOnly: boolean;
+  readOnlyReason?: string;
 }): Promise<void> {
   try {
     await invoke("cache_events_locally", {
@@ -314,6 +323,8 @@ export async function restoreCachedEventToDisk(event: {
           is_all_day: event.isAllDay,
           color: event.color,
           provider: "google",
+          is_read_only: event.isReadOnly,
+          read_only_reason: event.readOnlyReason ?? null,
         },
       ],
     });

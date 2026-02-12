@@ -175,7 +175,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "No accounts found" }, 404);
       }
 
-      const event = await findUserEvent(accountIds, googleEventId);
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -206,7 +207,8 @@ export const eventsRoute = new Hono()
       return c.json({ error: "No accounts found" }, 404);
     }
 
-    const event = await findUserEvent(accountIds, googleEventId);
+    const calendarId = c.req.query("calendarId");
+    const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
     if (!event) {
       return c.json({ error: "Event not found" }, 404);
     }
@@ -242,7 +244,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "No accounts found" }, 404);
       }
 
-      const event = await findUserEvent(accountIds, googleEventId);
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -281,7 +284,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "No accounts found" }, 404);
       }
 
-      const event = await findUserEvent(accountIds, googleEventId);
+      const calendarId = c.req.query("calendarId");
+      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }

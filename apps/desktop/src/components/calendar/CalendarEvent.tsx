@@ -83,6 +83,14 @@ export function CalendarEvent(props: CalendarEventProps) {
     if (e.button !== 0) return;
     if (props.event.isAllDay) return;
 
+    // Read-only events: click-to-select only, no drag
+    if (props.event.isReadOnly) {
+      e.preventDefault();
+      contentRef?.focus();
+      selectEvent(props.event.id);
+      return;
+    }
+
     // Don't start move drag from the resize handle
     const target = e.target as HTMLElement;
     if (target.closest("[data-resize-handle]")) return;
@@ -92,7 +100,6 @@ export function CalendarEvent(props: CalendarEventProps) {
     let started = false;
 
     const onMove = (me: PointerEvent) => {
-      if (props.event.isReadOnly) return;
       const dx = me.clientX - startX;
       const dy = me.clientY - startY;
       if (!started && Math.sqrt(dx * dx + dy * dy) >= MOVE_DRAG_THRESHOLD) {

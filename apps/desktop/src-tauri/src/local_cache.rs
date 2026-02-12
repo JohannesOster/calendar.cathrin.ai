@@ -25,6 +25,8 @@ pub struct CachedEvent {
     pub is_all_day: bool,
     pub color: String,
     pub provider: String,
+    pub is_read_only: bool,
+    pub read_only_reason: Option<String>,
 }
 
 /// Local SQLite cache for offline event access
@@ -59,7 +61,9 @@ impl LocalCache {
                 is_all_day INTEGER DEFAULT 0,
                 color TEXT,
                 provider TEXT NOT NULL,
-                cached_at INTEGER NOT NULL
+                cached_at INTEGER NOT NULL,
+                is_read_only INTEGER DEFAULT 0,
+                read_only_reason TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_events_dates ON cached_events(start, end);
@@ -82,7 +86,7 @@ impl LocalCache {
         let conn = self.conn.lock().map_err(|_| CacheError::Lock)?;
 
         let mut stmt = conn.prepare(
-            "SELECT id, calendar_id, title, start, end, is_all_day, color, provider
+            "SELECT id, calendar_id, title, start, end, is_all_day, color, provider, is_read_only, read_only_reason
              FROM cached_events
              WHERE start <= ?1 AND end >= ?2
              ORDER BY start",
@@ -99,6 +103,8 @@ impl LocalCache {
                     is_all_day: row.get::<_, i32>(5)? != 0,
                     color: row.get(6)?,
                     provider: row.get(7)?,
+                    is_read_only: row.get::<_, i32>(8).unwrap_or(0) != 0,
+                    read_only_reason: row.get(9)?,
                 })
             })?
             .collect::<SqliteResult<Vec<_>>>()?;
@@ -119,8 +125,8 @@ impl LocalCache {
         for event in events {
             conn.execute(
                 "INSERT OR REPLACE INTO cached_events
-                 (id, calendar_id, title, start, end, is_all_day, color, provider, cached_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                 (id, calendar_id, title, start, end, is_all_day, color, provider, cached_at, is_read_only, read_only_reason)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     event.id,
                     event.calendar_id,
@@ -131,6 +137,8 @@ impl LocalCache {
                     event.color,
                     event.provider,
                     now,
+                    event.is_read_only as i32,
+                    event.read_only_reason,
                 ],
             )?;
             count += 1;

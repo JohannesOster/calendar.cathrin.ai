@@ -196,7 +196,7 @@ export async function updateEvent(
   }
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
@@ -240,7 +240,7 @@ export async function moveEvent(
   );
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/move`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/move?calendarId=${encodeURIComponent(event.calendarId)}`, {
       method: "POST",
       body: JSON.stringify({ targetCalendarId }),
     });
