@@ -3,12 +3,29 @@
  */
 
 /**
+ * Extract hours and minutes from a Date, optionally in a specific IANA timezone.
+ * Without timezone, uses the local system timezone via Date.getHours/getMinutes.
+ */
+function getHoursAndMinutes(date: Date, timeZone?: string): { hours: number; minutes: number } {
+  if (!timeZone) return { hours: date.getHours(), minutes: date.getMinutes() };
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(date);
+  const hours = parseInt(parts.find(p => p.type === "hour")?.value ?? "0", 10);
+  const minutes = parseInt(parts.find(p => p.type === "minute")?.value ?? "0", 10);
+  return { hours: hours === 24 ? 0 : hours, minutes };
+}
+
+/**
  * Format a Date to a 12-hour display string for the EventForm.
  * Includes a space before AM/PM: "9 AM", "2:30 PM"
+ * When timeZone is provided, displays the time in that timezone.
  */
-export function formatTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+export function formatTime(date: Date, timeZone?: string): string {
+  const { hours, minutes } = getHoursAndMinutes(date, timeZone);
   const period = hours >= 12 ? "PM" : "AM";
   const displayHour = hours % 12 || 12;
   if (minutes === 0) return `${displayHour} ${period}`;
@@ -18,10 +35,10 @@ export function formatTime(date: Date): string {
 /**
  * Format a Date to a compact 12-hour string (no space before AM/PM).
  * Used on calendar event chips: "9AM", "2:30PM"
+ * When timeZone is provided, displays the time in that timezone.
  */
-export function formatCompactTime(date: Date): string {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+export function formatCompactTime(date: Date, timeZone?: string): string {
+  const { hours, minutes } = getHoursAndMinutes(date, timeZone);
   const period = hours >= 12 ? "PM" : "AM";
   const displayHour = hours % 12 || 12;
   if (minutes === 0) return `${displayHour}${period}`;
@@ -30,9 +47,21 @@ export function formatCompactTime(date: Date): string {
 
 /**
  * Format a time range using compact format: "9AM – 10AM"
+ * When timeZone is provided, displays times in that timezone.
  */
-export function formatTimeRange(start: Date, end: Date): string {
-  return `${formatCompactTime(start)} – ${formatCompactTime(end)}`;
+export function formatTimeRange(start: Date, end: Date, timeZone?: string): string {
+  return `${formatCompactTime(start, timeZone)} – ${formatCompactTime(end, timeZone)}`;
+}
+
+/**
+ * Get the short timezone abbreviation (e.g., "EST", "PST") for a given IANA timezone.
+ */
+export function getTimezoneAbbr(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "short",
+  }).formatToParts(date);
+  return parts.find(p => p.type === "timeZoneName")?.value ?? "";
 }
 
 /**
