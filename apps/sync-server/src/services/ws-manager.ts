@@ -13,17 +13,21 @@ type ServerMessage =
   | { type: "ping" };
 
 const connections = new Map<string, Set<WSContext>>();
+const clientIds = new Map<WSContext, string>();
 
 const HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-export function addConnection(userId: string, ws: WSContext): void {
+export function addConnection(userId: string, ws: WSContext, clientId?: string): void {
   let userConns = connections.get(userId);
   if (!userConns) {
     userConns = new Set();
     connections.set(userId, userConns);
   }
   userConns.add(ws);
+  if (clientId) {
+    clientIds.set(ws, clientId);
+  }
   console.log(
     `[ws] Client connected for user ${userId} (${userConns.size} total)`
   );
@@ -39,6 +43,7 @@ export function removeConnection(userId: string, ws: WSContext): void {
   if (!userConns) return;
 
   userConns.delete(ws);
+  clientIds.delete(ws);
   if (userConns.size === 0) {
     connections.delete(userId);
   }
@@ -52,7 +57,7 @@ export function removeConnection(userId: string, ws: WSContext): void {
   }
 }
 
-export function notifyUser(userId: string, message: ServerMessage): void {
+export function notifyUser(userId: string, message: ServerMessage, excludeClientId?: string): void {
   const userConns = connections.get(userId);
   if (!userConns || userConns.size === 0) return;
 
@@ -60,6 +65,7 @@ export function notifyUser(userId: string, message: ServerMessage): void {
   console.log(`[ws] Notifying user ${userId}: ${message.type}`, message);
 
   for (const ws of userConns) {
+    if (excludeClientId && clientIds.get(ws) === excludeClientId) continue;
     try {
       ws.send(payload);
     } catch (error) {
@@ -86,6 +92,7 @@ function startHeartbeat(): void {
         } catch {
           // Dead connection — remove it
           userConns.delete(ws);
+          clientIds.delete(ws);
           if (userConns.size === 0) {
             connections.delete(userId);
           }
@@ -114,4 +121,5 @@ export function shutdownWsManager(): void {
     }
   }
   connections.clear();
+  clientIds.clear();
 }

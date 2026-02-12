@@ -112,6 +112,7 @@ export async function createWatchChannelsForAccount(
     where: eq(calendarSyncState.accountId, accountId),
   });
 
+  // Sequential is fine — runs once per account at startup/initial-sync, not on a hot path
   for (const cal of calendars) {
     try {
       await createWatchChannel(accountId, cal.calendarId);

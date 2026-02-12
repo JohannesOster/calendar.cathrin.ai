@@ -133,13 +133,14 @@ export const eventsRoute = new Hono()
           owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees
         );
 
-        // Notify all connected clients of this user
+        // Notify connected clients — skip the originating client (already has optimistic state)
+        const clientId = c.req.header("X-Client-ID");
         const weekId = getWeekId(new Date(apiEvent.start));
         notifyUser(userId, {
           type: "weeks_changed",
           weekIds: [weekId],
           source: "mutation",
-        });
+        }, clientId);
 
         return c.json(apiEvent, 201);
       } catch (error) {
@@ -198,6 +199,7 @@ export const eventsRoute = new Hono()
         );
 
         // Notify connected clients — include both old and new weeks if event moved
+        const clientId = c.req.header("X-Client-ID");
         const weekIds = new Set<string>();
         weekIds.add(getWeekId(event.start));
         weekIds.add(getWeekId(new Date(apiEvent.start)));
@@ -205,7 +207,7 @@ export const eventsRoute = new Hono()
           type: "weeks_changed",
           weekIds: Array.from(weekIds),
           source: "mutation",
-        });
+        }, clientId);
 
         return c.json(apiEvent);
       } catch (error) {
@@ -238,13 +240,14 @@ export const eventsRoute = new Hono()
     try {
       await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id, sendUpdates);
 
-      // Notify connected clients
+      // Notify connected clients — skip the originating client
+      const clientId = c.req.header("X-Client-ID");
       const weekId = getWeekId(event.start);
       notifyUser(userId, {
         type: "weeks_changed",
         weekIds: [weekId],
         source: "mutation",
-      });
+      }, clientId);
 
       return c.json({ success: true });
     } catch (error) {
@@ -286,11 +289,12 @@ export const eventsRoute = new Hono()
           event.accountId, event.calendarId, googleEventId, responseStatus, event
         );
 
+        const clientId = c.req.header("X-Client-ID");
         notifyUser(userId, {
           type: "weeks_changed",
           weekIds: [getWeekId(event.start)],
           source: "mutation",
-        });
+        }, clientId);
 
         return c.json(apiEvent);
       } catch (error) {
@@ -343,11 +347,12 @@ export const eventsRoute = new Hono()
           googleEventId, event.id, targetOwner.color
         );
 
+        const clientId = c.req.header("X-Client-ID");
         notifyUser(userId, {
           type: "weeks_changed",
           weekIds: [getWeekId(event.start)],
           source: "mutation",
-        });
+        }, clientId);
 
         return c.json(apiEvent);
       } catch (error) {

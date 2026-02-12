@@ -1,4 +1,5 @@
 import { sessionToken, isAuthenticated } from "../stores/auth";
+import { API_BASE, CLIENT_ID } from "../lib/api";
 
 // =============================================================================
 // WebSocket Client
@@ -36,16 +37,9 @@ export function onWsWeeksChanged(
   onWeeksChanged = callback;
 }
 
-// Server URL — derive WS URL from the HTTP base
-const API_BASE =
-  import.meta.env.VITE_SYNC_SERVER_URL ||
-  (import.meta.env.VITE_SYNC_PORT
-    ? `http://localhost:${import.meta.env.VITE_SYNC_PORT}`
-    : "http://localhost:3000");
-
 function getWsUrl(token: string): string {
   const base = API_BASE.replace(/^http/, "ws");
-  return `${base}/ws?token=${encodeURIComponent(token)}`;
+  return `${base}/ws?token=${encodeURIComponent(token)}&clientId=${encodeURIComponent(CLIENT_ID)}`;
 }
 
 /**

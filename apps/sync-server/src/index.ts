@@ -49,7 +49,7 @@ app.use(
         }
       : tauriOrigins,
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Client-ID"],
     credentials: true,
   })
 );
@@ -86,7 +86,8 @@ app.get(
           }
 
           userId = payload.sub;
-          addConnection(userId, ws);
+          const clientId = c.req.query("clientId");
+          addConnection(userId, ws, clientId || undefined);
         } catch {
           ws.close(4001, "Invalid token");
         }
@@ -107,10 +108,8 @@ app.get(
           removeConnection(userId, ws);
         }
       },
-      onError(_event, ws) {
-        if (userId) {
-          removeConnection(userId, ws);
-        }
+      onError() {
+        // onClose always fires after onError — cleanup happens there
       },
     };
   })

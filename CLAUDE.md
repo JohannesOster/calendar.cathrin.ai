@@ -86,7 +86,7 @@ apps/sync-server/src/
 - Exports `AppType` for RPC client usage
 - Drizzle ORM with postgres.js (schema in `src/db/schema.ts`)
 - Token encryption: AES-256-GCM (`src/lib/crypto.ts`)
-- Env: `PORT`, `DATABASE_URL`, `ENCRYPTION_KEY` (64-char hex)
+- Env: `PORT`, `DATABASE_URL`, `ENCRYPTION_KEY` (64-char hex), `WEBHOOK_BASE_URL` (optional, see below)
 
 ### Caching & Sync Architecture
 
@@ -107,6 +107,28 @@ SERVER: fetched_weeks tracker → Postgres event cache
 Changes propagate in ~3-8 minutes.
 
 **Key files:** `stores/events.ts`, `stores/event-polling.ts`, `stores/event-deletion.ts`, `services/background-sync.ts`, `services/reanchor.ts`
+
+### Real-Time Sync (Push Notifications)
+
+Google Calendar push notifications deliver changes in seconds instead of waiting for the polling interval. **Optional** — without it, the app falls back to polling every 2 minutes.
+
+**How it works:** The sync server registers watch channels with Google for each calendar. Google POSTs to `{WEBHOOK_BASE_URL}/webhooks/google-calendar` when events change. The server debounces notifications (3s window), runs an incremental sync, and pushes affected week IDs to the client via WebSocket.
+
+**Setup for local dev:**
+
+1. Start a tunnel exposing the sync server (port 3000):
+   ```bash
+   ngrok http 3000        # or: cloudflared tunnel --url localhost:3000
+   ```
+2. Copy the HTTPS URL (e.g. `https://abc123.ngrok.io`) and set it in `.env`:
+   ```
+   WEBHOOK_BASE_URL=https://abc123.ngrok.io
+   ```
+3. Restart the sync server. Watch channels are created automatically after initial sync completes, and bootstrapped for existing accounts on startup.
+
+Without `WEBHOOK_BASE_URL`, the watch system is disabled entirely and sync runs on the 2-minute polling interval.
+
+**Key files:** `services/watch-manager.ts`, `services/webhook-debouncer.ts`, `routes/webhooks.ts`
 
 ### Shared Types Package
 

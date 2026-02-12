@@ -2,9 +2,7 @@ import { syncCalendarIncremental } from "./incremental-sync.js";
 import { notifyUser } from "./ws-manager.js";
 import { db } from "../db/index.js";
 import { eq, and } from "drizzle-orm";
-import { accounts, calendarSyncState } from "../db/schema.js";
-import { getAccessToken } from "./token-refresh.js";
-import { GoogleCalendarService } from "./google-calendar.js";
+import { accounts, calendarSyncState, serverEvents } from "../db/schema.js";
 
 // =============================================================================
 // Webhook Debouncer
@@ -74,13 +72,16 @@ async function performWebhookSync(
     return;
   }
 
-  // Get calendar color for events
-  const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  const calendarList = await service.fetchCalendarList();
-  const calendarInfo = calendarList.find((c) => c.id === calendarId);
-  const color = calendarInfo?.color || "#4285f4";
-  const accessRole = calendarInfo?.accessRole;
+  // Read color from an existing event — avoids a Google API round-trip
+  const existingEvent = await db.query.serverEvents.findFirst({
+    where: and(
+      eq(serverEvents.accountId, accountId),
+      eq(serverEvents.calendarId, calendarId)
+    ),
+    columns: { color: true },
+  });
+  const color = existingEvent?.color || "#4285f4";
+  const accessRole = state.accessRole ?? undefined;
 
   console.log(`[webhook] Running incremental sync for ${calendarId}`);
 
