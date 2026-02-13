@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
+import { addPendingNotification } from "./pending-notifications";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
 // =============================================================================
@@ -261,6 +262,9 @@ export function commitCreation(): boolean {
   // Reset creation state
   cancelCreation();
 
+  // When attendees are present, save silently (no emails) and enter draft state
+  const hasAttendees = attendees.length > 0;
+
   // Background API call
   apiFetch<ApiCalendarEvent>("/api/events", {
     method: "POST",
@@ -282,17 +286,19 @@ export function commitCreation(): boolean {
           : { type: "meet" as const },
       }),
       timeZone,
-      ...(attendees.length > 0 && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
+      ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
+      ...(hasAttendees && { sendUpdates: "none" }),
     }),
   })
     .then((serverEvent) => {
+      const compositeId = `${calId}/${serverEvent.id}`;
       // Swap temp ID with server-assigned ID
       setEvents((prev) =>
         prev.map((e) =>
           e.id === tempId
             ? {
                 ...e,
-                id: `${calId}/${serverEvent.id}`,
+                id: compositeId,
                 googleEventId: serverEvent.id,
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
@@ -302,6 +308,10 @@ export function commitCreation(): boolean {
             : e
         )
       );
+      // Track as pending notification so the user can decide about emails later
+      if (hasAttendees) {
+        addPendingNotification(compositeId);
+      }
       // Revalidate the affected week to sync with server state
       revalidateWeeksForDates(new Date(serverEvent.start));
     })

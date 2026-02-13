@@ -7,6 +7,7 @@ import { deleteEvent } from "../../stores/event-deletion";
 import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
+import { isPendingNotification } from "../../stores/pending-notifications";
 import { Users } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
@@ -43,6 +44,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
   const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
+  const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id));
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;
@@ -318,6 +320,14 @@ export function CalendarEvent(props: CalendarEventProps) {
           />
         </Show>
       </div>
+
+      {/* Pending notification dot indicator */}
+      <Show when={hasPendingNotification()}>
+        <div
+          class="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-accent z-[2]"
+          aria-label="Invitations not sent"
+        />
+      </Show>
 
       {/* Fire GIF overlay - sibling to content, not clipped */}
       <Show when={isBurning()}>

@@ -33,6 +33,11 @@ import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
+import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
+import { selectedEventId } from "../../stores/event-selection";
+import { events, setEvents } from "../../stores/events";
+import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { EventFormState } from "./useEventFormState";
 
 interface SectionProps {
@@ -235,6 +240,7 @@ export function DetailsSection(props: SectionProps) {
       <AttendeeList
         attendees={s.attendees()}
         isOrganizer={s.isOrganizer()}
+        accountEmail={s.accountEmail()}
         onAdd={(email, name) => s.addAttendee(email, name)}
         onRemove={(email) => s.removeAttendee(email)}
         onRsvp={(status) => s.rsvpAttendee(status)}
@@ -637,6 +643,7 @@ const STATUS_LABELS: Record<string, string> = {
 function AttendeeList(props: {
   attendees: Attendee[] | undefined;
   isOrganizer: boolean;
+  accountEmail: string | null;
   onAdd: (email: string, name?: string) => void;
   onRemove: (email: string) => void;
   onRsvp: (status: "accepted" | "declined" | "tentative") => void;
@@ -648,6 +655,57 @@ function AttendeeList(props: {
     const self = selfAttendee();
     return self && !self.isOrganizer;
   });
+
+  const hasPendingNotification = createMemo(() => {
+    const eventId = selectedEventId();
+    return eventId ? isPendingNotification(eventId) : false;
+  });
+
+  const nonSelfAttendeeCount = createMemo(() =>
+    (props.attendees ?? []).filter(a => !a.isSelf).length
+  );
+
+  async function handleSendInvitations(): Promise<void> {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const event = events().find(e => e.id === eventId);
+    if (!event) return;
+    // PATCH with existing attendees + sendUpdates: "all" to trigger notification emails
+    await apiFetch<ApiCalendarEvent>(
+      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          attendees: (event.attendees ?? []).map(a => ({ email: a.email, name: a.name })),
+          sendUpdates: "all",
+        }),
+      }
+    );
+    removePendingNotification(eventId);
+  }
+
+  function handleSendSilent(): void {
+    const eventId = selectedEventId();
+    if (eventId) removePendingNotification(eventId);
+  }
+
+  async function handleDiscard(): Promise<void> {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const event = events().find(e => e.id === eventId);
+    if (!event) return;
+    // Remove attendees from the event
+    await apiFetch<ApiCalendarEvent>(
+      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ attendees: null, sendUpdates: "none" }),
+      }
+    );
+    // Update local state
+    setEvents((prev) => prev.map(e => e.id === eventId ? { ...e, attendees: undefined } : e));
+    removePendingNotification(eventId);
+  }
 
   return (
     <div class="space-y-0.5">
@@ -694,8 +752,16 @@ function AttendeeList(props: {
           <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
         </Show>
       </Show>
+      <Show when={hasPendingNotification()}>
+        <NotificationConfirmPopover
+          count={nonSelfAttendeeCount()}
+          onSend={handleSendInvitations}
+          onSendSilent={handleSendSilent}
+          onDiscard={handleDiscard}
+        />
+      </Show>
       <Show when={props.isOrganizer}>
-        <AttendeeCombobox attendees={props.attendees} onAdd={props.onAdd} />
+        <AttendeeCombobox attendees={props.attendees} accountEmail={props.accountEmail} onAdd={props.onAdd} />
       </Show>
     </div>
   );
@@ -709,13 +775,18 @@ interface ContactSuggestion {
 
 function AttendeeCombobox(props: {
   attendees: Attendee[] | undefined;
+  accountEmail: string | null;
   onAdd: (email: string, name?: string) => void;
 }) {
+  let inputRef: HTMLInputElement | undefined;
   const [inputValue, setInputValue] = createSignal("");
   const [query, setQuery] = createSignal("");
   const [suggestions, setSuggestions] = createSignal<ContactSuggestion[]>([]);
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let zeroStateCache: ContactSuggestion[] | null = null;
+  // Only mirror highlighted item into input on explicit navigation (hover/arrow),
+  // not when autohighlight fires after typing.
+  let userNavigated = false;
 
   onCleanup(() => clearTimeout(debounceTimer));
 
@@ -783,8 +854,19 @@ function AttendeeCombobox(props: {
       openOnClick
       closeOnSelect
       selectionBehavior="clear"
+      inputBehavior="autohighlight"
+      onHighlightChange={(d) => {
+        if (d.highlightedValue != null && userNavigated) {
+          const item = items().find((i) => i.value === d.highlightedValue);
+          if (item) {
+            setInputValue(item.name || item.value);
+            requestAnimationFrame(() => inputRef?.select());
+          }
+        }
+      }}
       inputValue={inputValue()}
       onInputValueChange={(d) => {
+        userNavigated = false;
         setInputValue(d.inputValue);
         setQuery(d.inputValue);
         debouncedFetch(d.inputValue.trim());
@@ -812,11 +894,19 @@ function AttendeeCombobox(props: {
     >
       <Combobox.Control class="pl-[30px] pr-2">
         <Combobox.Input
+          ref={(el) => { inputRef = el; }}
           placeholder="Add participant"
           aria-label="Add participant"
           autocomplete="off"
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              userNavigated = true;
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setInputValue("");
+              setQuery("");
+              (e.target as HTMLElement).blur();
+            } else if (e.key === "Enter") {
               const val = inputValue().trim();
               if (val && val.includes("@")) {
                 e.preventDefault();
@@ -828,23 +918,36 @@ function AttendeeCombobox(props: {
         />
       </Combobox.Control>
       <Combobox.Positioner>
-        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
-          <For each={items()}>
-            {(item) => (
-              <Combobox.Item
-                item={item}
-                class="flex flex-col px-3 py-1.5 cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
-              >
-                <Combobox.ItemText class="text-xs text-fg">
-                  {item.name || item.value}
-                </Combobox.ItemText>
-                <Show when={item.name}>
-                  <span class="text-2xs text-fg-disabled">{item.value}</span>
-                </Show>
-              </Combobox.Item>
-            )}
-          </For>
-        </Combobox.Content>
+        <Show when={items().length > 0}>
+          <Combobox.Content
+            class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto"
+            onPointerMove={() => { userNavigated = true; }}
+          >
+            <For each={items()}>
+              {(item) => {
+                const isSelf = () => props.accountEmail != null && item.value.toLowerCase() === props.accountEmail;
+                return (
+                  <Combobox.Item
+                    item={item}
+                    class="flex flex-col px-3 py-1.5 cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <Combobox.ItemText class="text-xs text-fg">
+                        {item.name || item.value}
+                      </Combobox.ItemText>
+                      <Show when={isSelf()}>
+                        <span class="text-2xs text-fg-disabled">(You)</span>
+                      </Show>
+                    </div>
+                    <Show when={item.name}>
+                      <span class="text-2xs text-fg-disabled">{item.value}</span>
+                    </Show>
+                  </Combobox.Item>
+                );
+              }}
+            </For>
+          </Combobox.Content>
+        </Show>
       </Combobox.Positioner>
     </Combobox.Root>
   );
