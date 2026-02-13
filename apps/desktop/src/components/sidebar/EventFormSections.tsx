@@ -799,6 +799,11 @@ function AttendeeCombobox(props: {
         if (d.open) {
           debouncedFetch("");
         } else {
+          // Try to add any remaining email-like text (handles blur-to-add)
+          const val = inputValue().trim();
+          if (val && val.includes("@")) {
+            handleAdd(val);
+          }
           setInputValue("");
           setQuery("");
         }
@@ -810,6 +815,15 @@ function AttendeeCombobox(props: {
           placeholder="Add participant"
           aria-label="Add participant"
           autocomplete="off"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const val = inputValue().trim();
+              if (val && val.includes("@")) {
+                e.preventDefault();
+                handleAdd(val);
+              }
+            }
+          }}
           class="flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
         />
       </Combobox.Control>
