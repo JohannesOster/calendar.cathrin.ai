@@ -38,7 +38,7 @@ import {
 } from "../../stores/event-creation";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
-import { selectedEvent, selectedEventId } from "../../stores/event-selection";
+import { selectedEvent, selectedEventId, deselectEvent } from "../../stores/event-selection";
 import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import { dragActiveEventId } from "../../stores/event-drag";
 import type { EventPatch } from "../../stores/event-types";
@@ -49,6 +49,17 @@ import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
 export type FormMode = "create" | "edit";
+
+type FieldGroup = "time" | "identity" | "attendees" | "content" | "preferences" | "conferencing";
+
+const FIELD_GROUPS: Record<string, FieldGroup> = {
+  start: "time", end: "time", isAllDay: "time", timeZone: "time",
+  calendarId: "identity",
+  title: "content", location: "content", description: "content",
+  attendees: "attendees",
+  transparency: "preferences", visibility: "preferences", reminders: "preferences", colorId: "preferences",
+  conferencing: "conferencing",
+};
 
 export function useEventFormState() {
   // Remember timed start/end when switching to all-day so we can restore them
@@ -99,6 +110,11 @@ export function useEventFormState() {
   /** Accumulate a field change. Flushed on blur via flushSave(). */
   function scheduleSave(patch: EventPatch): void {
     Object.assign(pendingPatch, patch);
+  }
+
+  /** Check if any field in a group has a pending edit. */
+  function isGroupDirty(group: FieldGroup): boolean {
+    return Object.keys(pendingPatch).some((key) => FIELD_GROUPS[key] === group);
   }
 
   function flushSave(overrideEventId?: string): void {
@@ -171,16 +187,70 @@ export function useEventFormState() {
     savedTimedEnd = null;
   }));
 
-  // Sync edit signals from events signal during drag so form times update live
+  // Unified sync: push external store changes into form signals, grouped by field.
+  // Each group is skipped when the user has pending local edits in that group,
+  // preventing external updates from clobbering in-flight user changes.
+  // Also handles structural changes (event deleted from store while sidebar open).
   createEffect(() => {
-    const activeId = dragActiveEventId();
-    const eventId = selectedEventId();
-    if (activeId && activeId === eventId) {
-      const event = events().find(e => e.id === activeId);
-      if (event) {
-        setEditStart(new Date(event.start));
-        setEditEnd(new Date(event.end));
+    if (mode() !== "edit") return;
+    const id = selectedEventId();
+    if (!id) return;
+    const event = events().find((e) => e.id === id);
+    if (!event) {
+      // Event vanished (external deletion, uninvited). Flush pending edits
+      // (PATCH will 404 — caught by .catch) and close the sidebar.
+      flushSave();
+      deselectEvent();
+      return;
+    }
+
+    const isDragging = dragActiveEventId() === id;
+
+    // Time group: during drag, always sync start/end (drag handler writes to store).
+    // Otherwise skip if user has pending time edits.
+    if (isDragging || !isGroupDirty("time")) {
+      const newStart = new Date(event.start);
+      const newEnd = new Date(event.end);
+      setEditStart(newStart);
+      setEditEnd(newEnd);
+      if (!isDragging) {
+        setEditIsAllDay(event.isAllDay);
+        setEditTimeZone(event.timeZone);
+        // Auto-adjust if end <= start (e.g. external change created invalid range)
+        if (newEnd <= newStart) {
+          setEditEnd(new Date(newStart.getTime() + 3600000));
+        }
       }
+    }
+
+    // Identity group
+    if (!isGroupDirty("identity")) {
+      setEditCalendarId(event.calendarId);
+    }
+
+    // Content group
+    if (!isGroupDirty("content")) {
+      setEditTitle(event.title);
+      setEditLocation(event.location ?? "");
+      setEditDescription(event.description ?? "");
+    }
+
+    // Attendees group: skip if dirty or RSVP debounce pending
+    if (!isGroupDirty("attendees") && !rsvpTimer) {
+      setEditAttendees(event.attendees ?? []);
+    }
+
+    // Preferences group
+    if (!isGroupDirty("preferences")) {
+      setEditTransparency(event.transparency ?? "opaque");
+      setEditVisibility(event.visibility ?? "default");
+      setEditReminders(event.reminders ?? []);
+      setEditColorId(event.colorId ?? null);
+    }
+
+    // Conferencing group: skip if dirty or loading
+    if (!isGroupDirty("conferencing") && !conferencingLoading()) {
+      setEditConferencing(event.conferencing ?? null);
     }
   });
 
