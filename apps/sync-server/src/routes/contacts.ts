@@ -39,7 +39,7 @@ export const contactsRoute = new Hono()
           MAX(e.start) AS last_seen
         FROM events e,
           jsonb_array_elements(e.attendees) AS att
-        WHERE e.account_id = ANY(${accountIds})
+        WHERE e.account_id = ANY(${sql`ARRAY[${sql.join(accountIds.map(id => sql`${id}`), sql`, `)}]`})
           AND e.attendees IS NOT NULL
           AND COALESCE((att->>'isSelf')::boolean, false) IS NOT TRUE
           AND att->>'email' IS NOT NULL
