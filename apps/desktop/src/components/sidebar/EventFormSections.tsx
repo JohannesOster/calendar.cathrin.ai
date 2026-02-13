@@ -1098,6 +1098,12 @@ function ReminderCombobox(props: { state: EventFormState }) {
         const minutes = parseReminderInput(val);
         if (minutes) handleAdd(minutes);
       }}
+      onOpenChange={(d) => {
+        if (!d.open) {
+          setInputValue("");
+          setQuery("");
+        }
+      }}
       positioning={{ placement: "bottom-start", sameWidth: true }}
     >
       <Combobox.Control class="flex items-center gap-2 rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
