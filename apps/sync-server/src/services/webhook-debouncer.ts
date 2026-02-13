@@ -12,7 +12,7 @@ import { accounts, calendarSyncState, serverEvents } from "../db/schema.js";
 // sync operation per (accountId, calendarId) pair with a 3-second window.
 // =============================================================================
 
-const DEBOUNCE_MS = 3_000; // 3 seconds
+const DEBOUNCE_MS = 1_000; // 1 second
 const pendingSyncs = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
