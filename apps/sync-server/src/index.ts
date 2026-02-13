@@ -10,11 +10,13 @@ import { accountsRoute } from "./routes/accounts.js";
 import { calendarsRoute } from "./routes/calendars.js";
 import { eventsRoute } from "./routes/events.js";
 import { webhooksRoute } from "./routes/webhooks.js";
+import { contactsRoute } from "./routes/contacts.js";
 import { closeDatabase } from "./db/index.js";
 import {
   startBackgroundSync,
   stopBackgroundSync,
 } from "./services/background-sync.js";
+import { isWatchEnabled } from "./services/watch-manager.js";
 import { addConnection, removeConnection, shutdownWsManager } from "./services/ws-manager.js";
 import { verifySessionToken } from "./lib/jwt.js";
 import { db } from "./db/index.js";
@@ -122,6 +124,7 @@ const routes = app
   .route("/api/accounts", accountsRoute)
   .route("/api/calendars", calendarsRoute)
   .route("/api/events", eventsRoute)
+  .route("/api/contacts", contactsRoute)
   .route("/webhooks", webhooksRoute);
 
 // Export type for RPC client (future use)
@@ -138,6 +141,24 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 
   // Start background sync service
   startBackgroundSync();
+
+  // Check webhook connectivity
+  if (isWatchEnabled()) {
+    const webhookUrl = process.env.WEBHOOK_BASE_URL!;
+    fetch(`${webhookUrl}/health`)
+      .then(async (res) => {
+        if (res.ok) {
+          console.log(`[watch] Webhook tunnel reachable at ${webhookUrl}`);
+        } else {
+          console.warn(`[watch] Webhook tunnel returned ${res.status} — push notifications may not work`);
+        }
+      })
+      .catch(() => {
+        console.warn(`[watch] Webhook tunnel unreachable at ${webhookUrl} — push notifications will not work`);
+      });
+  } else {
+    console.log("[watch] WEBHOOK_BASE_URL not set — using polling-only mode");
+  }
 });
 
 // Graceful shutdown
