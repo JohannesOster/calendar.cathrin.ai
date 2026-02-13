@@ -50,8 +50,14 @@ export const contactsRoute = new Hono()
         email,
         name,
         frequency * EXP(
-          -EXTRACT(EPOCH FROM (NOW() - last_seen)) / 86400.0 / 90.0
-        ) AS score
+          -EXTRACT(EPOCH FROM (NOW() - last_seen)) / 86400.0 / 180.0
+        )
+        -- Prefix matches rank above substring-only matches
+        * CASE WHEN ${search} != '' AND (
+          email LIKE ${search} || '%'
+          OR LOWER(COALESCE(name, '')) LIKE ${search} || '%'
+        ) THEN 2.0 ELSE 1.0 END
+        AS score
       FROM attendee_stats
       WHERE (
         ${search} = ''
