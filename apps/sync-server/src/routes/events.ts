@@ -114,6 +114,7 @@ export const eventsRoute = new Hono()
         ]).nullable().optional(),
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).optional(),
+        sendUpdates: z.enum(["all", "none"]).optional(),
       })
     ),
     async (c) => {
@@ -122,7 +123,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -136,7 +137,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await createEventViaGoogle(
-          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees
+          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates
         );
 
         // Notify connected clients — skip the originating client (already has optimistic state)
@@ -177,6 +178,7 @@ export const eventsRoute = new Hono()
         ]).nullable().optional(),
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
+        sendUpdates: z.enum(["all", "none"]).optional(),
       })
     ),
     async (c) => {
@@ -186,7 +188,7 @@ export const eventsRoute = new Hono()
 
       const userId = c.get("userId");
       const googleEventId = c.req.param("eventId");
-      const patch = c.req.valid("json");
+      const { sendUpdates, ...patch } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -201,7 +203,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await updateEventViaGoogle(
-          event.accountId, event.calendarId, googleEventId, patch, event
+          event.accountId, event.calendarId, googleEventId, patch, event, sendUpdates
         );
 
         // Notify connected clients — include both old and new weeks if event moved
@@ -268,6 +270,7 @@ export const eventsRoute = new Hono()
       "json",
       z.object({
         responseStatus: z.enum(["accepted", "declined", "tentative"]),
+        sendUpdates: z.enum(["all", "none"]).optional(),
       })
     ),
     async (c) => {
@@ -277,7 +280,7 @@ export const eventsRoute = new Hono()
 
       const userId = c.get("userId");
       const googleEventId = c.req.param("eventId");
-      const { responseStatus } = c.req.valid("json");
+      const { responseStatus, sendUpdates } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -292,7 +295,7 @@ export const eventsRoute = new Hono()
 
       try {
         const apiEvent = await rsvpEventViaGoogle(
-          event.accountId, event.calendarId, googleEventId, responseStatus, event
+          event.accountId, event.calendarId, googleEventId, responseStatus, event, sendUpdates
         );
 
         const clientId = c.req.header("X-Client-ID");
