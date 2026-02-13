@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onCleanup } from "solid-js";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
@@ -28,6 +28,7 @@ import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
 import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
+import { apiFetch } from "../../lib/api";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
@@ -640,7 +641,6 @@ function AttendeeList(props: {
   onRemove: (email: string) => void;
   onRsvp: (status: "accepted" | "declined" | "tentative") => void;
 }) {
-  const [emailInput, setEmailInput] = createSignal("");
   const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
   const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
   const selfAttendee = createMemo(() => props.attendees?.find(a => a.isSelf));
@@ -648,13 +648,6 @@ function AttendeeList(props: {
     const self = selfAttendee();
     return self && !self.isOrganizer;
   });
-
-  function handleAddEmail(): void {
-    const email = emailInput().trim();
-    if (!email || !email.includes("@")) return;
-    props.onAdd(email);
-    setEmailInput("");
-  }
 
   return (
     <div class="space-y-0.5">
@@ -702,25 +695,144 @@ function AttendeeList(props: {
         </Show>
       </Show>
       <Show when={props.isOrganizer}>
-        <div class="flex items-center gap-2 pl-[30px] pr-2">
-          <input
-            type="email"
-            placeholder="Add participant email"
-            aria-label="Add participant email"
-            value={emailInput()}
-            onInput={(e) => setEmailInput(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAddEmail();
-              }
-            }}
-            onBlur={() => handleAddEmail()}
-            class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
-          />
-        </div>
+        <AttendeeCombobox attendees={props.attendees} onAdd={props.onAdd} />
       </Show>
     </div>
+  );
+}
+
+interface ContactSuggestion {
+  email: string;
+  name: string | null;
+  score: number;
+}
+
+function AttendeeCombobox(props: {
+  attendees: Attendee[] | undefined;
+  onAdd: (email: string, name?: string) => void;
+}) {
+  const [inputValue, setInputValue] = createSignal("");
+  const [query, setQuery] = createSignal("");
+  const [suggestions, setSuggestions] = createSignal<ContactSuggestion[]>([]);
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let zeroStateCache: ContactSuggestion[] | null = null;
+
+  onCleanup(() => clearTimeout(debounceTimer));
+
+  const existingEmails = createMemo(() =>
+    new Set((props.attendees ?? []).map(a => a.email.toLowerCase()))
+  );
+
+  const filtered = createMemo(() =>
+    suggestions().filter(c => !existingEmails().has(c.email.toLowerCase()))
+  );
+
+  const items = createMemo(() =>
+    filtered().map(c => ({ value: c.email, name: c.name }))
+  );
+
+  const collection = createMemo(() => {
+    const q = query().toLowerCase();
+    return createListCollection({
+      items: items(),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => q ? `${q} ${item.value}` : item.value,
+    });
+  });
+
+  async function fetchSuggestions(q: string): Promise<void> {
+    if (q === "" && zeroStateCache) {
+      setSuggestions(zeroStateCache);
+      return;
+    }
+    try {
+      const result = await apiFetch<{ contacts: ContactSuggestion[] }>(
+        `/api/contacts/suggestions?q=${encodeURIComponent(q)}&limit=8`
+      );
+      if (q === "") zeroStateCache = result.contacts;
+      setSuggestions(result.contacts);
+    } catch {
+      // API error — fall back to raw email input behavior
+    }
+  }
+
+  function debouncedFetch(q: string): void {
+    clearTimeout(debounceTimer);
+    if (q === "") {
+      fetchSuggestions("").catch(() => {});
+      return;
+    }
+    debounceTimer = setTimeout(() => {
+      fetchSuggestions(q).catch(() => {});
+    }, 200);
+  }
+
+  function handleAdd(email: string, name?: string): void {
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes("@")) return;
+    props.onAdd(trimmed, name || undefined);
+    setInputValue("");
+    setQuery("");
+    setSuggestions(zeroStateCache ?? []);
+  }
+
+  return (
+    <Combobox.Root
+      collection={collection()}
+      allowCustomValue
+      openOnClick
+      closeOnSelect
+      selectionBehavior="clear"
+      inputValue={inputValue()}
+      onInputValueChange={(d) => {
+        setInputValue(d.inputValue);
+        setQuery(d.inputValue);
+        debouncedFetch(d.inputValue.trim());
+      }}
+      onValueChange={(details) => {
+        const email = details.value[0];
+        if (!email) return;
+        const contact = filtered().find(c => c.email === email);
+        handleAdd(email, contact?.name ?? undefined);
+      }}
+      onOpenChange={(d) => {
+        if (d.open) {
+          debouncedFetch("");
+        } else {
+          setInputValue("");
+          setQuery("");
+        }
+      }}
+      positioning={{ placement: "bottom-start", sameWidth: true }}
+    >
+      <Combobox.Control class="pl-[30px] pr-2">
+        <Combobox.Input
+          placeholder="Add participant"
+          aria-label="Add participant"
+          autocomplete="off"
+          class="flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
+        />
+      </Combobox.Control>
+      <Combobox.Positioner>
+        <Combobox.Content class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto">
+          <For each={items()}>
+            {(item) => (
+              <Combobox.Item
+                item={item}
+                class="flex flex-col px-3 py-1.5 cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+              >
+                <Combobox.ItemText class="text-xs text-fg">
+                  {item.name || item.value}
+                </Combobox.ItemText>
+                <Show when={item.name}>
+                  <span class="text-2xs text-fg-disabled">{item.value}</span>
+                </Show>
+              </Combobox.Item>
+            )}
+          </For>
+        </Combobox.Content>
+      </Combobox.Positioner>
+    </Combobox.Root>
   );
 }
 
