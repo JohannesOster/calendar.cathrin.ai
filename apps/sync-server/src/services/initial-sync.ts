@@ -10,6 +10,7 @@ import { GoogleCalendarService } from "./google-calendar.js";
 import { getWeeksInRange } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
 import { createWatchChannelsForAccount } from "./watch-manager.js";
+import { syncProviderContacts } from "./contacts-provider.js";
 
 // Initial sync window: ±6 months
 const INITIAL_SYNC_MONTHS_BEFORE = 6;
@@ -194,6 +195,14 @@ export async function performInitialSync(accountId: string): Promise<void> {
     createWatchChannelsForAccount(accountId).catch((error) => {
       console.error(
         `[initial-sync] Failed to create watch channels for ${accountId}:`,
+        error
+      );
+    });
+
+    // Sync provider contacts (Google People API) immediately
+    syncProviderContacts(accountId).catch((error) => {
+      console.error(
+        `[initial-sync] Failed to sync contacts for ${accountId}:`,
         error
       );
     });

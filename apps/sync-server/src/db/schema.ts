@@ -196,6 +196,30 @@ export const fetchedWeeks = pgTable(
  * Tracks Google Calendar push notification watch channels.
  * One channel per (account, calendar) pair.
  */
+/**
+ * Cached contacts fetched from provider APIs (e.g. Google People API).
+ * Used as fallback tier in contact suggestions when no event-based
+ * history exists for a contact.
+ */
+export const providerContacts = pgTable(
+  "provider_contacts",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name"),
+    fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  },
+  (table) => [
+    unique("provider_contacts_account_email").on(table.accountId, table.email),
+    index("provider_contacts_account_idx").on(table.accountId),
+  ]
+);
+
 export const watchChannels = pgTable(
   "watch_channels",
   {
