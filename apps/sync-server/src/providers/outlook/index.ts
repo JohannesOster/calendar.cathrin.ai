@@ -126,12 +126,13 @@ export async function fetchMicrosoftUserProfile(
 
 /**
  * Make a Graph API request with immutable ID preference and error handling.
- * Retries on 429 with Retry-After backoff.
+ * Retries on 429 with Retry-After backoff (max 3 retries).
  */
 async function graphFetch(
   url: string,
   accessToken: string,
   options: RequestInit = {},
+  retryCount = 0,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -143,13 +144,16 @@ async function graphFetch(
 
   // Handle 429 Too Many Requests — retry with Retry-After
   if (response.status === 429) {
+    if (retryCount >= 3) {
+      throw new ProviderApiError("Outlook API rate limit exceeded after retries", 429);
+    }
     const retryAfter = response.headers.get("Retry-After");
     const delayMs = Math.min(
       (retryAfter ? parseInt(retryAfter, 10) * 1000 : 5000),
       MAX_RETRY_DELAY_MS,
     );
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return graphFetch(url, accessToken, options);
+    return graphFetch(url, accessToken, options, retryCount + 1);
   }
 
   return response;
@@ -183,9 +187,10 @@ async function handleGraphError(response: Response): Promise<never> {
 // Category Cache
 // =============================================================================
 
-/** Per-token category cache with 1-hour TTL. */
+/** Per-token category cache with 1-hour TTL, max 20 entries. */
 const categoryCache = new Map<string, { categories: GraphCategory[]; expiresAt: number }>();
 const CATEGORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CATEGORY_CACHE_MAX_SIZE = 20;
 
 async function fetchCategories(accessToken: string): Promise<GraphCategory[]> {
   // Use first 16 chars of token as cache key (enough to distinguish tokens)
@@ -207,9 +212,20 @@ async function fetchCategories(accessToken: string): Promise<GraphCategory[]> {
   }
 
   const data = (await response.json()) as GraphCategoryListResponse;
+
+  // Evict expired entries and cap size to prevent unbounded growth
+  const now = Date.now();
+  for (const [key, entry] of categoryCache) {
+    if (entry.expiresAt < now) categoryCache.delete(key);
+  }
+  if (categoryCache.size >= CATEGORY_CACHE_MAX_SIZE) {
+    const oldest = categoryCache.keys().next().value;
+    if (oldest) categoryCache.delete(oldest);
+  }
+
   categoryCache.set(cacheKey, {
     categories: data.value,
-    expiresAt: Date.now() + CATEGORY_CACHE_TTL_MS,
+    expiresAt: now + CATEGORY_CACHE_TTL_MS,
   });
   return data.value;
 }
@@ -228,7 +244,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
   readonly capabilities: ProviderCapabilities = {
     incrementalSync: true,
     webhooks: true,
-    moveEvent: false, // Outlook uses copy+delete, implemented later
+    moveEvent: true, // Copy+delete emulation
     conferenceCreate: false, // Teams meeting creation via Graph is more complex
   };
 
@@ -477,14 +493,16 @@ export class OutlookCalendarProvider implements CalendarProvider {
 
   async getInitialSyncToken(
     accessToken: string,
-    _calendarId: string,
+    calendarId: string,
     timeMin: string,
     timeMax: string,
   ): Promise<string> {
     // For Outlook, delta sync is date-range-bound. The initial delta query
     // returns all events + a deltaLink. We discard the events (already
     // fetched via getEvents) and just capture the deltaLink.
-    const baseUrl = new URL(`${MS_GRAPH_URL}/me/calendarView/delta`);
+    const baseUrl = new URL(
+      `${MS_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}/calendarView/delta`,
+    );
     baseUrl.searchParams.set("startDateTime", timeMin);
     baseUrl.searchParams.set("endDateTime", timeMax);
 

@@ -87,47 +87,16 @@ export async function performInitialSync(accountId: string): Promise<void> {
 
         totalEvents += events.length;
 
-        // Get syncToken for future incremental syncs
-        // Must paginate through ALL events to get the syncToken
+        // Get syncToken for future incremental syncs via provider abstraction
         let syncToken: string | null = null;
         try {
-          let pageToken: string | undefined;
-          let pageCount = 0;
-
-          // Paginate through all events to get syncToken
-          do {
-            const params = new URLSearchParams({ maxResults: "2500" });
-            if (pageToken) {
-              params.set("pageToken", pageToken);
-            }
-
-            const syncTokenUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`;
-            const syncTokenResponse = await fetch(syncTokenUrl, {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-
-            if (!syncTokenResponse.ok) {
-              console.warn(`[initial-sync] Failed to fetch page for syncToken: ${syncTokenResponse.status}`);
-              break;
-            }
-
-            const syncData = (await syncTokenResponse.json()) as {
-              nextSyncToken?: string;
-              nextPageToken?: string;
-            };
-
-            pageCount++;
-            pageToken = syncData.nextPageToken;
-
-            if (syncData.nextSyncToken) {
-              syncToken = syncData.nextSyncToken;
-              console.log(`[initial-sync] Got syncToken for "${calendar.name}" after ${pageCount} pages`);
-            }
-          } while (pageToken && !syncToken);
-
-          if (!syncToken) {
-            console.warn(`[initial-sync] No syncToken after ${pageCount} pages for "${calendar.name}"`);
-          }
+          syncToken = await provider.getInitialSyncToken(
+            accessToken,
+            calendar.id,
+            timeMin.toISOString(),
+            timeMax.toISOString(),
+          );
+          console.log(`[initial-sync] Got syncToken for "${calendar.name}"`);
         } catch (err) {
           console.error(
             `[initial-sync] Failed to get syncToken for calendar "${calendar.name}":`,

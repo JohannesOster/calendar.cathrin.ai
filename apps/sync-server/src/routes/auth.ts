@@ -217,8 +217,11 @@ export const authRoute = new Hono()
 
     if (error) {
       console.error(`[auth/outlook] OAuth error: ${error} — ${errorDescription}`);
+      const safeMessage = (errorDescription || error || "").replace(/[&<>"]/g, (c: string) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] || c
+      );
       return c.html(
-        `<html><body><h1>Error</h1><p>${errorDescription || error}</p></body></html>`,
+        `<html><body><h1>Error</h1><p>${safeMessage}</p></body></html>`,
         400
       );
     }
