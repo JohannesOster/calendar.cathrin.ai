@@ -8,7 +8,7 @@ import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
 import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
-import { startCreation, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes } from "../../stores/event-creation";
+import { startCreation, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes, draftHasAttendees, setShowCommitPrompt } from "../../stores/event-creation";
 import { deselectEvent, selectedEventId } from "../../stores/event-selection";
 import { spansMultipleDays } from "../../utils/allDayLayout";
 import { resizeDragEventId, unfoldDragEventId } from "../../stores/event-drag";
@@ -125,6 +125,13 @@ export function DayColumn(props: DayColumnProps) {
       // Clicking on an existing event — cancel any active creation
       // (selection is handled by CalendarEvent's onClick)
       if (isCreating()) {
+        if (draftHasAttendees()) {
+          setShowCommitPrompt(true);
+          // Block the click from reaching CalendarEvent's onClick
+          const blockClick = (ce: MouseEvent) => { ce.stopPropagation(); ce.preventDefault(); };
+          document.addEventListener("click", blockClick, { capture: true, once: true });
+          return;
+        }
         if (draftTitle().trim()) {
           commitCreation();
         } else {
@@ -139,8 +146,13 @@ export function DayColumn(props: DayColumnProps) {
       deselectEvent();
     }
 
-    // Commit/cancel any active creation first
+    // Commit/cancel any active creation first — with attendee interception
     if (isCreating()) {
+      if (draftHasAttendees()) {
+        setShowCommitPrompt(true);
+        e.preventDefault();
+        return;
+      }
       if (draftTitle().trim()) {
         commitCreation();
       } else {

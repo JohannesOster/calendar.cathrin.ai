@@ -8,6 +8,7 @@ import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
 import { notifyUser } from "./ws-manager.js";
 import { isWatchEnabled, renewExpiringChannels, createWatchChannelsForAccount } from "./watch-manager.js";
+import { shouldSyncContacts, syncProviderContacts } from "./contacts-provider.js";
 
 // =============================================================================
 // Sync Timing Configuration
@@ -194,29 +195,30 @@ async function recoverStuckAccounts(): Promise<void> {
 }
 
 /**
- * Create watch channels for accounts that completed initial sync
- * but don't have watch channels yet (e.g. deployed after initial sync ran).
+ * Create watch channels for all accounts that completed initial sync.
+ * Clears existing channels first so channels always point to the current
+ * WEBHOOK_BASE_URL (e.g. after an ngrok restart gives a new tunnel URL).
+ * Old Google channels expire harmlessly on their own (~7 days).
  */
 async function bootstrapWatchChannels(): Promise<void> {
   if (!db) return;
 
   try {
+    // Clear stale channels — they may point to an old WEBHOOK_BASE_URL
+    const deleted = await db.delete(watchChannels).returning({ id: watchChannels.id });
+    if (deleted.length > 0) {
+      console.log(`[watch] Cleared ${deleted.length} stale channel(s)`);
+    }
+
     const completeAccounts = await db.query.accounts.findMany({
       where: eq(accounts.syncStatus, "complete"),
       columns: { id: true, email: true },
     });
 
     for (const account of completeAccounts) {
-      // Check if this account already has any watch channels
-      const existing = await db.query.watchChannels.findFirst({
-        where: eq(watchChannels.accountId, account.id),
-      });
-
-      if (!existing) {
-        console.log(`[watch] Bootstrapping channels for ${account.email}`);
-        await createWatchChannelsForAccount(account.id);
-        await sleep(ACCOUNT_STAGGER_MS);
-      }
+      console.log(`[watch] Bootstrapping channels for ${account.email}`);
+      await createWatchChannelsForAccount(account.id);
+      await sleep(ACCOUNT_STAGGER_MS);
     }
   } catch (error) {
     console.error("[watch] Bootstrap failed:", error);
@@ -295,6 +297,16 @@ async function runSyncCycle(): Promise<void> {
             );
             // Don't fail the account sync for reanchor errors
           }
+        }
+
+        // Sync provider contacts (once per day per account)
+        if (shouldSyncContacts(account.id)) {
+          syncProviderContacts(account.id).catch((err) => {
+            console.error(
+              `[background-sync] Contact sync failed for ${account.email}:`,
+              err
+            );
+          });
         }
       } catch (error) {
         console.error(

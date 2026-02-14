@@ -182,7 +182,10 @@ function App() {
         leftSidebar={<LeftSidebar />}
         rightSidebar={
           <Show when={isCreating() || selectedEventId()}>
-            <Show when={selectedEvent()?.isReadOnly} fallback={<EventForm />}>
+            <Show
+              when={selectedEvent()?.isReadOnly && selectedEvent()?.readOnlyReason !== "not_organizer"}
+              fallback={<EventForm />}
+            >
               <EventDetailPanel event={selectedEvent()!} />
             </Show>
           </Show>

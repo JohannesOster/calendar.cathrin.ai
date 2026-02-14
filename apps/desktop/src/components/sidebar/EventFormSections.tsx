@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onCleanup } from "solid-js";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
@@ -21,17 +21,26 @@ import {
   Repeat,
   Check,
   HelpCircle,
+  Info,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select, createListCollection } from "@ark-ui/solid/select";
 import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
+import { Tooltip } from "@ark-ui/solid/tooltip";
 import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
+import { apiFetch } from "../../lib/api";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
-import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
+import { setDraftStart, setDraftEnd, commitCreation, draftTitle, setDraftAttendees } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
+import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
+import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
+import { selectedEventId } from "../../stores/event-selection";
+import { events, setEvents } from "../../stores/events";
+import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { EventFormState } from "./useEventFormState";
 
 interface SectionProps {
@@ -45,32 +54,49 @@ export function TimeSection(props: SectionProps) {
     <div class="px-3 py-3 border-t border-border space-y-1.5">
       {/* Start time + End time on one row (hidden for all-day) */}
       <Show when={s.start() && s.end() && !s.isAllDay()}>
-        <div class="flex items-center gap-2 text-sm text-fg">
-          <Clock size={14} class="text-fg-muted shrink-0" />
-          <TimeCombobox
-            date={() => s.start()!}
-            timeZone={() => s.timeZone()}
-            which="start"
-            ariaLabel="Start time"
-            state={s}
-            referenceHour={() => new Date().getHours()}
-          />
-          <ArrowRight size={14} class="text-fg-muted shrink-0" />
-          <TimeCombobox
-            date={() => s.end()!}
-            timeZone={() => s.timeZone()}
-            which="end"
-            ariaLabel="End time"
-            state={s}
-            referenceHour={() => s.start()!.getHours()}
-            excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
-          />
-          <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
-            <span class="text-xs text-fg-muted whitespace-nowrap">
-              {formatDuration(s.start()!, s.end()!)}
-            </span>
-          </Show>
-        </div>
+        <Show
+          when={s.mode() === "create" || s.isOrganizer()}
+          fallback={
+            <div class="flex items-center gap-2 text-sm text-fg px-2 py-1.5">
+              <Clock size={14} class="text-fg-muted shrink-0" />
+              <span>{formatTime(s.start()!, s.timeZone())}</span>
+              <ArrowRight size={14} class="text-fg-muted shrink-0" />
+              <span>{formatTime(s.end()!, s.timeZone())}</span>
+              <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
+                <span class="text-xs text-fg-muted whitespace-nowrap">
+                  {formatDuration(s.start()!, s.end()!)}
+                </span>
+              </Show>
+            </div>
+          }
+        >
+          <div class="flex items-center gap-2 text-sm text-fg">
+            <Clock size={14} class="text-fg-muted shrink-0" />
+            <TimeCombobox
+              date={() => s.start()!}
+              timeZone={() => s.timeZone()}
+              which="start"
+              ariaLabel="Start time"
+              state={s}
+              referenceHour={() => new Date().getHours()}
+            />
+            <ArrowRight size={14} class="text-fg-muted shrink-0" />
+            <TimeCombobox
+              date={() => s.end()!}
+              timeZone={() => s.timeZone()}
+              which="end"
+              ariaLabel="End time"
+              state={s}
+              referenceHour={() => s.start()!.getHours()}
+              excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
+            />
+            <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
+              <span class="text-xs text-fg-muted whitespace-nowrap">
+                {formatDuration(s.start()!, s.end()!)}
+              </span>
+            </Show>
+          </div>
+        </Show>
       </Show>
       {/* "Your time" row — shown when event timezone differs from system */}
       <Show when={s.start() && s.end() && !s.isAllDay() && s.timeZone() && s.timeZone() !== SYSTEM_TIMEZONE}>
@@ -102,7 +128,8 @@ export function TimeSection(props: SectionProps) {
           </Show>
         </div>
       </Show>
-      {/* All-day toggle */}
+      {/* All-day toggle, timezone, repeat — organizer only */}
+      <Show when={s.mode() === "create" || s.isOrganizer()}>
       <Switch.Root
         checked={s.isAllDay()}
         onCheckedChange={() => {
@@ -222,6 +249,7 @@ export function TimeSection(props: SectionProps) {
         <Repeat size={14} class="shrink-0" />
         <span>Does not repeat</span>
       </button>
+      </Show>
     </div>
   );
 }
@@ -234,11 +262,23 @@ export function DetailsSection(props: SectionProps) {
       <AttendeeList
         attendees={s.attendees()}
         isOrganizer={s.isOrganizer()}
+        accountEmail={s.accountEmail()}
+        mode={s.mode()}
         onAdd={(email, name) => s.addAttendee(email, name)}
         onRemove={(email) => s.removeAttendee(email)}
-        onRsvp={(status) => s.rsvpAttendee(status)}
+        onRsvp={(status, sendUpdates) => s.rsvpAttendee(status, sendUpdates)}
       />
-      <ConferencingField state={s} />
+      <Show when={s.mode() === "create" || s.isOrganizer()}>
+        <ConferencingField state={s} />
+      </Show>
+      <Show when={s.mode() !== "create" && !s.isOrganizer() && s.conferencing()}>
+        {(conf) => (
+          <div class="flex items-center gap-2 text-sm px-2 py-2">
+            <Video size={14} class="text-fg-muted shrink-0" />
+            <span class="flex-1 text-fg truncate">{conferencingLabel(conf())} Link</span>
+          </div>
+        )}
+      </Show>
       <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
@@ -250,7 +290,10 @@ export function DetailsSection(props: SectionProps) {
           onBlur={() => {
             if (s.mode() === "edit") s.flushSave();
           }}
-          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
+          disabled={s.mode() === "edit" && !s.isOrganizer()}
+          class={`flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none ${
+            s.mode() === "edit" && !s.isOrganizer() ? "cursor-default" : ""
+          }`}
         />
       </div>
       <Show
@@ -341,7 +384,12 @@ export function DescriptionSection(props: SectionProps) {
         onBlur={() => {
           if (s.mode() === "edit") s.flushSave();
         }}
-        class="w-full text-sm text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+        disabled={s.mode() === "edit" && !s.isOrganizer()}
+        class={`w-full text-sm text-fg placeholder-fg-disabled appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 transition-colors ${
+          s.mode() === "edit" && !s.isOrganizer()
+            ? "bg-transparent cursor-default"
+            : "bg-surface-input hover:bg-surface-hover focus:bg-surface-hover"
+        }`}
         rows={2}
       />
     </div>
@@ -409,6 +457,7 @@ export function CalendarSection(props: SectionProps) {
                 s.setVisibility(val);
               }
             }}
+            disabled={s.mode() === "edit" && !s.isOrganizer()}
             positioning={{ placement: "bottom-start" }}
           >
             <Select.Control>
@@ -587,9 +636,12 @@ const RESPONSE_STATUS_ORDER: Record<string, number> = {
 
 function sortAttendees(attendees: Attendee[]): Attendee[] {
   return [...attendees].sort((a, b) => {
-    // Organizer always first
+    // Organizer first (even if self)
     if (a.isOrganizer && !b.isOrganizer) return -1;
     if (!a.isOrganizer && b.isOrganizer) return 1;
+    // Non-organizer self last
+    if (a.isSelf && !b.isSelf) return 1;
+    if (!a.isSelf && b.isSelf) return -1;
     // Then by response status
     const aOrder = RESPONSE_STATUS_ORDER[a.responseStatus] ?? 4;
     const bOrder = RESPONSE_STATUS_ORDER[b.responseStatus] ?? 4;
@@ -636,24 +688,247 @@ const STATUS_LABELS: Record<string, string> = {
 function AttendeeList(props: {
   attendees: Attendee[] | undefined;
   isOrganizer: boolean;
+  accountEmail: string | null;
+  mode: "create" | "edit";
   onAdd: (email: string, name?: string) => void;
   onRemove: (email: string) => void;
-  onRsvp: (status: "accepted" | "declined" | "tentative") => void;
+  onRsvp: (status: "accepted" | "declined" | "tentative", sendUpdates: "all" | "none") => void;
 }) {
-  const [emailInput, setEmailInput] = createSignal("");
   const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
   const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
   const selfAttendee = createMemo(() => props.attendees?.find(a => a.isSelf));
   const canRsvp = createMemo(() => {
+    if (props.isOrganizer) return false;
     const self = selfAttendee();
     return self && !self.isOrganizer;
   });
 
-  function handleAddEmail(): void {
-    const email = emailInput().trim();
-    if (!email || !email.includes("@")) return;
-    props.onAdd(email);
-    setEmailInput("");
+  const organizerName = createMemo(() => {
+    const organizer = props.attendees?.find(a => a.isOrganizer && !a.isSelf);
+    if (!organizer) return "";
+    return organizer.name || organizer.email;
+  });
+
+  const hasPendingNotification = createMemo(() => {
+    const eventId = selectedEventId();
+    return eventId ? isPendingNotification(eventId) : false;
+  });
+
+  const hasBufferedChanges = createMemo(() => {
+    const eventId = selectedEventId();
+    return eventId ? isBuffered(eventId) : false;
+  });
+
+  const [pendingRemovals, setPendingRemovals] = createSignal<Set<string>>(new Set());
+
+  // Clear pending removals when switching events
+  createEffect(() => {
+    selectedEventId();
+    setPendingRemovals(new Set());
+  });
+
+  const isPendingRemoval = (email: string) => pendingRemovals().has(email.toLowerCase());
+
+  function togglePendingRemoval(email: string): void {
+    setPendingRemovals(prev => {
+      const next = new Set(prev);
+      const key = email.toLowerCase();
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const showNotificationPopover = createMemo(() => {
+    if (props.mode === "create") {
+      // Show when there are non-self attendees to notify
+      return (props.attendees ?? []).some(a => !a.isSelf);
+    }
+    // Active work in progress — always show
+    if (hasBufferedChanges() || pendingRemovals().size > 0) return true;
+    // Pending notification only matters when there are non-self attendees to act on
+    if (hasPendingNotification()) {
+      return (props.attendees ?? []).some(a => !a.isSelf);
+    }
+    return false;
+  });
+
+  const addedCount = createMemo(() => {
+    if (props.mode === "create") {
+      // In create mode, all non-self attendees are "new"
+      return (props.attendees ?? []).filter(a => !a.isSelf).length;
+    }
+    const eventId = selectedEventId();
+    if (!eventId) return 0;
+    const removals = pendingRemovals();
+    const current = (props.attendees ?? []).filter(
+      a => !a.isSelf && !removals.has(a.email.toLowerCase())
+    );
+    const original = getOriginalAttendees(eventId);
+    if (!original) {
+      // Only treat all attendees as new in the creation case
+      return isPendingNotification(eventId) ? current.length : 0;
+    }
+    const originalEmails = new Set(original.map(a => a.email.toLowerCase()));
+    return current.filter(a => !originalEmails.has(a.email.toLowerCase())).length;
+  });
+
+  const removedCount = createMemo(() => pendingRemovals().size);
+
+  const isCreationPending = createMemo(() => {
+    const eventId = selectedEventId();
+    if (!eventId) return false;
+    return isPendingNotification(eventId) && !isBuffered(eventId);
+  });
+
+  async function handleSendInvitations(): Promise<void> {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const hasRemovals = pendingRemovals().size > 0;
+    // Apply pending removals first
+    for (const email of pendingRemovals()) {
+      props.onRemove(email);
+    }
+    setPendingRemovals(new Set());
+    // Read attendees from form state (protected by buffer guard against poll overwrites)
+    // instead of from events() store which polling can overwrite with stale server data.
+    const attendees = props.attendees ?? [];
+    const event = events().find(e => e.id === eventId);
+    if (!event) return;
+    const eventUrl = `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
+
+    if (isCreationPending() && hasRemovals) {
+      // Creation-pending with removals: two-step PATCH to avoid Google
+      // sending cancellation emails to never-invited attendees.
+      // Step 1: Strip all non-self attendees silently
+      const selfOnly = attendees.filter(a => a.isSelf);
+      await apiFetch<ApiCalendarEvent>(eventUrl, {
+        method: "PATCH",
+        body: JSON.stringify({
+          attendees: selfOnly.map(a => ({ email: a.email, name: a.name })),
+          sendUpdates: "none",
+        }),
+      });
+      // Step 2: Re-add remaining attendees with notifications
+      const remaining = attendees.filter(a => !a.isSelf);
+      if (remaining.length > 0) {
+        const allAttendees = [...selfOnly, ...remaining];
+        const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
+          method: "PATCH",
+          body: JSON.stringify({
+            attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
+            sendUpdates: "all",
+          }),
+        });
+        setEvents((prev) => prev.map((e) =>
+          e.id === eventId ? { ...e, attendees: response.attendees } : e
+        ));
+      }
+    } else {
+      // Normal case: PATCH with current attendees + sendUpdates: "all"
+      const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
+        method: "PATCH",
+        body: JSON.stringify({
+          attendees: attendees.map(a => ({ email: a.email, name: a.name })),
+          sendUpdates: "all",
+        }),
+      });
+      // Update store with server-confirmed attendees so clearBuffer's
+      // sync effect reads correct data instead of potentially stale poll data.
+      setEvents((prev) => prev.map((e) =>
+        e.id === eventId ? { ...e, attendees: response.attendees } : e
+      ));
+    }
+    clearBuffer(eventId);
+    removePendingNotification(eventId);
+  }
+
+  function handleSendSilent(): void {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const hasRemovals = pendingRemovals().size > 0;
+    // Apply pending removals first
+    for (const email of pendingRemovals()) {
+      props.onRemove(email);
+    }
+    setPendingRemovals(new Set());
+
+    if (isBuffered(eventId) || hasRemovals) {
+      // Read attendees from form state (protected by buffer guard) not from store
+      const attendees = props.attendees ?? [];
+      const event = events().find(e => e.id === eventId);
+      if (event) {
+        // Re-assert current attendees in store before clearBuffer so the sync
+        // effect reads correct data (store may have been overwritten by polling).
+        setEvents((prev) => prev.map((e) =>
+          e.id === eventId ? { ...e, attendees: attendees.length > 0 ? attendees : undefined } : e
+        ));
+        apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            attendees: attendees.map(a => ({ email: a.email, name: a.name })),
+            sendUpdates: "none",
+          }),
+        }).catch(err => console.error("[attendees] Failed to save silently:", err));
+      }
+      clearBuffer(eventId);
+    }
+    removePendingNotification(eventId);
+  }
+
+  // --- Create-mode handlers ---
+  async function handleCreateSend(): Promise<void> {
+    commitCreation("all");
+  }
+
+  function handleCreateSilent(): void {
+    commitCreation("none");
+  }
+
+  async function handleCreateDiscard(): Promise<void> {
+    setDraftAttendees([]);
+  }
+
+  async function handleDiscard(): Promise<void> {
+    const eventId = selectedEventId();
+    if (!eventId) return;
+    const hadPendingRemovals = pendingRemovals().size > 0;
+    // Clear pending removals
+    setPendingRemovals(new Set());
+
+    if (isBuffered(eventId)) {
+      // Edit buffered case: revert to original attendees
+      const original = getOriginalAttendees(eventId);
+      setEvents((prev) => prev.map(e =>
+        e.id === eventId
+          ? { ...e, attendees: original && original.length > 0 ? original : undefined }
+          : e
+      ));
+      clearBuffer(eventId);
+      return;
+    }
+
+    // Creation-pending with only pending removals (no buffer): just undo the removals.
+    // The pending notification survives so the popover reverts to "Send invite".
+    if (hadPendingRemovals && isPendingNotification(eventId)) return;
+
+    if (!isPendingNotification(eventId)) return;
+
+    // Creation pending case: remove all attendees from server
+    const event = events().find(e => e.id === eventId);
+    if (!event) return;
+    await apiFetch<ApiCalendarEvent>(
+      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ attendees: null, sendUpdates: "none" }),
+      }
+    );
+    setEvents((prev) => prev.map(e => e.id === eventId ? { ...e, attendees: undefined } : e));
+    removePendingNotification(eventId);
   }
 
   return (
@@ -667,64 +942,295 @@ function AttendeeList(props: {
       <Show when={hasAttendees()}>
         <div class="max-h-52 overflow-y-auto">
           <For each={sorted()}>
-            {(attendee) => (
-              <div
-                class="group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded hover:bg-surface-hover transition-colors"
-                role="listitem"
-                aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
-              >
-                <ResponseStatusIcon status={attendee.responseStatus} />
-                <span
-                  class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium text-fg" : "text-fg"}`}
+            {(attendee) => {
+              const pending = () => isPendingRemoval(attendee.email);
+              return (
+                <div
+                  class={`group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded transition-colors ${
+                    pending() ? "" : "hover:bg-surface-hover"
+                  }`}
+                  role="listitem"
+                  aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", you" : ""}${pending() ? ", pending removal" : ""}`}
                 >
-                  {attendee.isSelf
-                    ? (attendee.name ? `${attendee.name} (You)` : "You")
-                    : (attendee.name || attendee.email)}
-                </span>
-                <Show when={attendee.isOrganizer}>
-                  <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
-                </Show>
-                <Show when={props.isOrganizer && !attendee.isSelf}>
-                  <button
-                    class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
-                    onClick={() => props.onRemove(attendee.email)}
-                    aria-label={`Remove ${attendee.name || attendee.email}`}
+                  <span class={pending() ? "opacity-40" : ""}>
+                    <ResponseStatusIcon status={attendee.responseStatus} />
+                  </span>
+                  <span
+                    class={`flex-1 text-sm truncate ${
+                      pending() ? "text-fg-disabled line-through" : "text-fg"
+                    }`}
                   >
-                    <X size={12} />
-                  </button>
-                </Show>
-              </div>
-            )}
+                    {attendee.name || attendee.email}
+                  </span>
+                  <Show when={attendee.isSelf || attendee.isOrganizer}>
+                    <span class={`text-2xs shrink-0 ${pending() ? "text-fg-disabled/50" : "text-fg-disabled"}`}>
+                      {attendee.isSelf && attendee.isOrganizer
+                        ? "You · Organizer"
+                        : attendee.isSelf ? "You" : "Organizer"}
+                    </span>
+                  </Show>
+                  <Show when={props.isOrganizer && !attendee.isSelf}>
+                    <button
+                      class={`transition-colors cursor-pointer p-0.5 ${
+                        pending()
+                          ? "text-fg-muted hover:text-fg"
+                          : "text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg"
+                      }`}
+                      onClick={() => {
+                        if (props.mode === "edit") {
+                          // If attendee was added during this session (not in original list),
+                          // remove immediately — no confirmation needed since they were never emailed
+                          const eventId = selectedEventId();
+                          const original = eventId ? getOriginalAttendees(eventId) : undefined;
+                          if (original && !original.some(a => a.email.toLowerCase() === attendee.email.toLowerCase())) {
+                            props.onRemove(attendee.email);
+                          } else {
+                            togglePendingRemoval(attendee.email);
+                          }
+                        } else {
+                          props.onRemove(attendee.email);
+                        }
+                      }}
+                      aria-label={pending()
+                        ? `Undo remove ${attendee.name || attendee.email}`
+                        : `Remove ${attendee.name || attendee.email}`
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  </Show>
+                </div>
+              );
+            }}
           </For>
         </div>
         <Show when={canRsvp()}>
-          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
+          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} organizerName={organizerName()} onRsvp={props.onRsvp} />
         </Show>
       </Show>
+      <Show when={showNotificationPopover()}>
+        <NotificationConfirmPopover
+          addedCount={addedCount()}
+          removedCount={props.mode === "create" ? 0 : removedCount()}
+          isCreationPending={props.mode === "create" || isCreationPending()}
+          commitDisabled={props.mode === "create" && !draftTitle().trim()}
+          onSend={props.mode === "create" ? handleCreateSend : handleSendInvitations}
+          onSendSilent={props.mode === "create" ? handleCreateSilent : handleSendSilent}
+          onDiscard={props.mode === "create" ? handleCreateDiscard : handleDiscard}
+        />
+      </Show>
       <Show when={props.isOrganizer}>
-        <div class="flex items-center gap-2 pl-[30px] pr-2">
-          <input
-            type="email"
-            placeholder="Add participant email"
-            aria-label="Add participant email"
-            value={emailInput()}
-            onInput={(e) => setEmailInput(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAddEmail();
-              }
-            }}
-            onBlur={() => handleAddEmail()}
-            class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
-          />
-        </div>
+        <AttendeeCombobox attendees={props.attendees} accountEmail={props.accountEmail} onAdd={props.onAdd} />
       </Show>
     </div>
   );
 }
 
-function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp: (status: "accepted" | "declined" | "tentative") => void }) {
+interface ContactSuggestion {
+  email: string;
+  name: string | null;
+  score: number;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(value: string): boolean {
+  return EMAIL_RE.test(value);
+}
+
+function AttendeeCombobox(props: {
+  attendees: Attendee[] | undefined;
+  accountEmail: string | null;
+  onAdd: (email: string, name?: string) => void;
+}) {
+  let inputRef: HTMLInputElement | undefined;
+  const [inputValue, setInputValue] = createSignal("");
+  const [query, setQuery] = createSignal("");
+  const [suggestions, setSuggestions] = createSignal<ContactSuggestion[]>([]);
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let zeroStateCache: ContactSuggestion[] | null = null;
+  // Only mirror highlighted item into input on explicit navigation (hover/arrow),
+  // not when autohighlight fires after typing.
+  let userNavigated = false;
+
+  onCleanup(() => clearTimeout(debounceTimer));
+
+  const existingEmails = createMemo(() =>
+    new Set((props.attendees ?? []).map(a => a.email.toLowerCase()))
+  );
+
+  const filtered = createMemo(() =>
+    suggestions().filter(c => !existingEmails().has(c.email.toLowerCase()))
+  );
+
+  const items = createMemo(() =>
+    filtered().map(c => ({ value: c.email, name: c.name }))
+  );
+
+  const collection = createMemo(() => {
+    const q = query().toLowerCase();
+    return createListCollection({
+      items: items(),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => q ? `${q} ${item.value}` : item.value,
+    });
+  });
+
+  async function fetchSuggestions(q: string): Promise<void> {
+    if (q === "" && zeroStateCache) {
+      setSuggestions(zeroStateCache);
+      return;
+    }
+    try {
+      const result = await apiFetch<{ contacts: ContactSuggestion[] }>(
+        `/api/contacts/suggestions?q=${encodeURIComponent(q)}&limit=8`
+      );
+      if (q === "") zeroStateCache = result.contacts;
+      setSuggestions(result.contacts);
+    } catch {
+      // API error — fall back to raw email input behavior
+    }
+  }
+
+  function debouncedFetch(q: string): void {
+    clearTimeout(debounceTimer);
+    if (q === "") {
+      fetchSuggestions("").catch(() => {});
+      return;
+    }
+    debounceTimer = setTimeout(() => {
+      fetchSuggestions(q).catch(() => {});
+    }, 200);
+  }
+
+  function handleAdd(email: string, name?: string): void {
+    const trimmed = email.trim();
+    if (!trimmed || !isValidEmail(trimmed)) return;
+    props.onAdd(trimmed, name || undefined);
+    setInputValue("");
+    setQuery("");
+    setSuggestions(zeroStateCache ?? []);
+  }
+
+  return (
+    <Combobox.Root
+      collection={collection()}
+      value={[]}
+      allowCustomValue
+      openOnClick
+      closeOnSelect
+      inputBehavior="autohighlight"
+      onHighlightChange={(d) => {
+        if (d.highlightedValue != null && userNavigated) {
+          const item = items().find((i) => i.value === d.highlightedValue);
+          if (item) {
+            setInputValue(item.name || item.value);
+            requestAnimationFrame(() => inputRef?.select());
+          }
+        }
+      }}
+      inputValue={inputValue()}
+      onInputValueChange={(d) => {
+        userNavigated = false;
+        setInputValue(d.inputValue);
+        setQuery(d.inputValue);
+        debouncedFetch(d.inputValue.trim());
+      }}
+      onValueChange={(details) => {
+        const email = details.value[0];
+        if (!email) return;
+        const contact = filtered().find(c => c.email === email);
+        handleAdd(email, contact?.name ?? undefined);
+      }}
+      onOpenChange={(d) => {
+        if (d.open) {
+          debouncedFetch("");
+        } else {
+          // Try to add any remaining email-like text (handles blur-to-add)
+          const val = inputValue().trim();
+          if (val && isValidEmail(val)) {
+            handleAdd(val);
+          }
+          setInputValue("");
+          setQuery("");
+        }
+      }}
+      positioning={{ placement: "bottom-start", sameWidth: true }}
+    >
+      <Combobox.Control class="pl-[30px] pr-2">
+        <Combobox.Input
+          ref={(el) => { inputRef = el; }}
+          placeholder="Add participant"
+          aria-label="Add participant"
+          autocomplete="off"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              userNavigated = true;
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setInputValue("");
+              setQuery("");
+              (e.target as HTMLElement).blur();
+            } else if (e.key === "Enter") {
+              const val = inputValue().trim();
+              if (val && isValidEmail(val)) {
+                e.preventDefault();
+                const contact = filtered().find(c => c.email.toLowerCase() === val.toLowerCase());
+                handleAdd(val, contact?.name ?? undefined);
+                return;
+              }
+              // Non-email text with suggestions visible — let Combobox handle
+            }
+          }}
+          class="flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
+        />
+      </Combobox.Control>
+      <Combobox.Positioner>
+        <Show when={items().length > 0}>
+          <Combobox.Content
+            class="bg-surface border border-border rounded py-1 z-50 max-h-48 overflow-y-auto"
+            onPointerMove={() => { userNavigated = true; }}
+          >
+            <For each={items()}>
+              {(item) => {
+                const isSelf = () => props.accountEmail != null && item.value.toLowerCase() === props.accountEmail;
+                return (
+                  <Combobox.Item
+                    item={item}
+                    class="flex flex-col px-3 py-1.5 cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <Combobox.ItemText class="text-xs text-fg">
+                        {item.name || item.value}
+                      </Combobox.ItemText>
+                      <Show when={isSelf()}>
+                        <span class="text-2xs text-fg-disabled">(You)</span>
+                      </Show>
+                    </div>
+                    <Show when={item.name}>
+                      <span class="text-2xs text-fg-disabled">{item.value}</span>
+                    </Show>
+                  </Combobox.Item>
+                );
+              }}
+            </For>
+          </Combobox.Content>
+        </Show>
+      </Combobox.Positioner>
+    </Combobox.Root>
+  );
+}
+
+const RSVP_LABELS: Record<string, { button: string; silent: string; notifyPrefix: string }> = {
+  accepted: { button: "Accept", silent: "Accept without notifying", notifyPrefix: "Accept & notify" },
+  tentative: { button: "Maybe", silent: "Respond tentatively without notifying", notifyPrefix: "Respond tentatively & notify" },
+  declined: { button: "Decline", silent: "Decline without notifying", notifyPrefix: "Decline & notify" },
+};
+
+function RsvpButtons(props: {
+  currentStatus: Attendee["responseStatus"];
+  organizerName: string;
+  onRsvp: (status: "accepted" | "declined" | "tentative", sendUpdates: "all" | "none") => void;
+}) {
   const buttonClass = (status: string) => {
     const isActive = props.currentStatus === status;
     return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
@@ -740,27 +1246,64 @@ function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp:
       role="group"
       aria-label="Your response"
     >
-      <button
-        class={buttonClass("accepted")}
-        aria-pressed={props.currentStatus === "accepted"}
-        onClick={() => props.onRsvp("accepted")}
-      >
-        Accept
-      </button>
-      <button
-        class={buttonClass("tentative")}
-        aria-pressed={props.currentStatus === "tentative"}
-        onClick={() => props.onRsvp("tentative")}
-      >
-        Maybe
-      </button>
-      <button
-        class={buttonClass("declined")}
-        aria-pressed={props.currentStatus === "declined"}
-        onClick={() => props.onRsvp("declined")}
-      >
-        Decline
-      </button>
+      <For each={["accepted", "tentative", "declined"] as const}>
+        {(status) => (
+          <Popover.Root positioning={{ placement: "top" }}>
+            <Popover.Trigger
+              class={buttonClass(status)}
+              aria-pressed={props.currentStatus === status}
+            >
+              {RSVP_LABELS[status].button}
+            </Popover.Trigger>
+            <Popover.Positioner>
+              <Popover.Content
+                class="bg-surface border border-border rounded-lg shadow-lg z-50 w-64 py-2"
+                aria-label="Choose how to respond to this invitation"
+              >
+                {/* Cancel */}
+                <Popover.CloseTrigger
+                  class="w-full text-left text-sm text-fg-muted hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+                >
+                  Cancel
+                </Popover.CloseTrigger>
+
+                {/* Notify organizer */}
+                <Popover.CloseTrigger
+                  class="w-full text-left text-sm text-fg hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+                  onClick={() => props.onRsvp(status, "all")}
+                >
+                  {RSVP_LABELS[status].notifyPrefix} {props.organizerName}
+                </Popover.CloseTrigger>
+
+                {/* Primary: without notifying */}
+                <div class="px-3 pt-1 pb-1">
+                  <div class="flex items-center rounded-lg bg-accent hover:bg-accent/90 transition-colors">
+                    <Popover.CloseTrigger
+                      class="flex-1 text-sm py-2 px-3 text-white font-medium text-left cursor-pointer border-none outline-none bg-transparent"
+                      onClick={() => props.onRsvp(status, "none")}
+                    >
+                      {RSVP_LABELS[status].silent}
+                    </Popover.CloseTrigger>
+                    <Tooltip.Root openDelay={200} positioning={{ placement: "top" }}>
+                      <Tooltip.Trigger
+                        class="text-white/50 hover:text-white/80 transition-colors cursor-help bg-transparent border-none outline-none p-1 pr-2.5"
+                        aria-label="What does this mean?"
+                      >
+                        <Info size={14} />
+                      </Tooltip.Trigger>
+                      <Tooltip.Positioner>
+                        <Tooltip.Content class="bg-fg text-surface text-xs rounded px-2 py-1 max-w-52 z-50">
+                          {props.organizerName} will see your response on their next calendar sync. No email is sent.
+                        </Tooltip.Content>
+                      </Tooltip.Positioner>
+                    </Tooltip.Root>
+                  </div>
+                </div>
+              </Popover.Content>
+            </Popover.Positioner>
+          </Popover.Root>
+        )}
+      </For>
     </div>
   );
 }
@@ -1070,10 +1613,10 @@ function ReminderCombobox(props: { state: EventFormState }) {
   return (
     <Combobox.Root
       collection={collection()}
+      value={[]}
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
       inputBehavior="autohighlight"
       onHighlightChange={(d) => {
         if (d.highlightedValue != null && userNavigated) {
@@ -1279,7 +1822,7 @@ function TimeCombobox(props: {
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
+      value={[]}
       inputBehavior="autohighlight"
       highlightedValue={highlighted()}
       onHighlightChange={(d) => {
@@ -1484,7 +2027,7 @@ function TimezoneSelector(props: { state: EventFormState }) {
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
+      value={[]}
       inputBehavior="autohighlight"
       highlightedValue={highlighted()}
       onHighlightChange={(d) => {

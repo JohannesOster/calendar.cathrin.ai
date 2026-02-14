@@ -7,6 +7,7 @@ import { apiFetch } from "../lib/api";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
+import { addPendingNotification } from "./pending-notifications";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
 // =============================================================================
@@ -28,6 +29,14 @@ export const [draftColorId, setDraftColorId] = createSignal<string | null>(null)
 export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
 export const [draftTimeZone, setDraftTimeZone] = createSignal<string | undefined>(undefined);
 export const [draftAttendees, setDraftAttendees] = createSignal<Attendee[]>([]);
+
+// Commit prompt: shown when user tries to commit/leave with attendees present
+export const [showCommitPrompt, setShowCommitPrompt] = createSignal(false);
+
+/** Whether the draft has any attendees (triggers notification barrier). */
+export function draftHasAttendees(): boolean {
+  return draftAttendees().length > 0;
+}
 
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
@@ -75,10 +84,10 @@ function resolveCalendarId(): string | null {
   const saved = defaultCalendarId();
   if (saved) return saved;
 
-  // Fall back to first visible calendar
+  // Fall back to first visible writable calendar
   for (const account of connectedAccounts()) {
     for (const cal of account.calendars) {
-      if (cal.visible) {
+      if (cal.visible && cal.accessRole !== "reader" && cal.accessRole !== "freeBusyReader") {
         setDefaultCalendar(cal.id);
         return cal.id;
       }
@@ -157,6 +166,7 @@ export function finishDrag(): void {
  * Cancel the current creation (Escape or click-outside-without-title)
  */
 export function cancelCreation(): void {
+  setShowCommitPrompt(false);
   setIsCreating(false);
   setIsDragging(false);
   setDraftStart(null);
@@ -191,7 +201,8 @@ function formatDateOnly(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function commitCreation(): boolean {
+export function commitCreation(sendUpdates?: "all" | "none"): boolean {
+  setShowCommitPrompt(false);
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
@@ -261,6 +272,10 @@ export function commitCreation(): boolean {
   // Reset creation state
   cancelCreation();
 
+  const hasAttendees = attendees.length > 0;
+  // Use explicitly provided sendUpdates, or default to "none" for attendee events
+  const effectiveSendUpdates = hasAttendees ? (sendUpdates ?? "none") : undefined;
+
   // Background API call
   apiFetch<ApiCalendarEvent>("/api/events", {
     method: "POST",
@@ -282,17 +297,19 @@ export function commitCreation(): boolean {
           : { type: "meet" as const },
       }),
       timeZone,
-      ...(attendees.length > 0 && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
+      ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
+      ...(effectiveSendUpdates && { sendUpdates: effectiveSendUpdates }),
     }),
   })
     .then((serverEvent) => {
+      const compositeId = `${calId}/${serverEvent.id}`;
       // Swap temp ID with server-assigned ID
       setEvents((prev) =>
         prev.map((e) =>
           e.id === tempId
             ? {
                 ...e,
-                id: `${calId}/${serverEvent.id}`,
+                id: compositeId,
                 googleEventId: serverEvent.id,
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
@@ -302,6 +319,11 @@ export function commitCreation(): boolean {
             : e
         )
       );
+      // Only track as pending notification if user didn't explicitly choose
+      // (sendUpdates was not provided — shouldn't happen with new flow, but kept as safety)
+      if (hasAttendees && sendUpdates === undefined) {
+        addPendingNotification(compositeId);
+      }
       // Revalidate the affected week to sync with server state
       revalidateWeeksForDates(new Date(serverEvent.start));
     })

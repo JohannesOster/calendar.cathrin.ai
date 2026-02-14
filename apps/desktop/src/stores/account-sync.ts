@@ -70,6 +70,7 @@ export async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
         color: mapProviderColor(c.color),
         // Use local visibility preference (client-side setting)
         visible: getCalendarVisibility(c.id),
+        accessRole: c.accessRole,
       })),
     );
   }

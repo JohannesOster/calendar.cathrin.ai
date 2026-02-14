@@ -33,7 +33,8 @@ export async function createEventViaGoogle(
   colorId?: string,
   conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null,
   timeZone?: string,
-  attendees?: { email: string; name?: string }[]
+  attendees?: { email: string; name?: string }[],
+  sendUpdates?: "all" | "none"
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
@@ -63,7 +64,7 @@ export async function createEventViaGoogle(
     ...(attendees && attendees.length > 0 && {
       attendees: attendees.map(a => ({ email: a.email, displayName: a.name })),
     }),
-  }, attendees && attendees.length > 0 ? { sendUpdates: "all" } : undefined);
+  }, attendees && attendees.length > 0 ? { sendUpdates: sendUpdates ?? "all" } : undefined);
 
   // Extract conferencing from Google response
   const videoEntryPoint = googleEvent.conferenceData?.entryPoints
@@ -137,7 +138,8 @@ export async function updateEventViaGoogle(
     timeZone?: string;
     attendees?: { email: string; name?: string }[] | null;
   },
-  existingEvent: ServerEvent
+  existingEvent: ServerEvent,
+  sendUpdates?: "all" | "none"
 ): Promise<ApiCalendarEvent> {
   const googlePatch: GoogleEventPatch = {};
   if (patch.summary !== undefined) googlePatch.summary = patch.summary;
@@ -194,7 +196,9 @@ export async function updateEventViaGoogle(
   const service = new GoogleCalendarService(accessToken);
   const updated = await service.patchEvent(
     calendarId, googleEventId, googlePatch,
-    patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
+    sendUpdates !== undefined
+      ? { sendUpdates }
+      : patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
   );
 
   const updatedStart = updated.start.dateTime
@@ -380,7 +384,8 @@ export async function rsvpEventViaGoogle(
   calendarId: string,
   googleEventId: string,
   responseStatus: "accepted" | "declined" | "tentative",
-  existingEvent: ServerEvent
+  existingEvent: ServerEvent,
+  sendUpdates?: "all" | "none"
 ): Promise<ApiCalendarEvent> {
   const attendees = (existingEvent.attendees as Attendee[]) || [];
   if (attendees.length === 0) {
@@ -401,7 +406,7 @@ export async function rsvpEventViaGoogle(
     calendarId,
     googleEventId,
     { attendees: googleAttendees },
-    { sendUpdates: "none" }
+    { sendUpdates: sendUpdates ?? "none" }
   );
 
   // Update attendees in local DB

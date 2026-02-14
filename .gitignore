@@ -16,3 +16,6 @@ dist
 
 # Package manager
 yarn.lock
+
+# Dev scripts
+dev.sh

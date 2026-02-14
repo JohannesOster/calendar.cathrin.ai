@@ -29,6 +29,8 @@ function sortDetailAttendees(attendees: Attendee[]): Attendee[] {
   return [...attendees].sort((a, b) => {
     if (a.isOrganizer && !b.isOrganizer) return -1;
     if (!a.isOrganizer && b.isOrganizer) return 1;
+    if (a.isSelf && !b.isSelf) return 1;
+    if (!a.isSelf && b.isSelf) return -1;
     const aOrder = DETAIL_STATUS_ORDER[a.responseStatus] ?? 4;
     const bOrder = DETAIL_STATUS_ORDER[b.responseStatus] ?? 4;
     return aOrder - bOrder;
@@ -144,13 +146,15 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
                         aria-label={`${attendee.name || attendee.email}, ${DETAIL_STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
                       >
                         <DetailStatusIcon status={attendee.responseStatus} />
-                        <span class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium" : ""}`}>
-                          {attendee.isSelf
-                            ? (attendee.name ? `${attendee.name} (You)` : "You")
-                            : (attendee.name || attendee.email)}
+                        <span class="flex-1 text-sm truncate">
+                          {attendee.name || attendee.email}
                         </span>
-                        <Show when={attendee.isOrganizer}>
-                          <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
+                        <Show when={attendee.isSelf || attendee.isOrganizer}>
+                          <span class="text-2xs text-fg-disabled shrink-0">
+                            {attendee.isSelf && attendee.isOrganizer
+                              ? "You · Organizer"
+                              : attendee.isSelf ? "You" : "Organizer"}
+                          </span>
                         </Show>
                       </div>
                     )}

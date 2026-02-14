@@ -8,6 +8,7 @@ export interface Calendar {
   name: string;
   color: string;
   visible: boolean;
+  accessRole?: string;
 }
 
 export interface CalendarAccount {
