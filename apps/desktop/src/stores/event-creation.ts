@@ -30,6 +30,14 @@ export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: str
 export const [draftTimeZone, setDraftTimeZone] = createSignal<string | undefined>(undefined);
 export const [draftAttendees, setDraftAttendees] = createSignal<Attendee[]>([]);
 
+// Commit prompt: shown when user tries to commit/leave with attendees present
+export const [showCommitPrompt, setShowCommitPrompt] = createSignal(false);
+
+/** Whether the draft has any attendees (triggers notification barrier). */
+export function draftHasAttendees(): boolean {
+  return draftAttendees().length > 0;
+}
+
 // Shadow position: original start/end before inline time editing begins
 export const [shadowStart, setShadowStart] = createSignal<Date | null>(null);
 export const [shadowEnd, setShadowEnd] = createSignal<Date | null>(null);
@@ -158,6 +166,7 @@ export function finishDrag(): void {
  * Cancel the current creation (Escape or click-outside-without-title)
  */
 export function cancelCreation(): void {
+  setShowCommitPrompt(false);
   setIsCreating(false);
   setIsDragging(false);
   setDraftStart(null);
@@ -192,7 +201,8 @@ function formatDateOnly(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function commitCreation(): boolean {
+export function commitCreation(sendUpdates?: "all" | "none"): boolean {
+  setShowCommitPrompt(false);
   const title = draftTitle().trim();
   const start = draftStart();
   const end = draftEnd();
@@ -262,8 +272,9 @@ export function commitCreation(): boolean {
   // Reset creation state
   cancelCreation();
 
-  // When attendees are present, save silently (no emails) and enter draft state
   const hasAttendees = attendees.length > 0;
+  // Use explicitly provided sendUpdates, or default to "none" for attendee events
+  const effectiveSendUpdates = hasAttendees ? (sendUpdates ?? "none") : undefined;
 
   // Background API call
   apiFetch<ApiCalendarEvent>("/api/events", {
@@ -287,7 +298,7 @@ export function commitCreation(): boolean {
       }),
       timeZone,
       ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
-      ...(hasAttendees && { sendUpdates: "none" }),
+      ...(effectiveSendUpdates && { sendUpdates: effectiveSendUpdates }),
     }),
   })
     .then((serverEvent) => {
@@ -308,8 +319,9 @@ export function commitCreation(): boolean {
             : e
         )
       );
-      // Track as pending notification so the user can decide about emails later
-      if (hasAttendees) {
+      // Only track as pending notification if user didn't explicitly choose
+      // (sendUpdates was not provided — shouldn't happen with new flow, but kept as safety)
+      if (hasAttendees && sendUpdates === undefined) {
         addPendingNotification(compositeId);
       }
       // Revalidate the affected week to sync with server state

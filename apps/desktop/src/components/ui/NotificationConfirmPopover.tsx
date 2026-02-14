@@ -6,6 +6,9 @@ import { ChevronDown, Info } from "lucide-solid";
 interface NotificationConfirmPopoverProps {
   addedCount: number;
   removedCount: number;
+  isCreationPending?: boolean;
+  /** Disable send/silent buttons (e.g. when title is empty during creation) */
+  commitDisabled?: boolean;
   onSend: () => Promise<void>;
   onSendSilent: () => void;
   onDiscard: () => Promise<void>;
@@ -20,6 +23,19 @@ export function NotificationConfirmPopover(props: NotificationConfirmPopoverProp
   const isMixed = () => hasAdds() && hasRemoves();
 
   const label = () => {
+    if (props.isCreationPending) {
+      // Creation-pending: attendees were never emailed
+      if (hasRemoves() && !hasAdds()) {
+        return props.removedCount === 1
+          ? "Discard invite"
+          : `Discard ${props.removedCount} invites`;
+      }
+      if (isMixed()) {
+        return props.addedCount === 1
+          ? "Send invite"
+          : `Send ${props.addedCount} invites`;
+      }
+    }
     if (isMixed()) {
       const total = props.addedCount + props.removedCount;
       return `Notify ${total} participants`;
@@ -71,9 +87,9 @@ export function NotificationConfirmPopover(props: NotificationConfirmPopoverProp
       <div class="flex items-center">
         {/* Main send button */}
         <button
-          class="text-sm py-2 px-3 rounded-l-lg bg-accent text-white hover:bg-accent/90 transition-colors cursor-pointer border-none outline-none font-medium text-left"
+          class="text-sm py-2 px-3 rounded-l-lg bg-accent text-white hover:bg-accent/90 transition-colors cursor-pointer border-none outline-none font-medium text-left disabled:opacity-50 disabled:cursor-default"
           onClick={handleSend}
-          disabled={sending() || discarding()}
+          disabled={sending() || discarding() || props.commitDisabled}
         >
           {label()}
         </button>
@@ -84,9 +100,9 @@ export function NotificationConfirmPopover(props: NotificationConfirmPopoverProp
         {/* Chevron dropdown */}
         <Popover.Root positioning={{ placement: "bottom-end" }}>
           <Popover.Trigger
-            class="self-stretch flex items-center justify-center px-2 rounded-r-lg bg-accent text-white hover:bg-accent/90 transition-colors cursor-pointer border-none outline-none"
+            class="self-stretch flex items-center justify-center px-2 rounded-r-lg bg-accent text-white hover:bg-accent/90 transition-colors cursor-pointer border-none outline-none disabled:opacity-50 disabled:cursor-default"
             aria-label="More invitation options"
-            disabled={sending() || discarding()}
+            disabled={sending() || discarding() || props.commitDisabled}
           >
             <ChevronDown size={14} />
           </Popover.Trigger>
@@ -107,9 +123,9 @@ export function NotificationConfirmPopover(props: NotificationConfirmPopoverProp
               {/* Send without email */}
               <div class="flex items-center px-3 py-2 hover:bg-surface-hover transition-colors">
                 <Popover.CloseTrigger
-                  class="flex-1 text-left text-sm text-fg cursor-pointer border-none outline-none bg-transparent p-0"
+                  class="flex-1 text-left text-sm text-fg cursor-pointer border-none outline-none bg-transparent p-0 disabled:text-fg-disabled disabled:cursor-default"
                   onClick={() => props.onSendSilent()}
-                  disabled={sending() || discarding()}
+                  disabled={sending() || discarding() || props.commitDisabled}
                 >
                   {silentLabel()}
                 </Popover.CloseTrigger>

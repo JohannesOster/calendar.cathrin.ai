@@ -402,6 +402,17 @@ export function useEventFormState() {
     return true;
   });
 
+  // All writable visible calendars for the selector
+  // (must be declared before accountEmail which references it)
+  const allCalendars = createMemo(() => {
+    return connectedAccounts()
+      .flatMap((a) =>
+        a.calendars
+          .filter((c) => c.visible && c.accessRole !== "reader" && c.accessRole !== "freeBusyReader")
+          .map((c) => ({ ...c, accountEmail: a.email }))
+      );
+  });
+
   // The email of the account that owns the current calendar
   const accountEmail = createMemo(() => {
     const calId = calendarId();
@@ -431,29 +442,14 @@ export function useEventFormState() {
   }
 
   /**
-   * Auto-save buffered attendee changes when navigating away (deselect / switch event).
-   * Saves silently (sendUpdates: "none") and adds a pending notification so the user
-   * can decide about emails later.
+   * Mark buffered attendee changes as pending notification when navigating away.
+   * Does NOT sync to server — attendee changes stay local-only until the user
+   * explicitly confirms (send invite/cancellation) or discards via the popover.
+   * The buffer is kept alive so the popover reappears when the user returns.
    */
   function flushBufferedAttendees(eventId: string): void {
     if (!isBuffered(eventId)) return;
-    const event = events().find(e => e.id === eventId);
-    if (!event) { clearBuffer(eventId); return; }
-
-    const currentAttendees = event.attendees;
-    clearBuffer(eventId);
-
-    apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        attendees: currentAttendees ? currentAttendees.map(a => ({ email: a.email, name: a.name })) : null,
-        sendUpdates: "none",
-      }),
-    }).then(() => {
-      addPendingNotification(eventId);
-    }).catch(err => {
-      console.error("[attendees] Failed to save buffered attendees:", err);
-    });
+    addPendingNotification(eventId);
   }
 
   function addAttendee(email: string, name?: string): void {
@@ -707,16 +703,6 @@ export function useEventFormState() {
       }
     }
   }
-
-  // All writable visible calendars for the selector
-  const allCalendars = createMemo(() => {
-    return connectedAccounts()
-      .flatMap((a) =>
-        a.calendars
-          .filter((c) => c.visible && c.accessRole !== "reader" && c.accessRole !== "freeBusyReader")
-          .map((c) => ({ ...c, accountEmail: a.email }))
-      );
-  });
 
   // In edit mode: only calendars from the same account as the event
   const editCalendars = createMemo(() => {

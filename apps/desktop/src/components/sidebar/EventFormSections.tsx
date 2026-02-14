@@ -33,7 +33,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { apiFetch } from "../../lib/api";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
-import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
+import { setDraftStart, setDraftEnd, commitCreation, draftTitle, setDraftAttendees } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
@@ -742,14 +742,31 @@ function AttendeeList(props: {
     });
   }
 
-  const showNotificationPopover = createMemo(() =>
-    hasPendingNotification() || hasBufferedChanges() || pendingRemovals().size > 0
-  );
+  const showNotificationPopover = createMemo(() => {
+    if (props.mode === "create") {
+      // Show when there are non-self attendees to notify
+      return (props.attendees ?? []).some(a => !a.isSelf);
+    }
+    // Active work in progress — always show
+    if (hasBufferedChanges() || pendingRemovals().size > 0) return true;
+    // Pending notification only matters when there are non-self attendees to act on
+    if (hasPendingNotification()) {
+      return (props.attendees ?? []).some(a => !a.isSelf);
+    }
+    return false;
+  });
 
   const addedCount = createMemo(() => {
+    if (props.mode === "create") {
+      // In create mode, all non-self attendees are "new"
+      return (props.attendees ?? []).filter(a => !a.isSelf).length;
+    }
     const eventId = selectedEventId();
     if (!eventId) return 0;
-    const current = (props.attendees ?? []).filter(a => !a.isSelf);
+    const removals = pendingRemovals();
+    const current = (props.attendees ?? []).filter(
+      a => !a.isSelf && !removals.has(a.email.toLowerCase())
+    );
     const original = getOriginalAttendees(eventId);
     if (!original) {
       // Only treat all attendees as new in the creation case
@@ -761,9 +778,16 @@ function AttendeeList(props: {
 
   const removedCount = createMemo(() => pendingRemovals().size);
 
+  const isCreationPending = createMemo(() => {
+    const eventId = selectedEventId();
+    if (!eventId) return false;
+    return isPendingNotification(eventId) && !isBuffered(eventId);
+  });
+
   async function handleSendInvitations(): Promise<void> {
     const eventId = selectedEventId();
     if (!eventId) return;
+    const hasRemovals = pendingRemovals().size > 0;
     // Apply pending removals first
     for (const email of pendingRemovals()) {
       props.onRemove(email);
@@ -771,17 +795,42 @@ function AttendeeList(props: {
     setPendingRemovals(new Set());
     const event = events().find(e => e.id === eventId);
     if (!event) return;
-    // PATCH with current attendees + sendUpdates: "all" to trigger notification emails
-    await apiFetch<ApiCalendarEvent>(
-      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
-      {
+    const eventUrl = `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
+
+    if (isCreationPending() && hasRemovals) {
+      // Creation-pending with removals: two-step PATCH to avoid Google
+      // sending cancellation emails to never-invited attendees.
+      // Step 1: Strip all non-self attendees silently
+      const selfOnly = (event.attendees ?? []).filter(a => a.isSelf);
+      await apiFetch<ApiCalendarEvent>(eventUrl, {
+        method: "PATCH",
+        body: JSON.stringify({
+          attendees: selfOnly.map(a => ({ email: a.email, name: a.name })),
+          sendUpdates: "none",
+        }),
+      });
+      // Step 2: Re-add remaining attendees with notifications
+      const remaining = (event.attendees ?? []).filter(a => !a.isSelf);
+      if (remaining.length > 0) {
+        const allAttendees = [...selfOnly, ...remaining];
+        await apiFetch<ApiCalendarEvent>(eventUrl, {
+          method: "PATCH",
+          body: JSON.stringify({
+            attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
+            sendUpdates: "all",
+          }),
+        });
+      }
+    } else {
+      // Normal case: PATCH with current attendees + sendUpdates: "all"
+      await apiFetch<ApiCalendarEvent>(eventUrl, {
         method: "PATCH",
         body: JSON.stringify({
           attendees: (event.attendees ?? []).map(a => ({ email: a.email, name: a.name })),
           sendUpdates: "all",
         }),
-      }
-    );
+      });
+    }
     clearBuffer(eventId);
     removePendingNotification(eventId);
   }
@@ -789,14 +838,15 @@ function AttendeeList(props: {
   function handleSendSilent(): void {
     const eventId = selectedEventId();
     if (!eventId) return;
+    const hasRemovals = pendingRemovals().size > 0;
     // Apply pending removals first
     for (const email of pendingRemovals()) {
       props.onRemove(email);
     }
     setPendingRemovals(new Set());
 
-    if (isBuffered(eventId)) {
-      // Edit case: save current attendees silently
+    if (isBuffered(eventId) || hasRemovals) {
+      // Save current attendees silently (covers both buffered edits and pending removals)
       const event = events().find(e => e.id === eventId);
       if (event) {
         apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
@@ -812,9 +862,23 @@ function AttendeeList(props: {
     removePendingNotification(eventId);
   }
 
+  // --- Create-mode handlers ---
+  async function handleCreateSend(): Promise<void> {
+    commitCreation("all");
+  }
+
+  function handleCreateSilent(): void {
+    commitCreation("none");
+  }
+
+  async function handleCreateDiscard(): Promise<void> {
+    setDraftAttendees([]);
+  }
+
   async function handleDiscard(): Promise<void> {
     const eventId = selectedEventId();
     if (!eventId) return;
+    const hadPendingRemovals = pendingRemovals().size > 0;
     // Clear pending removals
     setPendingRemovals(new Set());
 
@@ -829,6 +893,10 @@ function AttendeeList(props: {
       clearBuffer(eventId);
       return;
     }
+
+    // Creation-pending with only pending removals (no buffer): just undo the removals.
+    // The pending notification survives so the popover reverts to "Send invite".
+    if (hadPendingRemovals && isPendingNotification(eventId)) return;
 
     if (!isPendingNotification(eventId)) return;
 
@@ -893,7 +961,15 @@ function AttendeeList(props: {
                       }`}
                       onClick={() => {
                         if (props.mode === "edit") {
-                          togglePendingRemoval(attendee.email);
+                          // If attendee was added during this session (not in original list),
+                          // remove immediately — no confirmation needed since they were never emailed
+                          const eventId = selectedEventId();
+                          const original = eventId ? getOriginalAttendees(eventId) : undefined;
+                          if (original && !original.some(a => a.email.toLowerCase() === attendee.email.toLowerCase())) {
+                            props.onRemove(attendee.email);
+                          } else {
+                            togglePendingRemoval(attendee.email);
+                          }
                         } else {
                           props.onRemove(attendee.email);
                         }
@@ -918,10 +994,12 @@ function AttendeeList(props: {
       <Show when={showNotificationPopover()}>
         <NotificationConfirmPopover
           addedCount={addedCount()}
-          removedCount={removedCount()}
-          onSend={handleSendInvitations}
-          onSendSilent={handleSendSilent}
-          onDiscard={handleDiscard}
+          removedCount={props.mode === "create" ? 0 : removedCount()}
+          isCreationPending={props.mode === "create" || isCreationPending()}
+          commitDisabled={props.mode === "create" && !draftTitle().trim()}
+          onSend={props.mode === "create" ? handleCreateSend : handleSendInvitations}
+          onSendSilent={props.mode === "create" ? handleCreateSilent : handleSendSilent}
+          onDiscard={props.mode === "create" ? handleCreateDiscard : handleDiscard}
         />
       </Show>
       <Show when={props.isOrganizer}>
@@ -1019,10 +1097,10 @@ function AttendeeCombobox(props: {
   return (
     <Combobox.Root
       collection={collection()}
+      value={[]}
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
       inputBehavior="autohighlight"
       onHighlightChange={(d) => {
         if (d.highlightedValue != null && userNavigated) {
@@ -1076,15 +1154,14 @@ function AttendeeCombobox(props: {
               setQuery("");
               (e.target as HTMLElement).blur();
             } else if (e.key === "Enter") {
-              if (items().length > 0) {
-                // Suggestions visible — let Combobox select the highlighted item
-                return;
-              }
               const val = inputValue().trim();
               if (val && isValidEmail(val)) {
                 e.preventDefault();
-                handleAdd(val);
+                const contact = filtered().find(c => c.email.toLowerCase() === val.toLowerCase());
+                handleAdd(val, contact?.name ?? undefined);
+                return;
               }
+              // Non-email text with suggestions visible — let Combobox handle
             }
           }}
           class="flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
@@ -1519,10 +1596,10 @@ function ReminderCombobox(props: { state: EventFormState }) {
   return (
     <Combobox.Root
       collection={collection()}
+      value={[]}
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
       inputBehavior="autohighlight"
       onHighlightChange={(d) => {
         if (d.highlightedValue != null && userNavigated) {
@@ -1728,7 +1805,7 @@ function TimeCombobox(props: {
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
+      value={[]}
       inputBehavior="autohighlight"
       highlightedValue={highlighted()}
       onHighlightChange={(d) => {
@@ -1933,7 +2010,7 @@ function TimezoneSelector(props: { state: EventFormState }) {
       allowCustomValue
       openOnClick
       closeOnSelect
-      selectionBehavior="clear"
+      value={[]}
       inputBehavior="autohighlight"
       highlightedValue={highlighted()}
       onHighlightChange={(d) => {
