@@ -102,10 +102,6 @@ export function useEventFormState() {
   let pendingRollback: EventPatch = {};
   /** Debounce timer for reminder add/remove so rapid changes batch into one PATCH. */
   let reminderFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Debounce timer for RSVP so rapid status toggles batch into one PATCH. */
-  let rsvpTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Original attendees before the first RSVP click in a debounce window (for rollback). */
-  let rsvpOriginalAttendees: Attendee[] | null = null;
   /** Last selected event ID — survives signal disposal for onCleanup. */
   let activeEditEventId: string | null = null;
 
@@ -147,7 +143,6 @@ export function useEventFormState() {
   // already null by the time <Show> disposes this component.
   onCleanup(() => {
     if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
-    if (rsvpTimer) { clearTimeout(rsvpTimer); rsvpTimer = null; rsvpOriginalAttendees = null; }
     if (activeEditEventId) flushBufferedAttendees(activeEditEventId);
     flushSave();
   });
@@ -240,8 +235,8 @@ export function useEventFormState() {
       setEditDescription(event.description ?? "");
     }
 
-    // Attendees group: skip if dirty, RSVP debounce pending, or buffered changes
-    if (!isGroupDirty("attendees") && !rsvpTimer && !(id && isBuffered(id))) {
+    // Attendees group: skip if dirty or buffered changes
+    if (!isGroupDirty("attendees") && !(id && isBuffered(id))) {
       setEditAttendees(event.attendees ?? []);
     }
 
@@ -503,17 +498,14 @@ export function useEventFormState() {
     }
   }
 
-  /** RSVP: optimistic update immediately, debounced API call. */
-  function rsvpAttendee(responseStatus: Attendee["responseStatus"]): void {
+  /** RSVP: optimistic update + immediate API call. Popover confirms the action. */
+  function rsvpAttendee(responseStatus: Attendee["responseStatus"], sendUpdates: "all" | "none" = "none"): void {
     const eventId = selectedEventId();
     if (!eventId) return;
     const event = events().find((e) => e.id === eventId);
     if (!event?.attendees) return;
 
-    // Capture original attendees only on first click in a debounce window
-    if (!rsvpOriginalAttendees) {
-      rsvpOriginalAttendees = event.attendees;
-    }
+    const original = event.attendees;
 
     // Optimistic: update both local form signal and global events signal
     const updated = editAttendees().map(a => a.isSelf ? { ...a, responseStatus } : a);
@@ -522,25 +514,16 @@ export function useEventFormState() {
       prev.map((e) => e.id === eventId ? { ...e, attendees: updated } : e)
     );
 
-    // Debounce the API call so rapid toggles only send once
-    if (rsvpTimer) clearTimeout(rsvpTimer);
-    const googleEventId = event.googleEventId;
-    const original = rsvpOriginalAttendees;
-    rsvpTimer = setTimeout(() => {
-      rsvpTimer = null;
-      rsvpOriginalAttendees = null;
-      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ responseStatus }),
-      }).catch((err) => {
-        console.error(`[rsvp] Failed:`, err);
-        // Roll back both signals to the pre-debounce-window state
-        setEditAttendees(original);
-        setEvents((prev) =>
-          prev.map((e) => e.id === eventId ? { ...e, attendees: original } : e)
-        );
-      });
-    }, 300);
+    apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ responseStatus, sendUpdates }),
+    }).catch((err) => {
+      console.error(`[rsvp] Failed:`, err);
+      setEditAttendees(original);
+      setEvents((prev) =>
+        prev.map((e) => e.id === eventId ? { ...e, attendees: original } : e)
+      );
+    });
   }
 
   const timeZone = () => mode() === "create" ? draftTimeZone() : editTimeZone();
@@ -725,12 +708,12 @@ export function useEventFormState() {
     }
   }
 
-  // All visible calendars for the selector
+  // All writable visible calendars for the selector
   const allCalendars = createMemo(() => {
     return connectedAccounts()
       .flatMap((a) =>
         a.calendars
-          .filter((c) => c.visible)
+          .filter((c) => c.visible && c.accessRole !== "reader" && c.accessRole !== "freeBusyReader")
           .map((c) => ({ ...c, accountEmail: a.email }))
       );
   });
@@ -746,7 +729,7 @@ export function useEventFormState() {
     );
     if (!ownerAccount) return allCalendars();
     return ownerAccount.calendars
-      .filter((c) => c.visible)
+      .filter((c) => c.visible && c.accessRole !== "reader" && c.accessRole !== "freeBusyReader")
       .map((c) => ({ ...c, accountEmail: ownerAccount.email }));
   });
 

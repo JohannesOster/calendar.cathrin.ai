@@ -21,11 +21,13 @@ import {
   Repeat,
   Check,
   HelpCircle,
+  Info,
 } from "lucide-solid";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select, createListCollection } from "@ark-ui/solid/select";
 import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
+import { Tooltip } from "@ark-ui/solid/tooltip";
 import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
 import { apiFetch } from "../../lib/api";
@@ -263,7 +265,7 @@ export function DetailsSection(props: SectionProps) {
         accountEmail={s.accountEmail()}
         onAdd={(email, name) => s.addAttendee(email, name)}
         onRemove={(email) => s.removeAttendee(email)}
-        onRsvp={(status) => s.rsvpAttendee(status)}
+        onRsvp={(status, sendUpdates) => s.rsvpAttendee(status, sendUpdates)}
       />
       <Show when={s.mode() === "create" || s.isOrganizer()}>
         <ConferencingField state={s} />
@@ -685,7 +687,7 @@ function AttendeeList(props: {
   accountEmail: string | null;
   onAdd: (email: string, name?: string) => void;
   onRemove: (email: string) => void;
-  onRsvp: (status: "accepted" | "declined" | "tentative") => void;
+  onRsvp: (status: "accepted" | "declined" | "tentative", sendUpdates: "all" | "none") => void;
 }) {
   const hasAttendees = () => !!props.attendees && props.attendees.length > 0;
   const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
@@ -694,6 +696,12 @@ function AttendeeList(props: {
     if (props.isOrganizer) return false;
     const self = selfAttendee();
     return self && !self.isOrganizer;
+  });
+
+  const organizerName = createMemo(() => {
+    const organizer = props.attendees?.find(a => a.isOrganizer && !a.isSelf);
+    if (!organizer) return "";
+    return organizer.name || organizer.email;
   });
 
   const hasPendingNotification = createMemo(() => {
@@ -827,7 +835,7 @@ function AttendeeList(props: {
           </For>
         </div>
         <Show when={canRsvp()}>
-          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
+          <RsvpButtons currentStatus={selfAttendee()!.responseStatus} organizerName={organizerName()} onRsvp={props.onRsvp} />
         </Show>
       </Show>
       <Show when={showNotificationPopover()}>
@@ -1031,7 +1039,17 @@ function AttendeeCombobox(props: {
   );
 }
 
-function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp: (status: "accepted" | "declined" | "tentative") => void }) {
+const RSVP_LABELS: Record<string, { button: string; silent: string; notifyPrefix: string }> = {
+  accepted: { button: "Accept", silent: "Accept without notifying", notifyPrefix: "Accept & notify" },
+  tentative: { button: "Maybe", silent: "Respond tentatively without notifying", notifyPrefix: "Respond tentatively & notify" },
+  declined: { button: "Decline", silent: "Decline without notifying", notifyPrefix: "Decline & notify" },
+};
+
+function RsvpButtons(props: {
+  currentStatus: Attendee["responseStatus"];
+  organizerName: string;
+  onRsvp: (status: "accepted" | "declined" | "tentative", sendUpdates: "all" | "none") => void;
+}) {
   const buttonClass = (status: string) => {
     const isActive = props.currentStatus === status;
     return `flex-1 text-xs py-1.5 rounded transition-colors cursor-pointer border-none outline-none ${
@@ -1047,27 +1065,64 @@ function RsvpButtons(props: { currentStatus: Attendee["responseStatus"]; onRsvp:
       role="group"
       aria-label="Your response"
     >
-      <button
-        class={buttonClass("accepted")}
-        aria-pressed={props.currentStatus === "accepted"}
-        onClick={() => props.onRsvp("accepted")}
-      >
-        Accept
-      </button>
-      <button
-        class={buttonClass("tentative")}
-        aria-pressed={props.currentStatus === "tentative"}
-        onClick={() => props.onRsvp("tentative")}
-      >
-        Maybe
-      </button>
-      <button
-        class={buttonClass("declined")}
-        aria-pressed={props.currentStatus === "declined"}
-        onClick={() => props.onRsvp("declined")}
-      >
-        Decline
-      </button>
+      <For each={["accepted", "tentative", "declined"] as const}>
+        {(status) => (
+          <Popover.Root positioning={{ placement: "top" }}>
+            <Popover.Trigger
+              class={buttonClass(status)}
+              aria-pressed={props.currentStatus === status}
+            >
+              {RSVP_LABELS[status].button}
+            </Popover.Trigger>
+            <Popover.Positioner>
+              <Popover.Content
+                class="bg-surface border border-border rounded-lg shadow-lg z-50 w-64 py-2"
+                aria-label="Choose how to respond to this invitation"
+              >
+                {/* Cancel */}
+                <Popover.CloseTrigger
+                  class="w-full text-left text-sm text-fg-muted hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+                >
+                  Cancel
+                </Popover.CloseTrigger>
+
+                {/* Notify organizer */}
+                <Popover.CloseTrigger
+                  class="w-full text-left text-sm text-fg hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+                  onClick={() => props.onRsvp(status, "all")}
+                >
+                  {RSVP_LABELS[status].notifyPrefix} {props.organizerName}
+                </Popover.CloseTrigger>
+
+                {/* Primary: without notifying */}
+                <div class="px-3 pt-1 pb-1">
+                  <div class="flex items-center rounded-lg bg-accent hover:bg-accent/90 transition-colors">
+                    <Popover.CloseTrigger
+                      class="flex-1 text-sm py-2 px-3 text-white font-medium text-left cursor-pointer border-none outline-none bg-transparent"
+                      onClick={() => props.onRsvp(status, "none")}
+                    >
+                      {RSVP_LABELS[status].silent}
+                    </Popover.CloseTrigger>
+                    <Tooltip.Root openDelay={200} positioning={{ placement: "top" }}>
+                      <Tooltip.Trigger
+                        class="text-white/50 hover:text-white/80 transition-colors cursor-help bg-transparent border-none outline-none p-1 pr-2.5"
+                        aria-label="What does this mean?"
+                      >
+                        <Info size={14} />
+                      </Tooltip.Trigger>
+                      <Tooltip.Positioner>
+                        <Tooltip.Content class="bg-fg text-surface text-xs rounded px-2 py-1 max-w-52 z-50">
+                          {props.organizerName} will see your response on their next calendar sync. No email is sent.
+                        </Tooltip.Content>
+                      </Tooltip.Positioner>
+                    </Tooltip.Root>
+                  </div>
+                </div>
+              </Popover.Content>
+            </Popover.Positioner>
+          </Popover.Root>
+        )}
+      </For>
     </div>
   );
 }
