@@ -76,10 +76,10 @@ function resolveCalendarId(): string | null {
   const saved = defaultCalendarId();
   if (saved) return saved;
 
-  // Fall back to first visible calendar
+  // Fall back to first visible writable calendar
   for (const account of connectedAccounts()) {
     for (const cal of account.calendars) {
-      if (cal.visible) {
+      if (cal.visible && cal.accessRole !== "reader" && cal.accessRole !== "freeBusyReader") {
         setDefaultCalendar(cal.id);
         return cal.id;
       }
