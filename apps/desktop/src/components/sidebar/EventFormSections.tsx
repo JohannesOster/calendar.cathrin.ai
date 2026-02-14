@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect, onCleanup } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onCleanup, on } from "solid-js";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
@@ -8,6 +8,7 @@ import {
   MapPin,
   Bell,
   ChevronDown,
+  EllipsisVertical,
   Globe,
   Lock,
   Copy,
@@ -19,10 +20,9 @@ import {
   Circle,
   Sun,
   Repeat,
-  Check,
-  HelpCircle,
   Info,
 } from "lucide-solid";
+import { sortAttendees, ResponseStatusIcon, STATUS_LABELS } from "./attendee-utils";
 import { Switch } from "@ark-ui/solid/switch";
 import { Select, createListCollection } from "@ark-ui/solid/select";
 import { Combobox } from "@ark-ui/solid/combobox";
@@ -627,64 +627,6 @@ export function RemindersSection(props: SectionProps) {
 // Attendee list
 // =============================================================================
 
-const RESPONSE_STATUS_ORDER: Record<string, number> = {
-  accepted: 0,
-  tentative: 1,
-  needsAction: 2,
-  declined: 3,
-};
-
-function sortAttendees(attendees: Attendee[]): Attendee[] {
-  return [...attendees].sort((a, b) => {
-    // Organizer first (even if self)
-    if (a.isOrganizer && !b.isOrganizer) return -1;
-    if (!a.isOrganizer && b.isOrganizer) return 1;
-    // Non-organizer self last
-    if (a.isSelf && !b.isSelf) return 1;
-    if (!a.isSelf && b.isSelf) return -1;
-    // Then by response status
-    const aOrder = RESPONSE_STATUS_ORDER[a.responseStatus] ?? 4;
-    const bOrder = RESPONSE_STATUS_ORDER[b.responseStatus] ?? 4;
-    return aOrder - bOrder;
-  });
-}
-
-function ResponseStatusIcon(props: { status: Attendee["responseStatus"] }) {
-  switch (props.status) {
-    case "accepted":
-      return (
-        <span class="text-green-600" aria-hidden="true">
-          <Check size={12} />
-        </span>
-      );
-    case "declined":
-      return (
-        <span class="text-red-500" aria-hidden="true">
-          <X size={12} />
-        </span>
-      );
-    case "tentative":
-      return (
-        <span class="text-amber-500" aria-hidden="true">
-          <HelpCircle size={12} />
-        </span>
-      );
-    default:
-      return (
-        <span class="text-fg-disabled" aria-hidden="true">
-          <Circle size={12} />
-        </span>
-      );
-  }
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  accepted: "Accepted",
-  declined: "Declined",
-  tentative: "Maybe",
-  needsAction: "No response",
-};
-
 function AttendeeList(props: {
   attendees: Attendee[] | undefined;
   isOrganizer: boolean;
@@ -725,6 +667,25 @@ function AttendeeList(props: {
   createEffect(() => {
     selectedEventId();
     setPendingRemovals(new Set());
+  });
+
+  const [isExpanded, setIsExpanded] = createSignal(false);
+
+  // Reset expanded state when switching events
+  createEffect(on(() => selectedEventId(), () => setIsExpanded(false)));
+
+  const collapseState = createMemo(() => {
+    const all = sorted();
+    if (isExpanded()) return { top: all, pinned: null as Attendee | null, hiddenCount: 0 };
+
+    const self = selfAttendee();
+    const first3 = all.slice(0, 3);
+    const selfInFirst3 = self ? first3.some(a => a.email === self.email) : true;
+    const pinned = (!selfInFirst3 && self) ? self : null;
+    const visibleCount = first3.length + (pinned ? 1 : 0);
+    const hidden = all.length - visibleCount;
+    if (hidden < 2) return { top: all, pinned: null as Attendee | null, hiddenCount: 0 };
+    return { top: first3, pinned, hiddenCount: hidden };
   });
 
   const isPendingRemoval = (email: string) => pendingRemovals().has(email.toLowerCase());
@@ -812,20 +773,33 @@ function AttendeeList(props: {
           sendUpdates: "none",
         }),
       });
-      // Step 2: Re-add remaining attendees with notifications
+      // Step 2: Re-add remaining attendees with notifications.
+      // If this fails, revert step 1 by restoring all attendees silently.
       const remaining = attendees.filter(a => !a.isSelf);
       if (remaining.length > 0) {
         const allAttendees = [...selfOnly, ...remaining];
-        const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
-          method: "PATCH",
-          body: JSON.stringify({
-            attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
-            sendUpdates: "all",
-          }),
-        });
-        setEvents((prev) => prev.map((e) =>
-          e.id === eventId ? { ...e, attendees: response.attendees } : e
-        ));
+        try {
+          const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
+            method: "PATCH",
+            body: JSON.stringify({
+              attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
+              sendUpdates: "all",
+            }),
+          });
+          setEvents((prev) => prev.map((e) =>
+            e.id === eventId ? { ...e, attendees: response.attendees } : e
+          ));
+        } catch (err) {
+          console.error("[attendees] Step 2 failed, reverting step 1:", err);
+          await apiFetch<ApiCalendarEvent>(eventUrl, {
+            method: "PATCH",
+            body: JSON.stringify({
+              attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
+              sendUpdates: "none",
+            }),
+          }).catch(revertErr => console.error("[attendees] Revert also failed:", revertErr));
+          throw err;
+        }
       }
     } else {
       // Normal case: PATCH with current attendees + sendUpdates: "all"
@@ -946,6 +920,65 @@ function AttendeeList(props: {
       .join(" \u00b7 ");
   });
 
+  const renderAttendeeRow = (attendee: Attendee) => {
+    const pending = () => isPendingRemoval(attendee.email);
+    return (
+      <div
+        class={`group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded transition-colors ${
+          pending() ? "" : "hover:bg-surface-hover"
+        }`}
+        role="listitem"
+        aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", you" : ""}${pending() ? ", pending removal" : ""}`}
+      >
+        <span class={pending() ? "opacity-40" : ""}>
+          <ResponseStatusIcon status={attendee.responseStatus} />
+        </span>
+        <span
+          class={`flex-1 text-sm truncate ${
+            pending() ? "text-fg-disabled line-through" : "text-fg"
+          }`}
+        >
+          {attendee.name || attendee.email}
+        </span>
+        <Show when={attendee.isSelf || attendee.isOrganizer}>
+          <span class={`text-2xs shrink-0 ${pending() ? "text-fg-disabled/50" : "text-fg-disabled"}`}>
+            {attendee.isSelf && attendee.isOrganizer
+              ? "You · Organizer"
+              : attendee.isSelf ? "You" : "Organizer"}
+          </span>
+        </Show>
+        <Show when={props.isOrganizer && !attendee.isSelf}>
+          <button
+            class={`transition-colors cursor-pointer p-0.5 ${
+              pending()
+                ? "text-fg-muted hover:text-fg"
+                : "text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg"
+            }`}
+            onClick={() => {
+              if (props.mode === "edit") {
+                const eventId = selectedEventId();
+                const original = eventId ? getOriginalAttendees(eventId) : undefined;
+                if (original && !original.some(a => a.email.toLowerCase() === attendee.email.toLowerCase())) {
+                  props.onRemove(attendee.email);
+                } else {
+                  togglePendingRemoval(attendee.email);
+                }
+              } else {
+                props.onRemove(attendee.email);
+              }
+            }}
+            aria-label={pending()
+              ? `Undo remove ${attendee.name || attendee.email}`
+              : `Remove ${attendee.name || attendee.email}`
+            }
+          >
+            <X size={12} />
+          </button>
+        </Show>
+      </div>
+    );
+  };
+
   return (
     <div class="space-y-0.5">
       <Show
@@ -978,67 +1011,22 @@ function AttendeeList(props: {
             </div>
           </div>
         </div>
-        <div class="max-h-52 overflow-y-auto">
-          <For each={sorted()}>
-            {(attendee) => {
-              const pending = () => isPendingRemoval(attendee.email);
-              return (
-                <div
-                  class={`group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded transition-colors ${
-                    pending() ? "" : "hover:bg-surface-hover"
-                  }`}
-                  role="listitem"
-                  aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", you" : ""}${pending() ? ", pending removal" : ""}`}
-                >
-                  <span class={pending() ? "opacity-40" : ""}>
-                    <ResponseStatusIcon status={attendee.responseStatus} />
-                  </span>
-                  <span
-                    class={`flex-1 text-sm truncate ${
-                      pending() ? "text-fg-disabled line-through" : "text-fg"
-                    }`}
-                  >
-                    {attendee.name || attendee.email}
-                  </span>
-                  <Show when={attendee.isSelf || attendee.isOrganizer}>
-                    <span class={`text-2xs shrink-0 ${pending() ? "text-fg-disabled/50" : "text-fg-disabled"}`}>
-                      {attendee.isSelf && attendee.isOrganizer
-                        ? "You · Organizer"
-                        : attendee.isSelf ? "You" : "Organizer"}
-                    </span>
-                  </Show>
-                  <Show when={props.isOrganizer && !attendee.isSelf}>
-                    <button
-                      class={`transition-colors cursor-pointer p-0.5 ${
-                        pending()
-                          ? "text-fg-muted hover:text-fg"
-                          : "text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg"
-                      }`}
-                      onClick={() => {
-                        if (props.mode === "edit") {
-                          const eventId = selectedEventId();
-                          const original = eventId ? getOriginalAttendees(eventId) : undefined;
-                          if (original && !original.some(a => a.email.toLowerCase() === attendee.email.toLowerCase())) {
-                            props.onRemove(attendee.email);
-                          } else {
-                            togglePendingRemoval(attendee.email);
-                          }
-                        } else {
-                          props.onRemove(attendee.email);
-                        }
-                      }}
-                      aria-label={pending()
-                        ? `Undo remove ${attendee.name || attendee.email}`
-                        : `Remove ${attendee.name || attendee.email}`
-                      }
-                    >
-                      <X size={12} />
-                    </button>
-                  </Show>
-                </div>
-              );
-            }}
+        <div>
+          <For each={collapseState().top}>
+            {(attendee) => renderAttendeeRow(attendee)}
           </For>
+          <Show when={collapseState().hiddenCount > 0}>
+            <button
+              class="flex items-center gap-1.5 pl-[30px] pr-2 py-1.5 text-sm text-fg-muted hover:text-fg transition-colors cursor-pointer w-full bg-transparent border-none outline-none"
+              onClick={() => setIsExpanded(true)}
+            >
+              <EllipsisVertical size={12} class="shrink-0" />
+              <span>Show {collapseState().hiddenCount} more participants</span>
+            </button>
+          </Show>
+          <Show when={collapseState().pinned}>
+            {(self) => renderAttendeeRow(self())}
+          </Show>
         </div>
         <Show when={canRsvp()}>
           <RsvpButtons currentStatus={selfAttendee()!.responseStatus} organizerName={organizerName()} onRsvp={props.onRsvp} />
