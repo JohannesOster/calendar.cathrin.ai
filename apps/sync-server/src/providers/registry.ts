@@ -1,6 +1,7 @@
 import type { Provider } from "@cathrin/shared-types";
 import type { CalendarProvider } from "./types.js";
 import { GoogleCalendarProvider } from "./google/index.js";
+import { OutlookCalendarProvider } from "./outlook/index.js";
 
 const providers = new Map<Provider, CalendarProvider>();
 
@@ -15,6 +16,9 @@ export function getProvider(providerId: Provider): CalendarProvider {
   switch (providerId) {
     case "google":
       provider = new GoogleCalendarProvider();
+      break;
+    case "outlook":
+      provider = new OutlookCalendarProvider();
       break;
     default:
       throw new Error(`Unsupported calendar provider: "${providerId}"`);

@@ -38,7 +38,7 @@ export function renderOAuthSuccessPage(jwt: string): string {
           <body>
             <div class="container">
               <h1>Connected!</h1>
-              <p>Your Google Calendar account has been connected.</p>
+              <p>Your calendar account has been connected.</p>
               <p>You can close this window.</p>
               <div class="token" id="token" style="display: none;">${jwt}</div>
             </div>
