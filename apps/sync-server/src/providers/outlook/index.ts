@@ -1,6 +1,9 @@
 import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
 import {
   TokenRevokedError,
+  TokenExpiredError,
+  SyncTokenExpiredError,
+  ProviderApiError,
   type CalendarProvider,
   type ProviderCapabilities,
   type AuthUrlParams,
@@ -13,10 +16,23 @@ import {
   type MutationOptions,
   type RsvpResponse,
 } from "../types.js";
+import type {
+  GraphCalendarListResponse,
+  GraphEventListResponse,
+  GraphCategoryListResponse,
+  GraphCategory,
+  GraphErrorResponse,
+} from "./types.js";
+import { mapGraphCalendar, mapGraphEvent, buildCategoryColorMap } from "./mappers.js";
 
 const MS_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const MS_GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me";
+const MS_GRAPH_URL = "https://graph.microsoft.com/v1.0";
+const MS_GRAPH_ME_URL = `${MS_GRAPH_URL}/me`;
+
+/** Standard headers for all Graph API requests — immutable IDs prevent ID changes on move. */
+const GRAPH_PREFER_HEADER = 'IdType="ImmutableId"';
+const MAX_RETRY_DELAY_MS = 30_000;
 
 const OUTLOOK_SCOPES = [
   "offline_access",
@@ -95,13 +111,106 @@ export async function fetchMicrosoftUserProfile(
 }
 
 // =============================================================================
+// Graph API Helpers
+// =============================================================================
+
+/**
+ * Make a Graph API request with immutable ID preference and error handling.
+ * Retries on 429 with Retry-After backoff.
+ */
+async function graphFetch(
+  url: string,
+  accessToken: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    Prefer: GRAPH_PREFER_HEADER,
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  const response = await fetch(url, { ...options, headers });
+
+  // Handle 429 Too Many Requests — retry with Retry-After
+  if (response.status === 429) {
+    const retryAfter = response.headers.get("Retry-After");
+    const delayMs = Math.min(
+      (retryAfter ? parseInt(retryAfter, 10) * 1000 : 5000),
+      MAX_RETRY_DELAY_MS,
+    );
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return graphFetch(url, accessToken, options);
+  }
+
+  return response;
+}
+
+/**
+ * Handle non-2xx Graph API responses, throwing typed errors.
+ */
+async function handleGraphError(response: Response): Promise<never> {
+  if (response.status === 401) {
+    throw new TokenExpiredError();
+  }
+
+  // 410 Gone with resyncRequired → delta token expired
+  if (response.status === 410) {
+    throw new SyncTokenExpiredError();
+  }
+
+  let message = response.statusText;
+  try {
+    const body = (await response.json()) as GraphErrorResponse;
+    message = body.error?.message || JSON.stringify(body);
+  } catch {
+    // Fall back to statusText
+  }
+
+  throw new ProviderApiError(`Outlook API error: ${message}`, response.status);
+}
+
+// =============================================================================
+// Category Cache
+// =============================================================================
+
+/** Per-token category cache with 1-hour TTL. */
+const categoryCache = new Map<string, { categories: GraphCategory[]; expiresAt: number }>();
+const CATEGORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function fetchCategories(accessToken: string): Promise<GraphCategory[]> {
+  // Use first 16 chars of token as cache key (enough to distinguish tokens)
+  const cacheKey = accessToken.slice(0, 16);
+  const cached = categoryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.categories;
+  }
+
+  const response = await graphFetch(
+    `${MS_GRAPH_URL}/me/outlook/masterCategories`,
+    accessToken,
+  );
+
+  if (!response.ok) {
+    // Non-critical — return empty list, events will use calendar color
+    console.warn("[outlook] Failed to fetch categories, using defaults");
+    return [];
+  }
+
+  const data = (await response.json()) as GraphCategoryListResponse;
+  categoryCache.set(cacheKey, {
+    categories: data.value,
+    expiresAt: Date.now() + CATEGORY_CACHE_TTL_MS,
+  });
+  return data.value;
+}
+
+// =============================================================================
 // Outlook Calendar Provider
 // =============================================================================
 
 /**
  * Outlook Calendar provider implementation.
- * Auth methods are fully implemented. Calendar/event methods are stubs
- * that will be implemented in subsequent issues (#206, #207, #208).
+ * Uses Microsoft Graph API v1.0 with immutable IDs.
  */
 export class OutlookCalendarProvider implements CalendarProvider {
   readonly id = "outlook" as const;
@@ -221,28 +330,164 @@ export class OutlookCalendarProvider implements CalendarProvider {
   }
 
   // ---------------------------------------------------------------------------
-  // Read (stubs — implemented in #206)
+  // Read
   // ---------------------------------------------------------------------------
 
-  async getCalendars(_accessToken: string): Promise<ApiCalendar[]> {
-    throw new Error("OutlookCalendarProvider.getCalendars not yet implemented");
+  async getCalendars(accessToken: string): Promise<ApiCalendar[]> {
+    const calendars: ApiCalendar[] = [];
+    let url: string | undefined = `${MS_GRAPH_URL}/me/calendars`;
+
+    do {
+      const response = await graphFetch(url, accessToken);
+      if (!response.ok) await handleGraphError(response);
+
+      const data = (await response.json()) as GraphCalendarListResponse;
+      for (const cal of data.value) {
+        calendars.push(mapGraphCalendar(cal));
+      }
+
+      url = data["@odata.nextLink"];
+    } while (url);
+
+    return calendars;
   }
 
   async getEvents(
-    _accessToken: string,
-    _calendarId: string,
-    _options: EventFetchOptions,
+    accessToken: string,
+    calendarId: string,
+    options: EventFetchOptions,
   ): Promise<EventFetchResult> {
-    throw new Error("OutlookCalendarProvider.getEvents not yet implemented");
+    const categories = await fetchCategories(accessToken);
+    const categoryColorMap = buildCategoryColorMap(categories);
+
+    const events: ApiCalendarEvent[] = [];
+    const baseUrl = new URL(
+      `${MS_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}/calendarView`,
+    );
+    baseUrl.searchParams.set("startDateTime", options.timeMin);
+    baseUrl.searchParams.set("endDateTime", options.timeMax);
+    baseUrl.searchParams.set("$top", "250");
+
+    let url: string | undefined = baseUrl.toString();
+
+    do {
+      const response = await graphFetch(url, accessToken, {
+        headers: { Prefer: `${GRAPH_PREFER_HEADER}, odata.maxpagesize=250` },
+      });
+      if (!response.ok) await handleGraphError(response);
+
+      const data = (await response.json()) as GraphEventListResponse;
+      for (const graphEvent of data.value) {
+        // Skip cancelled events
+        if (graphEvent.isCancelled) continue;
+
+        const mapped = mapGraphEvent(
+          graphEvent,
+          calendarId,
+          options.calendarColor,
+          options.calendarAccessRole,
+          categoryColorMap,
+        );
+        if (mapped) events.push(mapped);
+      }
+
+      url = data["@odata.nextLink"];
+    } while (url);
+
+    return { events };
   }
 
   async getEventsIncremental(
-    _accessToken: string,
-    _calendarId: string,
-    _syncToken: string,
-    _options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
+    accessToken: string,
+    calendarId: string,
+    syncToken: string,
+    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
   ): Promise<IncrementalSyncResult> {
-    throw new Error("OutlookCalendarProvider.getEventsIncremental not yet implemented");
+    const categories = await fetchCategories(accessToken);
+    const categoryColorMap = buildCategoryColorMap(categories);
+
+    const events: ApiCalendarEvent[] = [];
+    const cancelledIds: string[] = [];
+
+    // The syncToken IS the deltaLink URL for Outlook
+    let url: string | undefined = syncToken;
+
+    do {
+      const response = await graphFetch(url, accessToken, {
+        headers: { Prefer: `${GRAPH_PREFER_HEADER}, odata.maxpagesize=50` },
+      });
+      if (!response.ok) await handleGraphError(response);
+
+      const data = (await response.json()) as GraphEventListResponse;
+
+      for (const graphEvent of data.value) {
+        // Deleted events have @removed annotation
+        if (graphEvent["@removed"]) {
+          cancelledIds.push(graphEvent.id);
+          continue;
+        }
+
+        const mapped = mapGraphEvent(
+          graphEvent,
+          calendarId,
+          options.calendarColor,
+          options.calendarAccessRole,
+          categoryColorMap,
+        );
+        if (mapped) events.push(mapped);
+      }
+
+      // Follow nextLink for more pages, or get deltaLink when done
+      if (data["@odata.nextLink"]) {
+        url = data["@odata.nextLink"];
+      } else {
+        // Store the deltaLink as the next sync token
+        const nextSyncToken = data["@odata.deltaLink"];
+        if (!nextSyncToken) {
+          throw new ProviderApiError("No deltaLink returned from Outlook delta query", 500);
+        }
+
+        return { events, cancelledIds, nextSyncToken };
+      }
+    } while (url);
+
+    // Unreachable — the loop always returns via deltaLink
+    throw new ProviderApiError("Delta query ended without deltaLink", 500);
+  }
+
+  async getInitialSyncToken(
+    accessToken: string,
+    _calendarId: string,
+    timeMin: string,
+    timeMax: string,
+  ): Promise<string> {
+    // For Outlook, delta sync is date-range-bound. The initial delta query
+    // returns all events + a deltaLink. We discard the events (already
+    // fetched via getEvents) and just capture the deltaLink.
+    const baseUrl = new URL(`${MS_GRAPH_URL}/me/calendarView/delta`);
+    baseUrl.searchParams.set("startDateTime", timeMin);
+    baseUrl.searchParams.set("endDateTime", timeMax);
+
+    let url: string | undefined = baseUrl.toString();
+
+    do {
+      const response = await graphFetch(url, accessToken, {
+        headers: { Prefer: `${GRAPH_PREFER_HEADER}, odata.maxpagesize=250` },
+      });
+      if (!response.ok) await handleGraphError(response);
+
+      const data = (await response.json()) as GraphEventListResponse;
+
+      if (data["@odata.nextLink"]) {
+        url = data["@odata.nextLink"];
+      } else if (data["@odata.deltaLink"]) {
+        return data["@odata.deltaLink"];
+      } else {
+        throw new ProviderApiError("No deltaLink in initial delta response", 500);
+      }
+    } while (url);
+
+    throw new ProviderApiError("Initial delta query ended without deltaLink", 500);
   }
 
   // ---------------------------------------------------------------------------

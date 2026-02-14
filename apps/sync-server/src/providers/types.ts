@@ -211,6 +211,18 @@ export interface CalendarProvider {
     options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">
   ): Promise<IncrementalSyncResult>;
 
+  /**
+   * Obtain an initial sync token for a calendar after a full sync.
+   * Google: makes a small request to get nextSyncToken.
+   * Outlook: makes a delta query with time range, discards events, returns deltaLink.
+   */
+  getInitialSyncToken(
+    accessToken: string,
+    calendarId: string,
+    timeMin: string,
+    timeMax: string,
+  ): Promise<string>;
+
   // --- Write ---
   createEvent(accessToken: string, calendarId: string, event: NewProviderEvent, options?: MutationOptions): Promise<ApiCalendarEvent>;
   updateEvent(accessToken: string, calendarId: string, eventId: string, patch: ProviderEventPatch, options?: MutationOptions): Promise<ApiCalendarEvent>;

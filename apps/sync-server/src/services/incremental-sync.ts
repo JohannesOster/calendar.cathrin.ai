@@ -187,23 +187,13 @@ export async function syncCalendarFull(
     );
   }
 
-  // Now do a sync request to get the syncToken for future incremental syncs
-  // We need to make a request with no time bounds to get a syncToken
-  const syncTokenResponse = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?maxResults=1`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+  // Get initial sync token from the provider for future incremental syncs
+  const syncToken = await provider.getInitialSyncToken(
+    accessToken,
+    calendarId,
+    timeMin.toISOString(),
+    timeMax.toISOString(),
   );
-
-  if (!syncTokenResponse.ok) {
-    throw new Error(`Failed to get syncToken: ${syncTokenResponse.statusText}`);
-  }
-
-  const syncData = (await syncTokenResponse.json()) as {
-    nextSyncToken?: string;
-  };
-  const syncToken = syncData.nextSyncToken || "";
 
   // Update sync state with token
   await db

@@ -211,6 +211,26 @@ export class GoogleCalendarProvider implements CalendarProvider {
     });
   }
 
+  async getInitialSyncToken(
+    accessToken: string,
+    calendarId: string,
+    _timeMin: string,
+    _timeMax: string,
+  ): Promise<string> {
+    // Google sync tokens are unbounded — request a minimal events list to get one
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?maxResults=1`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get Google syncToken: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { nextSyncToken?: string };
+    return data.nextSyncToken || "";
+  }
+
   // ---------------------------------------------------------------------------
   // Write
   // ---------------------------------------------------------------------------
