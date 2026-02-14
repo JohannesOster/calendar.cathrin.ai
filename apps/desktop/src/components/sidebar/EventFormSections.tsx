@@ -263,6 +263,7 @@ export function DetailsSection(props: SectionProps) {
         attendees={s.attendees()}
         isOrganizer={s.isOrganizer()}
         accountEmail={s.accountEmail()}
+        mode={s.mode()}
         onAdd={(email, name) => s.addAttendee(email, name)}
         onRemove={(email) => s.removeAttendee(email)}
         onRsvp={(status, sendUpdates) => s.rsvpAttendee(status, sendUpdates)}
@@ -635,9 +636,12 @@ const RESPONSE_STATUS_ORDER: Record<string, number> = {
 
 function sortAttendees(attendees: Attendee[]): Attendee[] {
   return [...attendees].sort((a, b) => {
-    // Organizer always first
+    // Organizer first (even if self)
     if (a.isOrganizer && !b.isOrganizer) return -1;
     if (!a.isOrganizer && b.isOrganizer) return 1;
+    // Non-organizer self last
+    if (a.isSelf && !b.isSelf) return 1;
+    if (!a.isSelf && b.isSelf) return -1;
     // Then by response status
     const aOrder = RESPONSE_STATUS_ORDER[a.responseStatus] ?? 4;
     const bOrder = RESPONSE_STATUS_ORDER[b.responseStatus] ?? 4;
@@ -685,6 +689,7 @@ function AttendeeList(props: {
   attendees: Attendee[] | undefined;
   isOrganizer: boolean;
   accountEmail: string | null;
+  mode: "create" | "edit";
   onAdd: (email: string, name?: string) => void;
   onRemove: (email: string) => void;
   onRsvp: (status: "accepted" | "declined" | "tentative", sendUpdates: "all" | "none") => void;
@@ -714,17 +719,56 @@ function AttendeeList(props: {
     return eventId ? isBuffered(eventId) : false;
   });
 
+  const [pendingRemovals, setPendingRemovals] = createSignal<Set<string>>(new Set());
+
+  // Clear pending removals when switching events
+  createEffect(() => {
+    selectedEventId();
+    setPendingRemovals(new Set());
+  });
+
+  const isPendingRemoval = (email: string) => pendingRemovals().has(email.toLowerCase());
+
+  function togglePendingRemoval(email: string): void {
+    setPendingRemovals(prev => {
+      const next = new Set(prev);
+      const key = email.toLowerCase();
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   const showNotificationPopover = createMemo(() =>
-    hasPendingNotification() || hasBufferedChanges()
+    hasPendingNotification() || hasBufferedChanges() || pendingRemovals().size > 0
   );
 
-  const nonSelfAttendeeCount = createMemo(() =>
-    (props.attendees ?? []).filter(a => !a.isSelf).length
-  );
+  const addedCount = createMemo(() => {
+    const eventId = selectedEventId();
+    if (!eventId) return 0;
+    const current = (props.attendees ?? []).filter(a => !a.isSelf);
+    const original = getOriginalAttendees(eventId);
+    if (!original) {
+      // Only treat all attendees as new in the creation case
+      return isPendingNotification(eventId) ? current.length : 0;
+    }
+    const originalEmails = new Set(original.map(a => a.email.toLowerCase()));
+    return current.filter(a => !originalEmails.has(a.email.toLowerCase())).length;
+  });
+
+  const removedCount = createMemo(() => pendingRemovals().size);
 
   async function handleSendInvitations(): Promise<void> {
     const eventId = selectedEventId();
     if (!eventId) return;
+    // Apply pending removals first
+    for (const email of pendingRemovals()) {
+      props.onRemove(email);
+    }
+    setPendingRemovals(new Set());
     const event = events().find(e => e.id === eventId);
     if (!event) return;
     // PATCH with current attendees + sendUpdates: "all" to trigger notification emails
@@ -745,6 +789,11 @@ function AttendeeList(props: {
   function handleSendSilent(): void {
     const eventId = selectedEventId();
     if (!eventId) return;
+    // Apply pending removals first
+    for (const email of pendingRemovals()) {
+      props.onRemove(email);
+    }
+    setPendingRemovals(new Set());
 
     if (isBuffered(eventId)) {
       // Edit case: save current attendees silently
@@ -766,6 +815,8 @@ function AttendeeList(props: {
   async function handleDiscard(): Promise<void> {
     const eventId = selectedEventId();
     if (!eventId) return;
+    // Clear pending removals
+    setPendingRemovals(new Set());
 
     if (isBuffered(eventId)) {
       // Edit buffered case: revert to original attendees
@@ -778,6 +829,8 @@ function AttendeeList(props: {
       clearBuffer(eventId);
       return;
     }
+
+    if (!isPendingNotification(eventId)) return;
 
     // Creation pending case: remove all attendees from server
     const event = events().find(e => e.id === eventId);
@@ -804,34 +857,58 @@ function AttendeeList(props: {
       <Show when={hasAttendees()}>
         <div class="max-h-52 overflow-y-auto">
           <For each={sorted()}>
-            {(attendee) => (
-              <div
-                class="group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded hover:bg-surface-hover transition-colors"
-                role="listitem"
-                aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", You" : ""}`}
-              >
-                <ResponseStatusIcon status={attendee.responseStatus} />
-                <span
-                  class={`flex-1 text-sm truncate ${attendee.isSelf ? "font-medium text-fg" : "text-fg"}`}
+            {(attendee) => {
+              const pending = () => isPendingRemoval(attendee.email);
+              return (
+                <div
+                  class={`group flex items-center gap-2 pl-[30px] pr-2 py-1.5 rounded transition-colors ${
+                    pending() ? "" : "hover:bg-surface-hover"
+                  }`}
+                  role="listitem"
+                  aria-label={`${attendee.name || attendee.email}, ${STATUS_LABELS[attendee.responseStatus] ?? "No response"}${attendee.isOrganizer ? ", Organizer" : ""}${attendee.isSelf ? ", you" : ""}${pending() ? ", pending removal" : ""}`}
                 >
-                  {attendee.isSelf
-                    ? (attendee.name ? `${attendee.name} (You)` : "You")
-                    : (attendee.name || attendee.email)}
-                </span>
-                <Show when={attendee.isOrganizer}>
-                  <span class="text-2xs text-fg-disabled shrink-0">Organizer</span>
-                </Show>
-                <Show when={props.isOrganizer && !attendee.isSelf}>
-                  <button
-                    class="text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg transition-colors cursor-pointer p-0.5"
-                    onClick={() => props.onRemove(attendee.email)}
-                    aria-label={`Remove ${attendee.name || attendee.email}`}
+                  <span class={pending() ? "opacity-40" : ""}>
+                    <ResponseStatusIcon status={attendee.responseStatus} />
+                  </span>
+                  <span
+                    class={`flex-1 text-sm truncate ${
+                      pending() ? "text-fg-disabled line-through" : "text-fg"
+                    }`}
                   >
-                    <X size={12} />
-                  </button>
-                </Show>
-              </div>
-            )}
+                    {attendee.name || attendee.email}
+                  </span>
+                  <Show when={attendee.isSelf || attendee.isOrganizer}>
+                    <span class={`text-2xs shrink-0 ${pending() ? "text-fg-disabled/50" : "text-fg-disabled"}`}>
+                      {attendee.isSelf && attendee.isOrganizer
+                        ? "You · Organizer"
+                        : attendee.isSelf ? "You" : "Organizer"}
+                    </span>
+                  </Show>
+                  <Show when={props.isOrganizer && !attendee.isSelf}>
+                    <button
+                      class={`transition-colors cursor-pointer p-0.5 ${
+                        pending()
+                          ? "text-fg-muted hover:text-fg"
+                          : "text-fg-muted/0 group-hover:text-fg-muted hover:!text-fg"
+                      }`}
+                      onClick={() => {
+                        if (props.mode === "edit") {
+                          togglePendingRemoval(attendee.email);
+                        } else {
+                          props.onRemove(attendee.email);
+                        }
+                      }}
+                      aria-label={pending()
+                        ? `Undo remove ${attendee.name || attendee.email}`
+                        : `Remove ${attendee.name || attendee.email}`
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  </Show>
+                </div>
+              );
+            }}
           </For>
         </div>
         <Show when={canRsvp()}>
@@ -840,7 +917,8 @@ function AttendeeList(props: {
       </Show>
       <Show when={showNotificationPopover()}>
         <NotificationConfirmPopover
-          count={nonSelfAttendeeCount()}
+          addedCount={addedCount()}
+          removedCount={removedCount()}
           onSend={handleSendInvitations}
           onSendSilent={handleSendSilent}
           onDiscard={handleDiscard}
@@ -857,6 +935,11 @@ interface ContactSuggestion {
   email: string;
   name: string | null;
   score: number;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(value: string): boolean {
+  return EMAIL_RE.test(value);
 }
 
 function AttendeeCombobox(props: {
@@ -926,7 +1009,7 @@ function AttendeeCombobox(props: {
 
   function handleAdd(email: string, name?: string): void {
     const trimmed = email.trim();
-    if (!trimmed || !trimmed.includes("@")) return;
+    if (!trimmed || !isValidEmail(trimmed)) return;
     props.onAdd(trimmed, name || undefined);
     setInputValue("");
     setQuery("");
@@ -969,7 +1052,7 @@ function AttendeeCombobox(props: {
         } else {
           // Try to add any remaining email-like text (handles blur-to-add)
           const val = inputValue().trim();
-          if (val && val.includes("@")) {
+          if (val && isValidEmail(val)) {
             handleAdd(val);
           }
           setInputValue("");
@@ -993,8 +1076,12 @@ function AttendeeCombobox(props: {
               setQuery("");
               (e.target as HTMLElement).blur();
             } else if (e.key === "Enter") {
+              if (items().length > 0) {
+                // Suggestions visible — let Combobox select the highlighted item
+                return;
+              }
               const val = inputValue().trim();
-              if (val && val.includes("@")) {
+              if (val && isValidEmail(val)) {
                 e.preventDefault();
                 handleAdd(val);
               }
