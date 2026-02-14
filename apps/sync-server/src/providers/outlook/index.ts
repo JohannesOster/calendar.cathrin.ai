@@ -257,6 +257,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
     codeVerifier?: string,
   ): Promise<TokenPair> {
     const clientId = process.env.MICROSOFT_CLIENT_ID;
+    const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
     if (!clientId) {
       throw new Error("Microsoft OAuth credentials not configured");
     }
@@ -268,6 +269,9 @@ export class OutlookCalendarProvider implements CalendarProvider {
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     });
+    if (clientSecret) {
+      body.set("client_secret", clientSecret);
+    }
     if (codeVerifier) {
       body.set("code_verifier", codeVerifier);
     }
@@ -298,19 +302,25 @@ export class OutlookCalendarProvider implements CalendarProvider {
 
   async refreshToken(refreshToken: string): Promise<TokenPair> {
     const clientId = process.env.MICROSOFT_CLIENT_ID;
+    const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
     if (!clientId) {
       throw new Error("Microsoft OAuth credentials not configured");
+    }
+
+    const params: Record<string, string> = {
+      client_id: clientId,
+      scope: OUTLOOK_SCOPES.join(" "),
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    };
+    if (clientSecret) {
+      params.client_secret = clientSecret;
     }
 
     const response = await fetch(MS_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        scope: OUTLOOK_SCOPES.join(" "),
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
+      body: new URLSearchParams(params),
     });
 
     if (!response.ok) {
