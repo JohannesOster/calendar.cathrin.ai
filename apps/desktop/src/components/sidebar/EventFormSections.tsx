@@ -34,6 +34,7 @@ import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
+import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { selectedEventId } from "../../stores/event-selection";
 import { events, setEvents } from "../../stores/events";
 import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
@@ -51,32 +52,49 @@ export function TimeSection(props: SectionProps) {
     <div class="px-3 py-3 border-t border-border space-y-1.5">
       {/* Start time + End time on one row (hidden for all-day) */}
       <Show when={s.start() && s.end() && !s.isAllDay()}>
-        <div class="flex items-center gap-2 text-sm text-fg">
-          <Clock size={14} class="text-fg-muted shrink-0" />
-          <TimeCombobox
-            date={() => s.start()!}
-            timeZone={() => s.timeZone()}
-            which="start"
-            ariaLabel="Start time"
-            state={s}
-            referenceHour={() => new Date().getHours()}
-          />
-          <ArrowRight size={14} class="text-fg-muted shrink-0" />
-          <TimeCombobox
-            date={() => s.end()!}
-            timeZone={() => s.timeZone()}
-            which="end"
-            ariaLabel="End time"
-            state={s}
-            referenceHour={() => s.start()!.getHours()}
-            excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
-          />
-          <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
-            <span class="text-xs text-fg-muted whitespace-nowrap">
-              {formatDuration(s.start()!, s.end()!)}
-            </span>
-          </Show>
-        </div>
+        <Show
+          when={s.mode() === "create" || s.isOrganizer()}
+          fallback={
+            <div class="flex items-center gap-2 text-sm text-fg px-2 py-1.5">
+              <Clock size={14} class="text-fg-muted shrink-0" />
+              <span>{formatTime(s.start()!, s.timeZone())}</span>
+              <ArrowRight size={14} class="text-fg-muted shrink-0" />
+              <span>{formatTime(s.end()!, s.timeZone())}</span>
+              <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
+                <span class="text-xs text-fg-muted whitespace-nowrap">
+                  {formatDuration(s.start()!, s.end()!)}
+                </span>
+              </Show>
+            </div>
+          }
+        >
+          <div class="flex items-center gap-2 text-sm text-fg">
+            <Clock size={14} class="text-fg-muted shrink-0" />
+            <TimeCombobox
+              date={() => s.start()!}
+              timeZone={() => s.timeZone()}
+              which="start"
+              ariaLabel="Start time"
+              state={s}
+              referenceHour={() => new Date().getHours()}
+            />
+            <ArrowRight size={14} class="text-fg-muted shrink-0" />
+            <TimeCombobox
+              date={() => s.end()!}
+              timeZone={() => s.timeZone()}
+              which="end"
+              ariaLabel="End time"
+              state={s}
+              referenceHour={() => s.start()!.getHours()}
+              excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
+            />
+            <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
+              <span class="text-xs text-fg-muted whitespace-nowrap">
+                {formatDuration(s.start()!, s.end()!)}
+              </span>
+            </Show>
+          </div>
+        </Show>
       </Show>
       {/* "Your time" row — shown when event timezone differs from system */}
       <Show when={s.start() && s.end() && !s.isAllDay() && s.timeZone() && s.timeZone() !== SYSTEM_TIMEZONE}>
@@ -108,7 +126,8 @@ export function TimeSection(props: SectionProps) {
           </Show>
         </div>
       </Show>
-      {/* All-day toggle */}
+      {/* All-day toggle, timezone, repeat — organizer only */}
+      <Show when={s.mode() === "create" || s.isOrganizer()}>
       <Switch.Root
         checked={s.isAllDay()}
         onCheckedChange={() => {
@@ -228,6 +247,7 @@ export function TimeSection(props: SectionProps) {
         <Repeat size={14} class="shrink-0" />
         <span>Does not repeat</span>
       </button>
+      </Show>
     </div>
   );
 }
@@ -245,7 +265,17 @@ export function DetailsSection(props: SectionProps) {
         onRemove={(email) => s.removeAttendee(email)}
         onRsvp={(status) => s.rsvpAttendee(status)}
       />
-      <ConferencingField state={s} />
+      <Show when={s.mode() === "create" || s.isOrganizer()}>
+        <ConferencingField state={s} />
+      </Show>
+      <Show when={s.mode() !== "create" && !s.isOrganizer() && s.conferencing()}>
+        {(conf) => (
+          <div class="flex items-center gap-2 text-sm px-2 py-2">
+            <Video size={14} class="text-fg-muted shrink-0" />
+            <span class="flex-1 text-fg truncate">{conferencingLabel(conf())} Link</span>
+          </div>
+        )}
+      </Show>
       <div class="flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors">
         <MapPin size={14} class="text-fg-muted shrink-0" />
         <input
@@ -257,7 +287,10 @@ export function DetailsSection(props: SectionProps) {
           onBlur={() => {
             if (s.mode() === "edit") s.flushSave();
           }}
-          class="flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none"
+          disabled={s.mode() === "edit" && !s.isOrganizer()}
+          class={`flex-1 text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none ${
+            s.mode() === "edit" && !s.isOrganizer() ? "cursor-default" : ""
+          }`}
         />
       </div>
       <Show
@@ -348,7 +381,12 @@ export function DescriptionSection(props: SectionProps) {
         onBlur={() => {
           if (s.mode() === "edit") s.flushSave();
         }}
-        class="w-full text-sm text-fg placeholder-fg-disabled bg-surface-input appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+        disabled={s.mode() === "edit" && !s.isOrganizer()}
+        class={`w-full text-sm text-fg placeholder-fg-disabled appearance-none outline-none border-none resize-none overflow-hidden rounded px-2 py-1 transition-colors ${
+          s.mode() === "edit" && !s.isOrganizer()
+            ? "bg-transparent cursor-default"
+            : "bg-surface-input hover:bg-surface-hover focus:bg-surface-hover"
+        }`}
         rows={2}
       />
     </div>
@@ -416,6 +454,7 @@ export function CalendarSection(props: SectionProps) {
                 s.setVisibility(val);
               }
             }}
+            disabled={s.mode() === "edit" && !s.isOrganizer()}
             positioning={{ placement: "bottom-start" }}
           >
             <Select.Control>
@@ -652,6 +691,7 @@ function AttendeeList(props: {
   const sorted = createMemo(() => hasAttendees() ? sortAttendees(props.attendees!) : []);
   const selfAttendee = createMemo(() => props.attendees?.find(a => a.isSelf));
   const canRsvp = createMemo(() => {
+    if (props.isOrganizer) return false;
     const self = selfAttendee();
     return self && !self.isOrganizer;
   });
@@ -660,6 +700,15 @@ function AttendeeList(props: {
     const eventId = selectedEventId();
     return eventId ? isPendingNotification(eventId) : false;
   });
+
+  const hasBufferedChanges = createMemo(() => {
+    const eventId = selectedEventId();
+    return eventId ? isBuffered(eventId) : false;
+  });
+
+  const showNotificationPopover = createMemo(() =>
+    hasPendingNotification() || hasBufferedChanges()
+  );
 
   const nonSelfAttendeeCount = createMemo(() =>
     (props.attendees ?? []).filter(a => !a.isSelf).length
@@ -670,7 +719,7 @@ function AttendeeList(props: {
     if (!eventId) return;
     const event = events().find(e => e.id === eventId);
     if (!event) return;
-    // PATCH with existing attendees + sendUpdates: "all" to trigger notification emails
+    // PATCH with current attendees + sendUpdates: "all" to trigger notification emails
     await apiFetch<ApiCalendarEvent>(
       `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
       {
@@ -681,20 +730,50 @@ function AttendeeList(props: {
         }),
       }
     );
+    clearBuffer(eventId);
     removePendingNotification(eventId);
   }
 
   function handleSendSilent(): void {
     const eventId = selectedEventId();
-    if (eventId) removePendingNotification(eventId);
+    if (!eventId) return;
+
+    if (isBuffered(eventId)) {
+      // Edit case: save current attendees silently
+      const event = events().find(e => e.id === eventId);
+      if (event) {
+        apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            attendees: (event.attendees ?? []).map(a => ({ email: a.email, name: a.name })),
+            sendUpdates: "none",
+          }),
+        }).catch(err => console.error("[attendees] Failed to save silently:", err));
+      }
+      clearBuffer(eventId);
+    }
+    removePendingNotification(eventId);
   }
 
   async function handleDiscard(): Promise<void> {
     const eventId = selectedEventId();
     if (!eventId) return;
+
+    if (isBuffered(eventId)) {
+      // Edit buffered case: revert to original attendees
+      const original = getOriginalAttendees(eventId);
+      setEvents((prev) => prev.map(e =>
+        e.id === eventId
+          ? { ...e, attendees: original && original.length > 0 ? original : undefined }
+          : e
+      ));
+      clearBuffer(eventId);
+      return;
+    }
+
+    // Creation pending case: remove all attendees from server
     const event = events().find(e => e.id === eventId);
     if (!event) return;
-    // Remove attendees from the event
     await apiFetch<ApiCalendarEvent>(
       `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
       {
@@ -702,7 +781,6 @@ function AttendeeList(props: {
         body: JSON.stringify({ attendees: null, sendUpdates: "none" }),
       }
     );
-    // Update local state
     setEvents((prev) => prev.map(e => e.id === eventId ? { ...e, attendees: undefined } : e));
     removePendingNotification(eventId);
   }
@@ -752,7 +830,7 @@ function AttendeeList(props: {
           <RsvpButtons currentStatus={selfAttendee()!.responseStatus} onRsvp={props.onRsvp} />
         </Show>
       </Show>
-      <Show when={hasPendingNotification()}>
+      <Show when={showNotificationPopover()}>
         <NotificationConfirmPopover
           count={nonSelfAttendeeCount()}
           onSend={handleSendInvitations}

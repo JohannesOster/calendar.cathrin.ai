@@ -1,6 +1,7 @@
 import { Show, onMount, onCleanup, createMemo } from "solid-js";
 import { Users } from "lucide-solid";
 import { isPendingNotification } from "../../stores/pending-notifications";
+import { isBuffered } from "../../stores/buffered-attendees";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
@@ -39,7 +40,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   const isSelected = () => selectedEventId() === props.event.id;
   const isDragging = () => dragActiveEventId() === props.event.id;
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
-  const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id));
+  const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id) || isBuffered(props.event.id));
 
   const hasTimes = () => !props.event.isAllDay;
 

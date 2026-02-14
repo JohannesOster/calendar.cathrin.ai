@@ -8,6 +8,7 @@ import { selectEvent, selectedEventId } from "../../stores/event-selection";
 import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/event-drag";
 import { snapMinutes } from "../../stores/event-creation";
 import { isPendingNotification } from "../../stores/pending-notifications";
+import { isBuffered } from "../../stores/buffered-attendees";
 import { Users } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
@@ -44,7 +45,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const isSelected = createMemo(() => selectedEventId() === props.event.id);
   const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
-  const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id));
+  const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id) || isBuffered(props.event.id));
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;

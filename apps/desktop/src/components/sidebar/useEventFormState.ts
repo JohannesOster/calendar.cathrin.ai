@@ -45,6 +45,8 @@ import type { EventPatch } from "../../stores/event-types";
 import { apiFetch } from "../../lib/api";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
+import { startBuffering, isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
+import { addPendingNotification } from "../../stores/pending-notifications";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
@@ -136,6 +138,7 @@ export function useEventFormState() {
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
       if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+      flushBufferedAttendees(prevId);
       flushSave(prevId);
     }
   }));
@@ -145,6 +148,7 @@ export function useEventFormState() {
   onCleanup(() => {
     if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
     if (rsvpTimer) { clearTimeout(rsvpTimer); rsvpTimer = null; rsvpOriginalAttendees = null; }
+    if (activeEditEventId) flushBufferedAttendees(activeEditEventId);
     flushSave();
   });
 
@@ -160,6 +164,7 @@ export function useEventFormState() {
     // Flush pending saves for the previous event before switching
     if (prevId && prevId !== id) {
       if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+      flushBufferedAttendees(prevId);
       flushSave(prevId);
     }
     activeEditEventId = id;
@@ -235,8 +240,8 @@ export function useEventFormState() {
       setEditDescription(event.description ?? "");
     }
 
-    // Attendees group: skip if dirty or RSVP debounce pending
-    if (!isGroupDirty("attendees") && !rsvpTimer) {
+    // Attendees group: skip if dirty, RSVP debounce pending, or buffered changes
+    if (!isGroupDirty("attendees") && !rsvpTimer && !(id && isBuffered(id))) {
       setEditAttendees(event.attendees ?? []);
     }
 
@@ -402,18 +407,82 @@ export function useEventFormState() {
     return true;
   });
 
+  // The email of the account that owns the current calendar
+  const accountEmail = createMemo(() => {
+    const calId = calendarId();
+    if (!calId) return null;
+    const cal = allCalendars().find((c) => c.id === calId);
+    return cal?.accountEmail?.toLowerCase() ?? null;
+  });
+
+  /** Compare two attendee lists by email (case-insensitive) to detect net-zero changes. */
+  function attendeeSetsEqual(a: Attendee[], b: Attendee[]): boolean {
+    const aEmails = new Set(a.map(att => att.email.toLowerCase()));
+    const bEmails = new Set(b.map(att => att.email.toLowerCase()));
+    if (aEmails.size !== bEmails.size) return false;
+    for (const email of aEmails) {
+      if (!bEmails.has(email)) return false;
+    }
+    return true;
+  }
+
+  /** After each attendee add/remove, check if changes cancel out (net-zero). */
+  function checkNetZero(eventId: string, currentAttendees: Attendee[]): void {
+    const original = getOriginalAttendees(eventId);
+    if (!original) return;
+    if (attendeeSetsEqual(original, currentAttendees)) {
+      clearBuffer(eventId);
+    }
+  }
+
+  /**
+   * Auto-save buffered attendee changes when navigating away (deselect / switch event).
+   * Saves silently (sendUpdates: "none") and adds a pending notification so the user
+   * can decide about emails later.
+   */
+  function flushBufferedAttendees(eventId: string): void {
+    if (!isBuffered(eventId)) return;
+    const event = events().find(e => e.id === eventId);
+    if (!event) { clearBuffer(eventId); return; }
+
+    const currentAttendees = event.attendees;
+    clearBuffer(eventId);
+
+    apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        attendees: currentAttendees ? currentAttendees.map(a => ({ email: a.email, name: a.name })) : null,
+        sendUpdates: "none",
+      }),
+    }).then(() => {
+      addPendingNotification(eventId);
+    }).catch(err => {
+      console.error("[attendees] Failed to save buffered attendees:", err);
+    });
+  }
+
   function addAttendee(email: string, name?: string): void {
     const current = mode() === "create" ? draftAttendees() : editAttendees();
     if (current.some(a => a.email.toLowerCase() === email.toLowerCase())) return;
-    const newAttendee: Attendee = { email, name, responseStatus: "needsAction" };
+    const isSelf = accountEmail() === email.toLowerCase();
+    const newAttendee: Attendee = {
+      email,
+      name,
+      responseStatus: isSelf ? "accepted" : "needsAction",
+      ...(isSelf && { isOrganizer: true, isSelf: true }),
+    };
     const updated = [...current, newAttendee];
     if (mode() === "create") {
       setDraftAttendees(updated);
     } else {
+      const eventId = selectedEventId();
+      if (eventId) {
+        const event = events().find(e => e.id === eventId);
+        if (event) startBuffering(eventId, event.attendees ?? []);
+      }
       setEditAttendees(updated);
       setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated } : e));
-      scheduleSave({ attendees: updated });
-      flushSave();
+      if (eventId) checkNetZero(eventId, updated);
     }
   }
 
@@ -423,10 +492,14 @@ export function useEventFormState() {
     if (mode() === "create") {
       setDraftAttendees(updated);
     } else {
+      const eventId = selectedEventId();
+      if (eventId) {
+        const event = events().find(e => e.id === eventId);
+        if (event) startBuffering(eventId, event.attendees ?? []);
+      }
       setEditAttendees(updated);
       setEvents((prev) => prev.map((e) => e.id === selectedEventId() ? { ...e, attendees: updated.length > 0 ? updated : undefined } : e));
-      scheduleSave({ attendees: updated.length > 0 ? updated : null });
-      flushSave();
+      if (eventId) checkNetZero(eventId, updated);
     }
   }
 
@@ -750,6 +823,7 @@ export function useEventFormState() {
     conferencing,
     attendees,
     isOrganizer,
+    accountEmail,
     addAttendee,
     removeAttendee,
     rsvpAttendee,
