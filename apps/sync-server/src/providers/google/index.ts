@@ -1,24 +1,25 @@
 import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
 import {
   GoogleCalendarService,
+  SyncTokenExpiredError as GoogleSyncTokenExpiredError,
   type GoogleEventPatch,
-  type GoogleConferenceData,
 } from "../../services/google-calendar.js";
-import type {
-  CalendarProvider,
-  ProviderCapabilities,
-  AuthUrlParams,
-  TokenPair,
-  EventFetchOptions,
-  EventFetchResult,
-  IncrementalSyncResult,
-  NewProviderEvent,
-  ProviderEventPatch,
-  MutationOptions,
-  RsvpResponse,
-  WatchOptions,
-  WatchInfo,
-  ProviderContact,
+import {
+  SyncTokenExpiredError,
+  type CalendarProvider,
+  type ProviderCapabilities,
+  type AuthUrlParams,
+  type TokenPair,
+  type EventFetchOptions,
+  type EventFetchResult,
+  type IncrementalSyncResult,
+  type NewProviderEvent,
+  type ProviderEventPatch,
+  type MutationOptions,
+  type RsvpResponse,
+  type WatchOptions,
+  type WatchInfo,
+  type ProviderContact,
 } from "../types.js";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -162,13 +163,21 @@ export class GoogleCalendarProvider implements CalendarProvider {
     syncToken: string,
     options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
   ): Promise<IncrementalSyncResult> {
-    const service = new GoogleCalendarService(accessToken);
-    return service.fetchEventsIncremental(
-      calendarId,
-      syncToken,
-      options.calendarColor,
-      options.calendarAccessRole,
-    );
+    try {
+      const service = new GoogleCalendarService(accessToken);
+      return await service.fetchEventsIncremental(
+        calendarId,
+        syncToken,
+        options.calendarColor,
+        options.calendarAccessRole,
+      );
+    } catch (error) {
+      // Re-throw as provider-generic error
+      if (error instanceof GoogleSyncTokenExpiredError) {
+        throw new SyncTokenExpiredError();
+      }
+      throw error;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -182,6 +191,9 @@ export class GoogleCalendarProvider implements CalendarProvider {
     options?: MutationOptions,
   ): Promise<ApiCalendarEvent> {
     const service = new GoogleCalendarService(accessToken);
+
+    // Translate conferencing to Google's conferenceData format
+    const wantsMeet = event.conferencing?.type === "create";
 
     const googleEvent = await service.insertEvent(
       calendarId,
@@ -204,8 +216,13 @@ export class GoogleCalendarProvider implements CalendarProvider {
               : { useDefault: true },
         }),
         colorId: event.colorId,
-        ...(event.conferenceData !== undefined && {
-          conferenceData: event.conferenceData as GoogleConferenceData,
+        ...(wantsMeet && {
+          conferenceData: {
+            createRequest: {
+              requestId: crypto.randomUUID(),
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          },
         }),
         ...(event.attendees &&
           event.attendees.length > 0 && {
@@ -254,10 +271,22 @@ export class GoogleCalendarProvider implements CalendarProvider {
       };
     }
     if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? null;
-    if (patch.conferenceData !== undefined) {
-      googlePatch.conferenceData =
-        patch.conferenceData as GoogleEventPatch["conferenceData"];
+
+    // Translate conferencing to Google's conferenceData format
+    if (patch.conferencing !== undefined) {
+      if (patch.conferencing === null) {
+        googlePatch.conferenceData = null;
+      } else if (patch.conferencing.type === "create") {
+        googlePatch.conferenceData = {
+          createRequest: {
+            requestId: crypto.randomUUID(),
+            conferenceSolutionKey: { type: "hangoutsMeet" },
+          },
+        };
+      }
+      // "manual" URIs don't go through Google's conferenceData — stored locally
     }
+
     if (patch.attendees !== undefined) {
       googlePatch.attendees = patch.attendees
         ? patch.attendees.map((a) => ({ email: a.email }))

@@ -2,7 +2,8 @@ import { eq, or, and } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, calendarSyncState, watchChannels } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import { GoogleCalendarService } from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 import { syncCalendarIncremental, syncCalendarFull } from "./incremental-sync.js";
 import { shouldCheckReanchor, checkAndReanchor } from "./reanchor.js";
 import { performInitialSync } from "./initial-sync.js";
@@ -266,7 +267,7 @@ async function runSyncCycle(): Promise<void> {
 
     for (const account of syncableAccounts) {
       try {
-        const result = await syncAccount(account.id, account.email);
+        const result = await syncAccount(account.id, account.email, account.provider);
         totalUpdated += result.updated;
         totalDeleted += result.deleted;
         accountsSucceeded++;
@@ -338,7 +339,8 @@ async function runSyncCycle(): Promise<void> {
  */
 async function syncAccount(
   accountId: string,
-  email: string
+  email: string,
+  providerName: string
 ): Promise<{ updated: number; deleted: number; affectedWeekIds: string[] }> {
   if (!db) {
     throw new Error("Database not configured");
@@ -352,7 +354,7 @@ async function syncAccount(
   if (calendars.length === 0) {
     // No calendars synced yet - fetch calendar list and set up sync state
     console.log(`[background-sync] No calendars for ${email}, fetching list`);
-    await initializeCalendarSyncState(accountId);
+    await initializeCalendarSyncState(accountId, providerName);
     return { updated: 0, deleted: 0, affectedWeekIds: [] };
   }
 
@@ -361,9 +363,9 @@ async function syncAccount(
   const allAffectedWeekIds = new Set<string>();
 
   // Get calendar colors and access roles for events
+  const calendarProvider = getProvider(providerName as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  const calendarList = await service.fetchCalendarList();
+  const calendarList = await calendarProvider.getCalendars(accessToken);
   const colorMap = new Map(calendarList.map((c) => [c.id, c.color]));
   const accessRoleMap = new Map(calendarList.map((c) => [c.id, c.accessRole]));
 
@@ -434,12 +436,12 @@ async function syncAccount(
 /**
  * Initialize sync state for a newly discovered account
  */
-async function initializeCalendarSyncState(accountId: string): Promise<void> {
+async function initializeCalendarSyncState(accountId: string, providerName: string): Promise<void> {
   if (!db) return;
 
+  const calendarProvider = getProvider(providerName as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  const calendars = await service.fetchCalendarList();
+  const calendars = await calendarProvider.getCalendars(accessToken);
 
   for (const calendar of calendars) {
     await db

@@ -569,7 +569,7 @@ export function useEventFormState() {
       // PATCH the event with a Meet request
       apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.providerEventId)}`, {
         method: "PATCH",
-        body: JSON.stringify({ conferencing: { type: "meet" } }),
+        body: JSON.stringify({ conferencing: { type: "create" } }),
       })
         .then((updated) => {
           const conf = updated.conferencing ?? null;

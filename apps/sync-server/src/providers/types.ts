@@ -1,5 +1,31 @@
 import type { Provider, ApiCalendar, ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
+// === Provider Errors ===
+
+/**
+ * Thrown when a sync/delta token has expired and a full resync is required.
+ * Provider-agnostic — each provider adapter catches its API-specific
+ * equivalent (e.g., Google 410 Gone) and re-throws this.
+ */
+export class SyncTokenExpiredError extends Error {
+  constructor(message = "Sync token expired - full sync required") {
+    super(message);
+    this.name = "SyncTokenExpiredError";
+  }
+}
+
+/**
+ * Thrown when the access token is expired or invalid.
+ * Provider-agnostic — each provider adapter catches its API-specific
+ * equivalent (e.g., Google 401) and re-throws this.
+ */
+export class TokenExpiredError extends Error {
+  constructor(message = "Access token expired") {
+    super(message);
+    this.name = "TokenExpiredError";
+  }
+}
+
 // === Auth ===
 
 export interface AuthUrlParams {
@@ -56,8 +82,8 @@ export interface NewProviderEvent {
   visibility?: string;
   reminders?: { method: string; minutes: number }[];
   colorId?: string;
-  /** Provider-specific conference creation payload */
-  conferenceData?: unknown;
+  /** "create" asks provider to create a conference (Meet/Teams), "manual" uses provided URI */
+  conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
   attendees?: { email: string; name?: string }[];
   timeZone?: string;
 }
@@ -73,8 +99,8 @@ export interface ProviderEventPatch {
   visibility?: string;
   reminders?: { method: string; minutes: number }[] | null;
   colorId?: string | null;
-  /** Provider-specific conference payload (null to remove) */
-  conferenceData?: unknown | null;
+  /** "create" asks provider to create a conference, null removes it, "manual" is local-only */
+  conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
   attendees?: { email: string; name?: string }[] | null;
   timeZone?: string;
 }

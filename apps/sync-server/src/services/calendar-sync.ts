@@ -1,8 +1,9 @@
 import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents, fetchedWeeks, calendarSyncState } from "../db/schema.js";
+import { accounts, serverEvents, fetchedWeeks, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import { GoogleCalendarService } from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 import { getDateBoundsForWeeks } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
 
@@ -78,15 +79,20 @@ async function doEnsureWeeksFetched(
   try {
     const { start, end } = getDateBoundsForWeeks(weeksToFetch);
 
+    const account = await db!.query.accounts.findFirst({
+      where: eq(accounts.id, accountId),
+      columns: { provider: true },
+    });
+    if (!account) throw new Error("Account not found");
+
+    const provider = getProvider(account.provider as Provider);
     const accessToken = await getAccessToken(accountId);
-    const service = new GoogleCalendarService(accessToken);
-    const events = await service.fetchEvents(
-      calendarId,
-      start.toISOString(),
-      end.toISOString(),
+    const { events } = await provider.getEvents(accessToken, calendarId, {
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
       calendarColor,
-      calendarAccessRole
-    );
+      calendarAccessRole,
+    });
 
     console.log(
       `[calendar-sync] Fetched ${events.length} events for calendar ${calendarId}`

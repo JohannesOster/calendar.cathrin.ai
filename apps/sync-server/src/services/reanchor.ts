@@ -6,7 +6,8 @@ import {
   fetchedWeeks,
 } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import { GoogleCalendarService } from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 import {
   getWeekId,
   getWeekBounds,
@@ -78,15 +79,20 @@ async function fetchWeekRange(
   const { start } = getWeekBounds(fromWeek);
   const { end } = getWeekBounds(toWeek);
 
-  const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) return 0;
 
-  const events = await service.fetchEvents(
-    calendarId,
-    start.toISOString(),
-    end.toISOString(),
-    calendarColor
-  );
+  const provider = getProvider(account.provider as Provider);
+  const accessToken = await getAccessToken(accountId);
+
+  const { events } = await provider.getEvents(accessToken, calendarId, {
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+    calendarColor,
+  });
 
   // Store events
   await upsertServerEvents(db, events, accountId, calendarId);
@@ -143,9 +149,17 @@ export async function checkAndReanchor(accountId: string): Promise<{
   }
 
   // Get calendar colors for events
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) {
+    return { extended: false, futureWeeks: 0, pastWeeks: 0, eventsAdded: 0 };
+  }
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  const calendarList = await service.fetchCalendarList();
+  const calendarList = await provider.getCalendars(accessToken);
   const colorMap = new Map(calendarList.map((c) => [c.id, c.color]));
 
   for (const calendar of calendars) {

@@ -1,11 +1,10 @@
 import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
+import { accounts, serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import {
-  GoogleCalendarService,
-  SyncTokenExpiredError,
-} from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import { SyncTokenExpiredError } from "../providers/types.js";
+import type { Provider } from "@cathrin/shared-types";
 import { getWeekId, getWeeksInRange } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
 
@@ -40,16 +39,22 @@ export async function syncCalendarIncremental(
     throw new Error("No syncToken - full sync required");
   }
 
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
 
   try {
     const { events, cancelledIds, nextSyncToken } =
-      await service.fetchEventsIncremental(
+      await provider.getEventsIncremental(
+        accessToken,
         calendarId,
         state.syncToken,
-        calendarColor,
-        calendarAccessRole
+        { calendarColor, calendarAccessRole }
       );
 
     let updated = 0;
@@ -136,17 +141,22 @@ export async function syncCalendarFull(
     throw new Error("Database not configured");
   }
 
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
 
   // Fetch all events in range
-  const events = await service.fetchEvents(
-    calendarId,
-    timeMin.toISOString(),
-    timeMax.toISOString(),
+  const { events } = await provider.getEvents(accessToken, calendarId, {
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
     calendarColor,
-    calendarAccessRole
-  );
+    calendarAccessRole,
+  });
 
   // Store events
   await upsertServerEvents(db, events, accountId, calendarId);

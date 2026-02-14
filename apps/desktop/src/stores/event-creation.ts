@@ -294,7 +294,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
       ...(conferencing && {
         conferencing: conferencing.uri
           ? { type: "manual" as const, uri: conferencing.uri }
-          : { type: "meet" as const },
+          : { type: "create" as const },
       }),
       timeZone,
       ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),

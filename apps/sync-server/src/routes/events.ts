@@ -12,9 +12,10 @@ import {
   getCalendarsToCheck,
 } from "../services/calendar-sync.js";
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
-import { createEventViaGoogle, updateEventViaGoogle, deleteEventViaGoogle, moveEventViaGoogle, rsvpEventViaGoogle } from "../services/event-mutations.js";
+import { createEvent, updateEvent, deleteEvent, moveEvent, rsvpEvent } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 import { notifyUser } from "../services/ws-manager.js";
+import type { Provider } from "@cathrin/shared-types";
 import { getWeekId } from "../lib/week-utils.js";
 
 const querySchema = z
@@ -90,7 +91,8 @@ export const eventsRoute = new Hono()
           orderBy: (events, { asc }) => [asc(events.start)],
         });
 
-    return c.json(events.map(mapServerEventToApi));
+    const providerMap = new Map(userAccounts.map(a => [a.id, a.provider as Provider]));
+    return c.json(events.map(e => mapServerEventToApi(e, providerMap.get(e.accountId))));
   })
   .post(
     "/",
@@ -109,7 +111,7 @@ export const eventsRoute = new Hono()
         reminders: z.array(z.object({ method: z.string(), minutes: z.number().min(0).max(40320) })).max(5).optional(),
         colorId: z.string().optional(),
         conferencing: z.union([
-          z.object({ type: z.literal("meet") }),
+          z.object({ type: z.literal("create") }),
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
@@ -136,7 +138,7 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        const apiEvent = await createEventViaGoogle({
+        const apiEvent = await createEvent({
           accountId: owner.accountId, calendarId, title, start, end, isAllDay,
           calendarColor: owner.color, location, description, transparency,
           visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates,
@@ -175,7 +177,7 @@ export const eventsRoute = new Hono()
         reminders: z.array(z.object({ method: z.string(), minutes: z.number().min(0).max(40320) })).max(5).nullable().optional(),
         colorId: z.string().nullable().optional(),
         conferencing: z.union([
-          z.object({ type: z.literal("meet") }),
+          z.object({ type: z.literal("create") }),
           z.object({ type: z.literal("manual"), uri: z.string().url() }),
         ]).nullable().optional(),
         timeZone: z.string().optional(),
@@ -204,7 +206,7 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        const apiEvent = await updateEventViaGoogle(
+        const apiEvent = await updateEvent(
           event.accountId, event.calendarId, providerEventId, patch, event, sendUpdates
         );
 
@@ -248,7 +250,7 @@ export const eventsRoute = new Hono()
     }
 
     try {
-      await deleteEventViaGoogle(event.accountId, event.calendarId, providerEventId, event.id, sendUpdates);
+      await deleteEvent(event.accountId, event.calendarId, providerEventId, event.id, sendUpdates);
 
       // Notify connected clients — skip the originating client
       const clientId = c.req.header("X-Client-ID");
@@ -296,7 +298,7 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        const apiEvent = await rsvpEventViaGoogle(
+        const apiEvent = await rsvpEvent(
           event.accountId, event.calendarId, providerEventId, responseStatus, event, sendUpdates
         );
 
@@ -353,7 +355,7 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        const apiEvent = await moveEventViaGoogle(
+        const apiEvent = await moveEvent(
           event.accountId, event.calendarId, targetCalendarId,
           providerEventId, event.id, targetOwner.color
         );
