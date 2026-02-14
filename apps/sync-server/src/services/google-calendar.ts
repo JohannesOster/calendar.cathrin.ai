@@ -62,7 +62,7 @@ interface EventDateTime {
   timeZone?: string;
 }
 
-interface GoogleConferenceData {
+export interface GoogleConferenceData {
   createRequest?: {
     requestId: string;
     conferenceSolutionKey: { type: string };
@@ -468,7 +468,7 @@ export class GoogleCalendarService {
    * Computes `isReadOnly` from calendar-level `accessRole` and event-level
    * permission fields (`guestsCanModify`, `locked`, `organizer.self`).
    */
-  private mapEvent(
+  mapEvent(
     event: GoogleEvent,
     calendarId: string,
     calendarColor: string,
