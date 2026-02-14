@@ -136,9 +136,11 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        const apiEvent = await createEventViaGoogle(
-          owner.accountId, calendarId, title, start, end, isAllDay, owner.color, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates
-        );
+        const apiEvent = await createEventViaGoogle({
+          accountId: owner.accountId, calendarId, title, start, end, isAllDay,
+          calendarColor: owner.color, location, description, transparency,
+          visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates,
+        });
 
         // Notify connected clients — skip the originating client (already has optimistic state)
         const clientId = c.req.header("X-Client-ID");

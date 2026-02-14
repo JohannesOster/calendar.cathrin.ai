@@ -104,26 +104,29 @@ export async function syncProviderContacts(accountId: string): Promise<void> {
     return true;
   });
 
-  // Replace all cached contacts for this account
+  // Replace all cached contacts for this account in a single transaction
+  // to prevent data loss if the insert fails after deletion.
   try {
-    await db.delete(providerContacts).where(eq(providerContacts.accountId, accountId));
+    await db.transaction(async (tx) => {
+      await tx.delete(providerContacts).where(eq(providerContacts.accountId, accountId));
 
-    if (allContacts.length > 0) {
-      const now = new Date();
-      // Batch insert in chunks of 500 to stay within Postgres parameter limits
-      const BATCH_SIZE = 500;
-      for (let i = 0; i < allContacts.length; i += BATCH_SIZE) {
-        const batch = allContacts.slice(i, i + BATCH_SIZE);
-        await db.insert(providerContacts).values(
-          batch.map((c) => ({
-            accountId,
-            email: c.email,
-            name: c.name,
-            fetchedAt: now,
-          }))
-        );
+      if (allContacts.length > 0) {
+        const now = new Date();
+        // Batch insert in chunks of 500 to stay within Postgres parameter limits
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < allContacts.length; i += BATCH_SIZE) {
+          const batch = allContacts.slice(i, i + BATCH_SIZE);
+          await tx.insert(providerContacts).values(
+            batch.map((c) => ({
+              accountId,
+              email: c.email,
+              name: c.name,
+              fetchedAt: now,
+            }))
+          );
+        }
       }
-    }
+    });
 
     lastSyncMap.set(accountId, Date.now());
     console.log(

@@ -662,17 +662,13 @@ function AttendeeList(props: {
   });
 
   const [pendingRemovals, setPendingRemovals] = createSignal<Set<string>>(new Set());
-
-  // Clear pending removals when switching events
-  createEffect(() => {
-    selectedEventId();
-    setPendingRemovals(new Set());
-  });
-
   const [isExpanded, setIsExpanded] = createSignal(false);
 
-  // Reset expanded state when switching events
-  createEffect(on(() => selectedEventId(), () => setIsExpanded(false)));
+  // Reset transient state when switching events
+  createEffect(on(() => selectedEventId(), () => {
+    setPendingRemovals(new Set());
+    setIsExpanded(false);
+  }));
 
   const collapseState = createMemo(() => {
     const all = sorted();
@@ -1011,23 +1007,21 @@ function AttendeeList(props: {
             </div>
           </div>
         </div>
-        <div>
-          <For each={collapseState().top}>
-            {(attendee) => renderAttendeeRow(attendee)}
-          </For>
-          <Show when={collapseState().hiddenCount > 0}>
-            <button
-              class="flex items-center gap-1.5 pl-[30px] pr-2 py-1.5 text-sm text-fg-muted hover:text-fg transition-colors cursor-pointer w-full bg-transparent border-none outline-none"
-              onClick={() => setIsExpanded(true)}
-            >
-              <EllipsisVertical size={12} class="shrink-0" />
-              <span>Show {collapseState().hiddenCount} more participants</span>
-            </button>
-          </Show>
-          <Show when={collapseState().pinned}>
-            {(self) => renderAttendeeRow(self())}
-          </Show>
-        </div>
+        <For each={collapseState().top}>
+          {(attendee) => renderAttendeeRow(attendee)}
+        </For>
+        <Show when={collapseState().hiddenCount > 0}>
+          <button
+            class="flex items-center gap-1.5 pl-[30px] pr-2 py-1.5 text-sm text-fg-muted hover:text-fg transition-colors cursor-pointer w-full bg-transparent border-none outline-none"
+            onClick={() => setIsExpanded(true)}
+          >
+            <EllipsisVertical size={12} class="shrink-0" />
+            <span>Show {collapseState().hiddenCount} more participants</span>
+          </button>
+        </Show>
+        <Show when={collapseState().pinned}>
+          {(self) => renderAttendeeRow(self())}
+        </Show>
         <Show when={canRsvp()}>
           <RsvpButtons currentStatus={selfAttendee()!.responseStatus} organizerName={organizerName()} onRsvp={props.onRsvp} />
         </Show>

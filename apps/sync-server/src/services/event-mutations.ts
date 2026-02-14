@@ -13,29 +13,32 @@ import type { InferSelectModel } from "drizzle-orm";
 
 type ServerEvent = InferSelectModel<typeof serverEvents>;
 
+export interface CreateEventOptions {
+  accountId: string;
+  calendarId: string;
+  title: string;
+  start: string;
+  end: string;
+  isAllDay?: boolean;
+  calendarColor?: string | null;
+  location?: string;
+  description?: string;
+  transparency?: string;
+  visibility?: string;
+  reminders?: { method: string; minutes: number }[];
+  colorId?: string;
+  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
+  timeZone?: string;
+  attendees?: { email: string; name?: string }[];
+  sendUpdates?: "all" | "none";
+}
+
 /**
  * Create an event via Google Calendar API and cache it locally.
  * Returns the ApiCalendarEvent.
  */
-export async function createEventViaGoogle(
-  accountId: string,
-  calendarId: string,
-  title: string,
-  start: string,
-  end: string,
-  isAllDay?: boolean,
-  calendarColor?: string | null,
-  location?: string,
-  description?: string,
-  transparency?: string,
-  visibility?: string,
-  reminders?: { method: string; minutes: number }[],
-  colorId?: string,
-  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null,
-  timeZone?: string,
-  attendees?: { email: string; name?: string }[],
-  sendUpdates?: "all" | "none"
-): Promise<ApiCalendarEvent> {
+export async function createEventViaGoogle(opts: CreateEventOptions): Promise<ApiCalendarEvent> {
+  const { accountId, calendarId, title, start, end, isAllDay, calendarColor, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates } = opts;
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
 
