@@ -931,15 +931,53 @@ function AttendeeList(props: {
     removePendingNotification(eventId);
   }
 
+  const rsvpSummary = createMemo(() => {
+    if (!hasAttendees()) return "";
+    const counts: Record<string, number> = { accepted: 0, maybe: 0, declined: 0, pending: 0 };
+    for (const a of props.attendees!) {
+      if (a.responseStatus === "accepted") counts.accepted++;
+      else if (a.responseStatus === "tentative") counts.maybe++;
+      else if (a.responseStatus === "declined") counts.declined++;
+      else counts.pending++;
+    }
+    return Object.entries(counts)
+      .filter(([, n]) => n > 0)
+      .map(([status, n]) => `${n} ${status}`)
+      .join(" \u00b7 ");
+  });
+
   return (
     <div class="space-y-0.5">
-      <div class="flex items-center gap-2 px-2 py-2">
-        <Users size={14} class="text-fg-muted shrink-0" />
-        <span class="text-sm text-fg-muted">
-          Participants{hasAttendees() ? ` (${props.attendees!.length})` : ""}
-        </span>
-      </div>
-      <Show when={hasAttendees()}>
+      <Show
+        when={hasAttendees()}
+        fallback={
+          <Show when={props.isOrganizer}>
+            <AttendeeCombobox
+              attendees={props.attendees}
+              accountEmail={props.accountEmail}
+              onAdd={props.onAdd}
+              inline
+            />
+          </Show>
+        }
+      >
+        {/* Populated header */}
+        <div class="px-2 py-2">
+          <div
+            class="flex items-center gap-2"
+            aria-label={`${props.attendees!.length} participants: ${rsvpSummary()}`}
+          >
+            <Users size={14} class="text-fg-muted shrink-0" />
+            <div class="flex flex-col">
+              <span class="text-sm text-fg">
+                {props.attendees!.length} participant{props.attendees!.length !== 1 ? "s" : ""}
+              </span>
+              <Show when={rsvpSummary()}>
+                <span class="text-xs text-fg-muted">{rsvpSummary()}</span>
+              </Show>
+            </div>
+          </div>
+        </div>
         <div class="max-h-52 overflow-y-auto">
           <For each={sorted()}>
             {(attendee) => {
@@ -978,8 +1016,6 @@ function AttendeeList(props: {
                       }`}
                       onClick={() => {
                         if (props.mode === "edit") {
-                          // If attendee was added during this session (not in original list),
-                          // remove immediately — no confirmation needed since they were never emailed
                           const eventId = selectedEventId();
                           const original = eventId ? getOriginalAttendees(eventId) : undefined;
                           if (original && !original.some(a => a.email.toLowerCase() === attendee.email.toLowerCase())) {
@@ -1019,7 +1055,7 @@ function AttendeeList(props: {
           onDiscard={props.mode === "create" ? handleCreateDiscard : handleDiscard}
         />
       </Show>
-      <Show when={props.isOrganizer}>
+      <Show when={hasAttendees() && props.isOrganizer}>
         <AttendeeCombobox attendees={props.attendees} accountEmail={props.accountEmail} onAdd={props.onAdd} />
       </Show>
     </div>
@@ -1041,6 +1077,7 @@ function AttendeeCombobox(props: {
   attendees: Attendee[] | undefined;
   accountEmail: string | null;
   onAdd: (email: string, name?: string) => void;
+  inline?: boolean;
 }) {
   let inputRef: HTMLInputElement | undefined;
   const [inputValue, setInputValue] = createSignal("");
@@ -1156,11 +1193,17 @@ function AttendeeCombobox(props: {
       }}
       positioning={{ placement: "bottom-start", sameWidth: true }}
     >
-      <Combobox.Control class="pl-[30px] pr-2">
+      <Combobox.Control class={props.inline
+        ? "flex items-center gap-2 text-sm rounded px-2 py-2 hover:bg-surface-hover focus-within:bg-surface-hover transition-colors"
+        : "pl-[30px] pr-2"
+      }>
+        <Show when={props.inline}>
+          <Users size={14} class="text-fg-muted shrink-0" />
+        </Show>
         <Combobox.Input
           ref={(el) => { inputRef = el; }}
-          placeholder="Add participant"
-          aria-label="Add participant"
+          placeholder={props.inline ? "Participants" : "Add participant"}
+          aria-label="Add participants"
           autocomplete="off"
           onKeyDown={(e) => {
             if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -1181,7 +1224,7 @@ function AttendeeCombobox(props: {
               // Non-email text with suggestions visible — let Combobox handle
             }
           }}
-          class="flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none py-1.5"
+          class={`flex-1 w-full text-sm text-fg placeholder-fg-disabled bg-transparent outline-none border-none ${props.inline ? "py-0" : "py-1.5"}`}
         />
       </Combobox.Control>
       <Combobox.Positioner>
