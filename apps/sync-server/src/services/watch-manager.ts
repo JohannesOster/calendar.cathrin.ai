@@ -1,17 +1,18 @@
 import { eq, lt } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { watchChannels, calendarSyncState } from "../db/schema.js";
+import { accounts, watchChannels, calendarSyncState } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 
 // =============================================================================
-// Google Calendar Watch Channel Manager
+// Watch Channel Manager
 // =============================================================================
 // Creates, renews, and stops push notification channels per calendar.
-// Google sends webhook POSTs when events change — we trigger incremental sync.
-// Channels expire after ~7 days and must be proactively renewed.
+// Dispatches through the provider abstraction — each provider implements
+// its own webhook protocol (Google: watch channels, Outlook: subscriptions).
 // =============================================================================
 
-const CHANNEL_TTL_SECONDS = 604_800; // 7 days (Google default/max reliable)
 const RENEW_BEFORE_MS = 2 * 24 * 60 * 60 * 1000; // Renew 2 days before expiry
 
 const WEBHOOK_BASE_URL = process.env.WEBHOOK_BASE_URL;
@@ -25,8 +26,17 @@ export function isWatchEnabled(): boolean {
 }
 
 /**
+ * Resolve the webhook address for a provider.
+ * Each provider gets its own endpoint path.
+ */
+function getWebhookAddress(provider: Provider): string {
+  // Future: /webhooks/outlook for Outlook subscriptions
+  return `${WEBHOOK_BASE_URL}/webhooks/${provider === "google" ? "google-calendar" : provider}`;
+}
+
+/**
  * Create a watch channel for a specific calendar.
- * Google will POST to our webhook when events in this calendar change.
+ * Dispatches through the provider's createWatch method.
  */
 export async function createWatchChannel(
   accountId: string,
@@ -34,69 +44,51 @@ export async function createWatchChannel(
 ): Promise<void> {
   if (!db || !WEBHOOK_BASE_URL) return;
 
-  const channelId = crypto.randomUUID();
-  const token = `accountId=${accountId}&calendarId=${encodeURIComponent(calendarId)}`;
-  const address = `${WEBHOOK_BASE_URL}/webhooks/google-calendar`;
+  const account = await db.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) return;
+
+  const provider = getProvider(account.provider as Provider);
+  if (!provider.createWatch) return; // Provider doesn't support webhooks
 
   const accessToken = await getAccessToken(accountId);
+  const token = `accountId=${accountId}&calendarId=${encodeURIComponent(calendarId)}`;
+  const address = getWebhookAddress(account.provider as Provider);
 
-  const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/watch`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: channelId,
-        type: "web_hook",
-        address,
-        token,
-        params: { ttl: String(CHANNEL_TTL_SECONDS) },
-      }),
-    }
-  );
+  try {
+    const watchInfo = await provider.createWatch(accessToken, calendarId, address, { token });
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    console.error(
-      `[watch] Failed to create channel for ${calendarId}: ${response.status} ${errorBody}`
+    // Upsert — one channel per (account, calendar)
+    await db
+      .insert(watchChannels)
+      .values({
+        accountId,
+        calendarId,
+        channelId: watchInfo.channelId,
+        resourceId: watchInfo.resourceId,
+        expiration: watchInfo.expiration,
+      })
+      .onConflictDoUpdate({
+        target: [watchChannels.accountId, watchChannels.calendarId],
+        set: {
+          channelId: watchInfo.channelId,
+          resourceId: watchInfo.resourceId,
+          expiration: watchInfo.expiration,
+          createdAt: new Date(),
+        },
+      });
+
+    console.log(
+      `[watch] Created channel for ${calendarId} (expires: ${watchInfo.expiration.toISOString()})`
     );
-    return;
+  } catch (error) {
+    const errorBody = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[watch] Failed to create channel for ${calendarId}: ${errorBody}`
+    );
   }
-
-  const data = (await response.json()) as {
-    id: string;
-    resourceId: string;
-    expiration: string; // ms since epoch as string
-  };
-
-  const expiration = new Date(Number(data.expiration));
-
-  // Upsert — one channel per (account, calendar)
-  await db
-    .insert(watchChannels)
-    .values({
-      accountId,
-      calendarId,
-      channelId: data.id,
-      resourceId: data.resourceId,
-      expiration,
-    })
-    .onConflictDoUpdate({
-      target: [watchChannels.accountId, watchChannels.calendarId],
-      set: {
-        channelId: data.id,
-        resourceId: data.resourceId,
-        expiration,
-        createdAt: new Date(),
-      },
-    });
-
-  console.log(
-    `[watch] Created channel for ${calendarId} (expires: ${expiration.toISOString()})`
-  );
 }
 
 /**
@@ -129,7 +121,6 @@ export async function createWatchChannelsForAccount(
 /**
  * Renew channels that are expiring within the renewal window.
  * Creates a new channel (with new ID) and replaces the old one in DB.
- * Google allows overlapping channels during transition.
  */
 export async function renewExpiringChannels(): Promise<void> {
   if (!db || !WEBHOOK_BASE_URL) return;
@@ -148,7 +139,7 @@ export async function renewExpiringChannels(): Promise<void> {
 
   for (const channel of expiringChannels) {
     try {
-      // Stop old channel first (best effort — Google tolerates duplicates)
+      // Stop old channel first (best effort — providers tolerate duplicates)
       await stopChannel(channel.channelId, channel.resourceId, channel.accountId);
 
       // Create new channel
@@ -163,7 +154,7 @@ export async function renewExpiringChannels(): Promise<void> {
 }
 
 /**
- * Stop a specific watch channel via Google API.
+ * Stop a specific watch channel via the provider.
  */
 export async function stopChannel(
   channelId: string,
@@ -171,24 +162,17 @@ export async function stopChannel(
   accountId: string
 ): Promise<void> {
   try {
-    const accessToken = await getAccessToken(accountId);
+    const account = await db?.query.accounts.findFirst({
+      where: eq(accounts.id, accountId),
+      columns: { provider: true },
+    });
 
-    const response = await fetch(
-      "https://www.googleapis.com/calendar/v3/channels/stop",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id: channelId, resourceId }),
+    if (account) {
+      const provider = getProvider(account.provider as Provider);
+      if (provider.deleteWatch) {
+        const accessToken = await getAccessToken(accountId);
+        await provider.deleteWatch(accessToken, channelId, resourceId);
       }
-    );
-
-    if (!response.ok && response.status !== 404) {
-      console.warn(
-        `[watch] Failed to stop channel ${channelId}: ${response.status}`
-      );
     }
   } catch (error) {
     console.warn(`[watch] Error stopping channel ${channelId}:`, error);

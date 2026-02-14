@@ -2,10 +2,15 @@ import type { ApiCalendar, ApiCalendarEvent } from "@cathrin/shared-types";
 import {
   GoogleCalendarService,
   SyncTokenExpiredError as GoogleSyncTokenExpiredError,
+  GoogleApiError,
+  TokenExpiredError as GoogleTokenExpiredError,
   type GoogleEventPatch,
 } from "../../services/google-calendar.js";
 import {
   SyncTokenExpiredError,
+  TokenExpiredError,
+  TokenRevokedError,
+  ProviderApiError,
   type CalendarProvider,
   type ProviderCapabilities,
   type AuthUrlParams,
@@ -41,6 +46,24 @@ export class GoogleCalendarProvider implements CalendarProvider {
     moveEvent: true,
     conferenceCreate: true,
   };
+
+  // ---------------------------------------------------------------------------
+  // Error mapping — translates Google-specific errors to provider-generic types
+  // ---------------------------------------------------------------------------
+
+  private async withErrorMapping<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof GoogleTokenExpiredError) {
+        throw new TokenExpiredError();
+      }
+      if (error instanceof GoogleApiError) {
+        throw new ProviderApiError(error.message, error.statusCode);
+      }
+      throw error;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Auth
@@ -117,8 +140,11 @@ export class GoogleCalendarProvider implements CalendarProvider {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => response.statusText);
-      throw new Error(`Google token refresh failed: ${body}`);
+      const data = await response.json().catch(() => ({})) as { error?: string; error_description?: string };
+      if (data.error === "invalid_grant") {
+        throw new TokenRevokedError(data.error_description || "Refresh token is no longer valid");
+      }
+      throw new Error(`Google token refresh failed: ${data.error_description || data.error || response.statusText}`);
     }
 
     const data = (await response.json()) as {
@@ -137,8 +163,10 @@ export class GoogleCalendarProvider implements CalendarProvider {
   // ---------------------------------------------------------------------------
 
   async getCalendars(accessToken: string): Promise<ApiCalendar[]> {
-    const service = new GoogleCalendarService(accessToken);
-    return service.fetchCalendarList();
+    return this.withErrorMapping(() => {
+      const service = new GoogleCalendarService(accessToken);
+      return service.fetchCalendarList();
+    });
   }
 
   async getEvents(
@@ -146,15 +174,17 @@ export class GoogleCalendarProvider implements CalendarProvider {
     calendarId: string,
     options: EventFetchOptions,
   ): Promise<EventFetchResult> {
-    const service = new GoogleCalendarService(accessToken);
-    const events = await service.fetchEvents(
-      calendarId,
-      options.timeMin,
-      options.timeMax,
-      options.calendarColor,
-      options.calendarAccessRole,
-    );
-    return { events };
+    return this.withErrorMapping(async () => {
+      const service = new GoogleCalendarService(accessToken);
+      const events = await service.fetchEvents(
+        calendarId,
+        options.timeMin,
+        options.timeMax,
+        options.calendarColor,
+        options.calendarAccessRole,
+      );
+      return { events };
+    });
   }
 
   async getEventsIncremental(
@@ -163,21 +193,22 @@ export class GoogleCalendarProvider implements CalendarProvider {
     syncToken: string,
     options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
   ): Promise<IncrementalSyncResult> {
-    try {
-      const service = new GoogleCalendarService(accessToken);
-      return await service.fetchEventsIncremental(
-        calendarId,
-        syncToken,
-        options.calendarColor,
-        options.calendarAccessRole,
-      );
-    } catch (error) {
-      // Re-throw as provider-generic error
-      if (error instanceof GoogleSyncTokenExpiredError) {
-        throw new SyncTokenExpiredError();
+    return this.withErrorMapping(async () => {
+      try {
+        const service = new GoogleCalendarService(accessToken);
+        return await service.fetchEventsIncremental(
+          calendarId,
+          syncToken,
+          options.calendarColor,
+          options.calendarAccessRole,
+        );
+      } catch (error) {
+        if (error instanceof GoogleSyncTokenExpiredError) {
+          throw new SyncTokenExpiredError();
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -190,6 +221,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     event: NewProviderEvent,
     options?: MutationOptions,
   ): Promise<ApiCalendarEvent> {
+    return this.withErrorMapping(async () => {
     const service = new GoogleCalendarService(accessToken);
 
     // Translate conferencing to Google's conferenceData format
@@ -246,6 +278,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       throw new Error("Failed to map created event — missing start or end date");
     }
     return result;
+    });
   }
 
   async updateEvent(
@@ -255,6 +288,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     patch: ProviderEventPatch,
     options?: MutationOptions,
   ): Promise<ApiCalendarEvent> {
+    return this.withErrorMapping(async () => {
     const googlePatch: GoogleEventPatch = {};
     if (patch.summary !== undefined) googlePatch.summary = patch.summary;
     if (patch.description !== undefined)
@@ -327,6 +361,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       throw new Error("Failed to map updated event — missing start or end date");
     }
     return result;
+    });
   }
 
   async deleteEvent(
@@ -335,12 +370,14 @@ export class GoogleCalendarProvider implements CalendarProvider {
     eventId: string,
     options?: MutationOptions,
   ): Promise<void> {
-    const service = new GoogleCalendarService(accessToken);
-    await service.deleteEvent(
-      calendarId,
-      eventId,
-      options?.sendUpdates ? { sendUpdates: options.sendUpdates } : undefined,
-    );
+    return this.withErrorMapping(async () => {
+      const service = new GoogleCalendarService(accessToken);
+      await service.deleteEvent(
+        calendarId,
+        eventId,
+        options?.sendUpdates ? { sendUpdates: options.sendUpdates } : undefined,
+      );
+    });
   }
 
   async moveEvent(
@@ -349,14 +386,16 @@ export class GoogleCalendarProvider implements CalendarProvider {
     eventId: string,
     destCalId: string,
   ): Promise<ApiCalendarEvent> {
-    const service = new GoogleCalendarService(accessToken);
-    const moved = await service.moveEvent(sourceCalId, eventId, destCalId);
-    // Caller updates with actual calendar color after DB operations
-    const result = service.mapEvent(moved, destCalId, "#4285f4");
-    if (!result) {
-      throw new Error("Failed to map moved event — missing start or end date");
-    }
-    return result;
+    return this.withErrorMapping(async () => {
+      const service = new GoogleCalendarService(accessToken);
+      const moved = await service.moveEvent(sourceCalId, eventId, destCalId);
+      // Caller updates with actual calendar color after DB operations
+      const result = service.mapEvent(moved, destCalId, "#4285f4");
+      if (!result) {
+        throw new Error("Failed to map moved event — missing start or end date");
+      }
+      return result;
+    });
   }
 
   async rsvpEvent(
@@ -366,26 +405,28 @@ export class GoogleCalendarProvider implements CalendarProvider {
     response: RsvpResponse,
     options?: MutationOptions,
   ): Promise<void> {
-    // Google RSVP works by patching the attendees array with updated responseStatus
-    const attendees = options?.currentAttendees;
-    if (!attendees || attendees.length === 0) {
-      throw new Error("Google RSVP requires currentAttendees in options");
-    }
+    return this.withErrorMapping(async () => {
+      // Google RSVP works by patching the attendees array with updated responseStatus
+      const attendees = options?.currentAttendees;
+      if (!attendees || attendees.length === 0) {
+        throw new Error("Google RSVP requires currentAttendees in options");
+      }
 
-    const googleAttendees = attendees.map((a) => ({
-      email: a.email,
-      responseStatus: a.isSelf ? response : a.responseStatus,
-      ...(a.isOrganizer && { organizer: true }),
-      ...(a.isSelf && { self: true }),
-    }));
+      const googleAttendees = attendees.map((a) => ({
+        email: a.email,
+        responseStatus: a.isSelf ? response : a.responseStatus,
+        ...(a.isOrganizer && { organizer: true }),
+        ...(a.isSelf && { self: true }),
+      }));
 
-    const service = new GoogleCalendarService(accessToken);
-    await service.patchEvent(
-      calendarId,
-      eventId,
-      { attendees: googleAttendees },
-      { sendUpdates: options?.sendUpdates ?? "none" },
-    );
+      const service = new GoogleCalendarService(accessToken);
+      await service.patchEvent(
+        calendarId,
+        eventId,
+        { attendees: googleAttendees },
+        { sendUpdates: options?.sendUpdates ?? "none" },
+      );
+    });
   }
 
   // ---------------------------------------------------------------------------

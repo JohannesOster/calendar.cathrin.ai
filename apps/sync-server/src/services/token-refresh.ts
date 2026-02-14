@@ -2,22 +2,16 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts } from "../db/schema.js";
 import { encrypt, decrypt } from "../lib/crypto.js";
+import { getProvider } from "../providers/registry.js";
+import { TokenRevokedError } from "../providers/types.js";
+import type { Provider } from "@cathrin/shared-types";
 
-const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+export { TokenRevokedError };
+
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000; // Refresh 60 seconds before expiry
 
 /**
- * Error thrown when user has revoked access and must re-authorize
- */
-export class TokenRevokedError extends Error {
-  constructor(message = "User must re-authorize") {
-    super(message);
-    this.name = "TokenRevokedError";
-  }
-}
-
-/**
- * Error thrown when token refresh fails for other reasons
+ * Error thrown when token refresh fails for non-revocation reasons
  */
 export class TokenRefreshError extends Error {
   constructor(
@@ -29,69 +23,9 @@ export class TokenRefreshError extends Error {
   }
 }
 
-interface GoogleTokenResponse {
-  access_token: string;
-  expires_in: number;
-  token_type: string;
-  scope: string;
-}
-
-interface GoogleErrorResponse {
-  error: string;
-  error_description?: string;
-}
-
 /**
- * Refresh access token using Google's token endpoint
- */
-async function refreshGoogleToken(
-  refreshToken: string
-): Promise<GoogleTokenResponse> {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    throw new TokenRefreshError(
-      "Google OAuth credentials not configured",
-      "missing_credentials"
-    );
-  }
-
-  const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    const error = data as GoogleErrorResponse;
-
-    // invalid_grant means the refresh token is no longer valid
-    // User revoked access, or token was somehow invalidated
-    if (error.error === "invalid_grant") {
-      throw new TokenRevokedError(
-        error.error_description || "Refresh token is no longer valid"
-      );
-    }
-
-    throw new TokenRefreshError(
-      error.error_description || error.error || "Failed to refresh token",
-      error.error
-    );
-  }
-
-  return data as GoogleTokenResponse;
-}
-
-/**
- * Get a valid access token for an account, refreshing if needed
+ * Get a valid access token for an account, refreshing if needed.
+ * Dispatches token refresh through the provider abstraction.
  *
  * @param accountId - The account ID to get token for
  * @returns A valid access token
@@ -122,23 +56,24 @@ export async function getAccessToken(accountId: string): Promise<string> {
     return decrypt(account.encryptedAccessToken);
   }
 
-  // Need to refresh - decrypt the refresh token
+  // Need to refresh — decrypt the refresh token and dispatch through provider
   const refreshToken = decrypt(account.encryptedRefreshToken);
+  const provider = getProvider(account.provider as Provider);
 
   try {
-    const newTokens = await refreshGoogleToken(refreshToken);
+    const newTokens = await provider.refreshToken(refreshToken);
 
     // Store new access token
     await db
       .update(accounts)
       .set({
-        encryptedAccessToken: encrypt(newTokens.access_token),
-        tokenExpiresAt: new Date(now + newTokens.expires_in * 1000),
+        encryptedAccessToken: encrypt(newTokens.accessToken),
+        tokenExpiresAt: new Date(now + newTokens.expiresIn * 1000),
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, accountId));
 
-    return newTokens.access_token;
+    return newTokens.accessToken;
   } catch (error) {
     if (error instanceof TokenRevokedError) {
       // Mark account as needing re-authorization
@@ -156,7 +91,8 @@ export async function getAccessToken(accountId: string): Promise<string> {
 }
 
 /**
- * Force refresh the access token, bypassing cache
+ * Force refresh the access token, bypassing cache.
+ * Dispatches token refresh through the provider abstraction.
  *
  * @param accountId - The account ID to refresh token for
  * @returns A new access token
@@ -176,23 +112,24 @@ export async function forceRefresh(accountId: string): Promise<string> {
     throw new TokenRefreshError("Account not found", "not_found");
   }
 
-  // Decrypt the refresh token
+  // Decrypt the refresh token and dispatch through provider
   const refreshToken = decrypt(account.encryptedRefreshToken);
+  const provider = getProvider(account.provider as Provider);
 
   try {
-    const newTokens = await refreshGoogleToken(refreshToken);
+    const newTokens = await provider.refreshToken(refreshToken);
 
     // Store new access token
     await db
       .update(accounts)
       .set({
-        encryptedAccessToken: encrypt(newTokens.access_token),
-        tokenExpiresAt: new Date(Date.now() + newTokens.expires_in * 1000),
+        encryptedAccessToken: encrypt(newTokens.accessToken),
+        tokenExpiresAt: new Date(Date.now() + newTokens.expiresIn * 1000),
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, accountId));
 
-    return newTokens.access_token;
+    return newTokens.accessToken;
   } catch (error) {
     if (error instanceof TokenRevokedError) {
       // Mark account as needing re-authorization

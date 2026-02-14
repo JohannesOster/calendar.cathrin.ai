@@ -26,6 +26,34 @@ export class TokenExpiredError extends Error {
   }
 }
 
+/**
+ * Thrown when the refresh token has been revoked or invalidated.
+ * The user must re-authorize. Provider-agnostic — each provider detects
+ * its specific revocation signal (e.g., Google "invalid_grant",
+ * Outlook "invalid_grant" / "interaction_required") and throws this.
+ */
+export class TokenRevokedError extends Error {
+  constructor(message = "User must re-authorize") {
+    super(message);
+    this.name = "TokenRevokedError";
+  }
+}
+
+/**
+ * Thrown for provider API errors that should be forwarded to the client.
+ * Wraps provider-specific error shapes (e.g., Google GoogleApiError,
+ * Outlook Graph API errors) into a uniform type.
+ */
+export class ProviderApiError extends Error {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = "ProviderApiError";
+    this.statusCode = statusCode;
+  }
+}
+
 // === Auth ===
 
 export interface AuthUrlParams {

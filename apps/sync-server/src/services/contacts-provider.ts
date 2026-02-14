@@ -1,27 +1,14 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { providerContacts } from "../db/schema.js";
+import { accounts, providerContacts } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 
-const GOOGLE_PEOPLE_API_URL =
-  "https://people.googleapis.com/v1/people/me/connections";
-const PAGE_SIZE = 1000; // Max allowed by People API
 const CONTACTS_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Track last sync per account in memory. After restart, re-syncs once — harmless.
 const lastSyncMap = new Map<string, number>();
-
-interface GooglePerson {
-  resourceName: string;
-  names?: { displayName?: string }[];
-  emailAddresses?: { value?: string }[];
-}
-
-interface PeopleConnectionsResponse {
-  connections?: GooglePerson[];
-  nextPageToken?: string;
-  totalPeople?: number;
-}
 
 /**
  * Check if contacts need syncing for this account (once per 24h)
@@ -33,70 +20,38 @@ export function shouldSyncContacts(accountId: string): boolean {
 }
 
 /**
- * Fetch Google Contacts via People API and cache in provider_contacts table.
- * Gracefully handles missing scope (403) — just logs and skips.
+ * Fetch contacts via the provider and cache in provider_contacts table.
+ * Dispatches through the provider's searchContacts method.
+ * Gracefully handles providers that don't support contacts.
  */
 export async function syncProviderContacts(accountId: string): Promise<void> {
   if (!db) return;
 
+  const account = await db.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) return;
+
+  const provider = getProvider(account.provider as Provider);
+  if (!provider.searchContacts) {
+    // Provider doesn't support contacts — mark as synced to avoid retrying
+    lastSyncMap.set(accountId, Date.now());
+    return;
+  }
+
   const accessToken = await getAccessToken(accountId);
 
-  let allContacts: { email: string; name: string | null }[] = [];
-  let pageToken: string | undefined;
+  let allContacts: { email: string; name: string | null }[];
 
   try {
-    do {
-      const url = new URL(GOOGLE_PEOPLE_API_URL);
-      url.searchParams.set("personFields", "names,emailAddresses");
-      url.searchParams.set("pageSize", String(PAGE_SIZE));
-      if (pageToken) {
-        url.searchParams.set("pageToken", pageToken);
-      }
-
-      const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      // 403 = missing contacts.readonly scope (existing users pre-scope-addition)
-      if (response.status === 403) {
-        console.log(
-          `[contacts-provider] Skipping ${accountId} — contacts.readonly scope not granted`
-        );
-        lastSyncMap.set(accountId, Date.now());
-        return;
-      }
-
-      if (!response.ok) {
-        const detail = await response.text().catch(() => response.statusText);
-        console.error(
-          `[contacts-provider] People API error ${response.status}: ${detail}`
-        );
-        return;
-      }
-
-      const data = (await response.json()) as PeopleConnectionsResponse;
-
-      if (data.connections) {
-        for (const person of data.connections) {
-          const name = person.names?.[0]?.displayName || null;
-          const emails = person.emailAddresses || [];
-          for (const emailEntry of emails) {
-            const email = emailEntry.value?.trim().toLowerCase();
-            if (email) {
-              allContacts.push({ email, name });
-            }
-          }
-        }
-      }
-
-      pageToken = data.nextPageToken;
-    } while (pageToken);
+    allContacts = await provider.searchContacts(accessToken);
   } catch (error) {
     console.error(`[contacts-provider] Failed to fetch contacts for ${accountId}:`, error);
     return;
   }
 
-  // Deduplicate by email (keep first occurrence which has best name from Google's ordering)
+  // Deduplicate by email (keep first occurrence which has best name from provider's ordering)
   const seen = new Set<string>();
   allContacts = allContacts.filter((c) => {
     if (seen.has(c.email)) return false;

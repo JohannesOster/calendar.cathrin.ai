@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
-import { getAccessToken, TokenRevokedError } from "../services/token-refresh.js";
-import { TokenExpiredError } from "../providers/types.js";
+import { getAccessToken } from "../services/token-refresh.js";
+import { TokenExpiredError, TokenRevokedError } from "../providers/types.js";
 import { getProvider } from "../providers/registry.js";
 import type { ApiCalendar, Provider } from "@cathrin/shared-types";
 

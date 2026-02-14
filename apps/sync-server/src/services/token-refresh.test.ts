@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getAccessToken,
   forceRefresh,
   TokenRevokedError,
-  TokenRefreshError,
 } from "./token-refresh.js";
 
 // Mock the db module
@@ -28,18 +27,23 @@ vi.mock("../lib/crypto.js", () => ({
   decrypt: vi.fn((text: string) => text.replace("encrypted:", "")),
 }));
 
+// Mock the provider registry
+const mockRefreshToken = vi.fn();
+vi.mock("../providers/registry.js", () => ({
+  getProvider: vi.fn(() => ({
+    refreshToken: mockRefreshToken,
+  })),
+}));
+
 // Import mocked db after mocking
 import { db } from "../db/index.js";
 import { decrypt } from "../lib/crypto.js";
 
 describe("token-refresh service", () => {
   const mockAccountId = "test-account-id";
-  const mockRefreshToken = "mock-refresh-token";
+  const mockRefreshTokenValue = "mock-refresh-token";
   const mockAccessToken = "mock-access-token";
   const mockNewAccessToken = "new-mock-access-token";
-
-  const originalEnv = process.env;
-  const originalFetch = global.fetch;
 
   // Helper to create a mock account with all required fields
   function createMockAccount(overrides: Partial<{
@@ -51,7 +55,7 @@ describe("token-refresh service", () => {
     return {
       id: mockAccountId,
       encryptedAccessToken: `encrypted:${mockAccessToken}`,
-      encryptedRefreshToken: `encrypted:${mockRefreshToken}`,
+      encryptedRefreshToken: `encrypted:${mockRefreshTokenValue}`,
       tokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
       userId: "user-1",
       provider: "google",
@@ -70,18 +74,6 @@ describe("token-refresh service", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = {
-      ...originalEnv,
-      GOOGLE_CLIENT_ID: "test-client-id",
-      GOOGLE_CLIENT_SECRET: "test-client-secret",
-      ENCRYPTION_KEY:
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-    global.fetch = originalFetch;
   });
 
   describe("getAccessToken", () => {
@@ -105,26 +97,15 @@ describe("token-refresh service", () => {
         createMockAccount({ tokenExpiresAt: pastExpiry })
       );
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: mockNewAccessToken,
-            expires_in: 3600,
-            token_type: "Bearer",
-            scope: "calendar.readonly",
-          }),
+      mockRefreshToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+        expiresIn: 3600,
       });
 
       const token = await getAccessToken(mockAccountId);
 
       expect(token).toBe(mockNewAccessToken);
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://oauth2.googleapis.com/token",
-        expect.objectContaining({
-          method: "POST",
-        })
-      );
+      expect(mockRefreshToken).toHaveBeenCalledWith(mockRefreshTokenValue);
     });
 
     it("refreshes token within 60 second buffer", async () => {
@@ -135,21 +116,15 @@ describe("token-refresh service", () => {
         createMockAccount({ tokenExpiresAt: nearExpiry })
       );
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: mockNewAccessToken,
-            expires_in: 3600,
-            token_type: "Bearer",
-            scope: "calendar.readonly",
-          }),
+      mockRefreshToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+        expiresIn: 3600,
       });
 
       const token = await getAccessToken(mockAccountId);
 
       expect(token).toBe(mockNewAccessToken);
-      expect(global.fetch).toHaveBeenCalled();
+      expect(mockRefreshToken).toHaveBeenCalled();
     });
 
     it("throws TokenRevokedError when refresh token is invalid", async () => {
@@ -159,14 +134,9 @@ describe("token-refresh service", () => {
         createMockAccount({ tokenExpiresAt: pastExpiry })
       );
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        json: () =>
-          Promise.resolve({
-            error: "invalid_grant",
-            error_description: "Token has been revoked",
-          }),
-      });
+      mockRefreshToken.mockRejectedValue(
+        new TokenRevokedError("Token has been revoked")
+      );
 
       await expect(getAccessToken(mockAccountId)).rejects.toThrow(
         TokenRevokedError
@@ -176,24 +146,19 @@ describe("token-refresh service", () => {
       expect(db!.update).toHaveBeenCalled();
     });
 
-    it("throws TokenRefreshError for other Google errors", async () => {
+    it("throws error for other provider errors", async () => {
       const pastExpiry = new Date(Date.now() - 10 * 60 * 1000);
 
       vi.mocked(db!.query.accounts.findFirst).mockResolvedValue(
         createMockAccount({ tokenExpiresAt: pastExpiry })
       );
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        json: () =>
-          Promise.resolve({
-            error: "server_error",
-            error_description: "Internal server error",
-          }),
-      });
+      mockRefreshToken.mockRejectedValue(
+        new Error("Google token refresh failed: Internal server error")
+      );
 
       await expect(getAccessToken(mockAccountId)).rejects.toThrow(
-        TokenRefreshError
+        "Google token refresh failed"
       );
     });
 
@@ -214,21 +179,15 @@ describe("token-refresh service", () => {
         createMockAccount({ tokenExpiresAt: futureExpiry })
       );
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            access_token: mockNewAccessToken,
-            expires_in: 3600,
-            token_type: "Bearer",
-            scope: "calendar.readonly",
-          }),
+      mockRefreshToken.mockResolvedValue({
+        accessToken: mockNewAccessToken,
+        expiresIn: 3600,
       });
 
       const token = await forceRefresh(mockAccountId);
 
       expect(token).toBe(mockNewAccessToken);
-      expect(global.fetch).toHaveBeenCalled();
+      expect(mockRefreshToken).toHaveBeenCalled();
     });
   });
 });

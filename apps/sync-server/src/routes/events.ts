@@ -6,7 +6,7 @@ import { db } from "../db/index.js";
 import { accounts, serverEvents } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { getWeeksInRange } from "../lib/week-utils.js";
-import { handleGoogleApiError } from "../lib/google-error.js";
+import { handleProviderError } from "../lib/provider-error.js";
 import {
   ensureWeeksFetched,
   getCalendarsToCheck,
@@ -155,7 +155,7 @@ export const eventsRoute = new Hono()
 
         return c.json(apiEvent, 201);
       } catch (error) {
-        const errorResponse = handleGoogleApiError(error, c);
+        const errorResponse = handleProviderError(error, c);
         if (errorResponse) return errorResponse;
         throw error;
       }
@@ -223,7 +223,7 @@ export const eventsRoute = new Hono()
 
         return c.json(apiEvent);
       } catch (error) {
-        const errorResponse = handleGoogleApiError(error, c);
+        const errorResponse = handleProviderError(error, c);
         if (errorResponse) return errorResponse;
         throw error;
       }
@@ -263,7 +263,7 @@ export const eventsRoute = new Hono()
 
       return c.json({ success: true });
     } catch (error) {
-      const errorResponse = handleGoogleApiError(error, c);
+      const errorResponse = handleProviderError(error, c);
       if (errorResponse) return errorResponse;
       throw error;
     }
@@ -311,7 +311,7 @@ export const eventsRoute = new Hono()
 
         return c.json(apiEvent);
       } catch (error) {
-        const errorResponse = handleGoogleApiError(error, c);
+        const errorResponse = handleProviderError(error, c);
         if (errorResponse) return errorResponse;
         throw error;
       }
@@ -369,7 +369,7 @@ export const eventsRoute = new Hono()
 
         return c.json(apiEvent);
       } catch (error) {
-        const errorResponse = handleGoogleApiError(error, c);
+        const errorResponse = handleProviderError(error, c);
         if (errorResponse) return errorResponse;
         throw error;
       }

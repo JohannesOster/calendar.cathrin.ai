@@ -129,9 +129,10 @@ export const authRoute = new Hono()
       const pendingState = stateMatch ? stateMatch[1] : null;
 
       const { jwt } = await handleOAuthCallback({
+        provider: "google",
         accessToken,
         refreshToken: refreshToken.token,
-        googleUser: { id: googleUser.id, email: googleUser.email },
+        providerUser: { id: googleUser.id, email: googleUser.email },
         pendingState,
       });
 
