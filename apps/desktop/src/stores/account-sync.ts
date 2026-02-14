@@ -79,6 +79,7 @@ export async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
   const result = accounts.map((account) => ({
     id: account.id,
     email: account.email,
+    provider: account.provider,
     calendars: calendarsByAccount.get(account.id) || [],
     syncStatus: account.syncStatus ?? "pending",
   }));

@@ -15,6 +15,9 @@ import {
   type ProviderEventPatch,
   type MutationOptions,
   type RsvpResponse,
+  type WatchOptions,
+  type WatchInfo,
+  type ProviderContact,
 } from "../types.js";
 import type {
   GraphCalendarListResponse,
@@ -680,5 +683,109 @@ export class OutlookCalendarProvider implements CalendarProvider {
     // 202 Accepted = success
     if (rsvpResponse.status === 202) return;
     if (!rsvpResponse.ok) await handleGraphError(rsvpResponse);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Webhooks (Outlook Subscriptions)
+  // ---------------------------------------------------------------------------
+
+  async createWatch(
+    accessToken: string,
+    calendarId: string,
+    webhookUrl: string,
+    options?: WatchOptions,
+  ): Promise<WatchInfo> {
+    // Outlook uses subscriptions — max TTL is 10,080 minutes (7 days)
+    const ttlMinutes = options?.ttl ? Math.min(Math.floor(options.ttl / 60), 10_080) : 10_080;
+    const expirationDate = new Date(Date.now() + ttlMinutes * 60 * 1000);
+
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/subscriptions`,
+      accessToken,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: GRAPH_PREFER_HEADER },
+        body: JSON.stringify({
+          changeType: "created,updated,deleted",
+          notificationUrl: webhookUrl,
+          lifecycleNotificationUrl: `${webhookUrl}/lifecycle`,
+          resource: `/me/calendars/${calendarId}/events`,
+          expirationDateTime: expirationDate.toISOString(),
+          clientState: options?.token || "",
+        }),
+      },
+    );
+
+    if (!response.ok) await handleGraphError(response);
+
+    const data = (await response.json()) as {
+      id: string;
+      expirationDateTime: string;
+      resource: string;
+    };
+
+    return {
+      channelId: data.id, // subscription ID
+      resourceId: data.resource,
+      expiration: new Date(data.expirationDateTime),
+    };
+  }
+
+  async deleteWatch(
+    accessToken: string,
+    channelId: string,
+    _resourceId?: string,
+  ): Promise<void> {
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/subscriptions/${encodeURIComponent(channelId)}`,
+      accessToken,
+      { method: "DELETE" },
+    );
+
+    // 204 No Content = success, 404 = already expired/deleted
+    if (response.status === 204 || response.status === 404) return;
+    if (!response.ok) await handleGraphError(response);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Contacts (People API)
+  // ---------------------------------------------------------------------------
+
+  async searchContacts(accessToken: string, query?: string): Promise<ProviderContact[]> {
+    const url = new URL(`${MS_GRAPH_URL}/me/people`);
+    url.searchParams.set("$top", "100");
+    if (query) {
+      url.searchParams.set("$search", `"${query}"`);
+    }
+
+    const response = await graphFetch(url.toString(), accessToken);
+
+    // 403 = People.Read scope missing — return empty
+    if (response.status === 403) return [];
+    if (!response.ok) {
+      console.warn("[outlook] Failed to fetch contacts:", response.status);
+      return [];
+    }
+
+    const data = (await response.json()) as {
+      value: {
+        displayName?: string;
+        scoredEmailAddresses?: { address: string }[];
+        givenName?: string;
+        surname?: string;
+      }[];
+    };
+
+    const contacts: ProviderContact[] = [];
+    for (const person of data.value) {
+      const email = person.scoredEmailAddresses?.[0]?.address?.trim().toLowerCase();
+      if (!email) continue;
+      contacts.push({
+        email,
+        name: person.displayName || null,
+      });
+    }
+
+    return contacts;
   }
 }

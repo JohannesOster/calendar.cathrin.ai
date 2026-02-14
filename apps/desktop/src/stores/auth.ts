@@ -96,10 +96,11 @@ async function validateSession(token: string): Promise<boolean> {
 }
 
 /**
- * Start the OAuth flow by opening the browser to the server's OAuth endpoint
- * Uses a state-based polling mechanism for the callback
+ * Start the OAuth flow by opening the browser to the server's OAuth endpoint.
+ * Uses a state-based polling mechanism for the callback.
+ * @param provider - "google" or "outlook" (defaults to "google")
  */
-export async function startServerOAuth(): Promise<void> {
+export async function startServerOAuth(provider = "google"): Promise<void> {
   setIsAuthLoading(true);
   setAuthError(null);
 
@@ -124,9 +125,9 @@ export async function startServerOAuth(): Promise<void> {
 
     const { state } = await stateResponse.json();
 
-    // Step 2: Open browser to start OAuth flow
+    // Step 2: Open browser to start OAuth flow with provider selection
     await invoke("open_url", {
-      url: `${SYNC_SERVER_URL}/auth/start?state=${state}`,
+      url: `${SYNC_SERVER_URL}/auth/start?state=${state}&provider=${provider}`,
     });
 
     // Step 3: Poll for the token
