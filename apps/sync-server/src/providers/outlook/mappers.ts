@@ -1,9 +1,10 @@
 /**
- * Mappers from Microsoft Graph API types to normalized Cathrin types.
+ * Mappers between Microsoft Graph API types and normalized Cathrin types.
  */
 
 import type { ApiCalendar, ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
-import type { GraphCalendar, GraphEvent, GraphCategory } from "./types.js";
+import type { NewProviderEvent, ProviderEventPatch } from "../types.js";
+import type { GraphCalendar, GraphEvent, GraphCategory, GraphDateTimeTimeZone } from "./types.js";
 
 // =============================================================================
 // Color mapping
@@ -206,4 +207,101 @@ export function mapGraphEvent(
     timeZone,
     attendees: attendees && attendees.length > 0 ? attendees : undefined,
   };
+}
+
+// =============================================================================
+// Reverse mapping (Cathrin → Outlook Graph API format)
+// =============================================================================
+
+/**
+ * Convert an ISO 8601 string to Outlook DateTimeTimeZone format.
+ * Strips the "Z" suffix and uses "UTC" as timeZone.
+ */
+function toDateTimeTimeZone(
+  isoString: string,
+  timeZone?: string,
+): GraphDateTimeTimeZone {
+  // Remove the Z suffix — Outlook DateTimeTimeZone doesn't use it
+  const dateTime = isoString.replace(/Z$/, "");
+  return { dateTime, timeZone: timeZone || "UTC" };
+}
+
+/** Map our attendee format to Outlook attendee format. */
+function toOutlookAttendees(
+  attendees: { email: string; name?: string }[],
+): { emailAddress: { address: string; name: string }; type: string }[] {
+  return attendees.map((a) => ({
+    emailAddress: { address: a.email, name: a.name || a.email },
+    type: "required",
+  }));
+}
+
+/**
+ * Convert a NewProviderEvent to the Outlook Graph API create body.
+ */
+export function toOutlookCreateBody(event: NewProviderEvent): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    subject: event.title,
+    start: toDateTimeTimeZone(event.start, event.timeZone),
+    end: toDateTimeTimeZone(event.end, event.timeZone),
+    isAllDay: event.isAllDay || false,
+  };
+
+  if (event.description) {
+    body.body = { contentType: "html", content: event.description };
+  }
+  if (event.location) {
+    body.location = { displayName: event.location };
+  }
+  if (event.attendees && event.attendees.length > 0) {
+    body.attendees = toOutlookAttendees(event.attendees);
+  }
+  if (event.transparency === "transparent") {
+    body.showAs = "free";
+  } else if (event.transparency === "opaque") {
+    body.showAs = "busy";
+  }
+  if (event.visibility === "private") {
+    body.sensitivity = "private";
+  }
+
+  return body;
+}
+
+/**
+ * Convert a ProviderEventPatch to the Outlook Graph API patch body.
+ * Only includes fields that are present in the patch.
+ */
+export function toOutlookPatchBody(patch: ProviderEventPatch): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+
+  if (patch.summary !== undefined) body.subject = patch.summary;
+  if (patch.description !== undefined) {
+    body.body = { contentType: "html", content: patch.description };
+  }
+  if (patch.location !== undefined) {
+    body.location = { displayName: patch.location };
+  }
+  if (patch.start !== undefined) {
+    body.start = toDateTimeTimeZone(patch.start, patch.timeZone);
+  }
+  if (patch.end !== undefined) {
+    body.end = toDateTimeTimeZone(patch.end, patch.timeZone);
+  }
+  if (patch.isAllDay !== undefined) {
+    body.isAllDay = patch.isAllDay;
+  }
+  if (patch.attendees !== undefined) {
+    body.attendees = patch.attendees
+      ? toOutlookAttendees(patch.attendees)
+      : [];
+  }
+  if (patch.transparency !== undefined) {
+    body.showAs = patch.transparency === "transparent" ? "free" : "busy";
+  }
+  if (patch.visibility !== undefined) {
+    body.sensitivity = patch.visibility === "private" ? "private" : "normal";
+  }
+
+  return body;
 }

@@ -19,11 +19,18 @@ import {
 import type {
   GraphCalendarListResponse,
   GraphEventListResponse,
+  GraphEvent,
   GraphCategoryListResponse,
   GraphCategory,
   GraphErrorResponse,
 } from "./types.js";
-import { mapGraphCalendar, mapGraphEvent, buildCategoryColorMap } from "./mappers.js";
+import {
+  mapGraphCalendar,
+  mapGraphEvent,
+  buildCategoryColorMap,
+  toOutlookCreateBody,
+  toOutlookPatchBody,
+} from "./mappers.js";
 
 const MS_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -491,44 +498,187 @@ export class OutlookCalendarProvider implements CalendarProvider {
   }
 
   // ---------------------------------------------------------------------------
-  // Write (stubs — implemented in #207)
+  // Write
   // ---------------------------------------------------------------------------
 
   async createEvent(
-    _accessToken: string,
-    _calendarId: string,
-    _event: NewProviderEvent,
-    _options?: MutationOptions,
+    accessToken: string,
+    calendarId: string,
+    event: NewProviderEvent,
+    options?: MutationOptions,
   ): Promise<ApiCalendarEvent> {
-    throw new Error("OutlookCalendarProvider.createEvent not yet implemented");
+    const body = toOutlookCreateBody(event);
+
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}/events`,
+      accessToken,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: GRAPH_PREFER_HEADER,
+          // Idempotency for retries
+          "Immutable-Id": crypto.randomUUID(),
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!response.ok) await handleGraphError(response);
+
+    const created = (await response.json()) as GraphEvent;
+    const calendarColor = options?.calendarColor || "#0078d4";
+    const result = mapGraphEvent(created, calendarId, calendarColor, options?.calendarAccessRole);
+    if (!result) {
+      throw new Error("Failed to map created Outlook event — missing start or end");
+    }
+    return result;
   }
 
   async updateEvent(
-    _accessToken: string,
+    accessToken: string,
     _calendarId: string,
-    _eventId: string,
-    _patch: ProviderEventPatch,
-    _options?: MutationOptions,
+    eventId: string,
+    patch: ProviderEventPatch,
+    options?: MutationOptions,
   ): Promise<ApiCalendarEvent> {
-    throw new Error("OutlookCalendarProvider.updateEvent not yet implemented");
+    const body = toOutlookPatchBody(patch);
+
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(eventId)}`,
+      accessToken,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: GRAPH_PREFER_HEADER,
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!response.ok) await handleGraphError(response);
+
+    const updated = (await response.json()) as GraphEvent;
+    const calendarColor = options?.calendarColor || "#0078d4";
+    const result = mapGraphEvent(updated, _calendarId, calendarColor, options?.calendarAccessRole);
+    if (!result) {
+      throw new Error("Failed to map updated Outlook event — missing start or end");
+    }
+    return result;
   }
 
   async deleteEvent(
-    _accessToken: string,
+    accessToken: string,
     _calendarId: string,
-    _eventId: string,
+    eventId: string,
     _options?: MutationOptions,
   ): Promise<void> {
-    throw new Error("OutlookCalendarProvider.deleteEvent not yet implemented");
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(eventId)}`,
+      accessToken,
+      { method: "DELETE" },
+    );
+
+    // 204 No Content = success, 404 = already deleted
+    if (response.status === 204 || response.status === 404) return;
+    if (!response.ok) await handleGraphError(response);
+  }
+
+  async moveEvent(
+    accessToken: string,
+    _sourceCalId: string,
+    eventId: string,
+    destCalId: string,
+  ): Promise<ApiCalendarEvent> {
+    // Outlook has no native move — implement as copy+delete.
+    // 1. Read the original event
+    const getResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(eventId)}`,
+      accessToken,
+    );
+    if (!getResponse.ok) await handleGraphError(getResponse);
+    const original = (await getResponse.json()) as GraphEvent;
+
+    // 2. Create copy in destination calendar
+    const createBody: Record<string, unknown> = {
+      subject: original.subject,
+      body: original.body,
+      start: original.start,
+      end: original.end,
+      isAllDay: original.isAllDay,
+      location: original.location,
+      attendees: original.attendees,
+      showAs: original.showAs,
+      sensitivity: original.sensitivity,
+      categories: original.categories,
+    };
+
+    const createResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/calendars/${encodeURIComponent(destCalId)}/events`,
+      accessToken,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: GRAPH_PREFER_HEADER,
+        },
+        body: JSON.stringify(createBody),
+      },
+    );
+    if (!createResponse.ok) await handleGraphError(createResponse);
+    const created = (await createResponse.json()) as GraphEvent;
+
+    // 3. Delete original (best effort — if this fails, user has the event in the new calendar)
+    const deleteResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(eventId)}`,
+      accessToken,
+      { method: "DELETE" },
+    );
+    if (!deleteResponse.ok && deleteResponse.status !== 204 && deleteResponse.status !== 404) {
+      console.error(`[outlook] Failed to delete original event ${eventId} after move — duplicate may exist`);
+    }
+
+    const result = mapGraphEvent(created, destCalId, "#0078d4");
+    if (!result) {
+      throw new Error("Failed to map moved Outlook event — missing start or end");
+    }
+    return result;
   }
 
   async rsvpEvent(
-    _accessToken: string,
+    accessToken: string,
     _calendarId: string,
-    _eventId: string,
-    _response: RsvpResponse,
-    _options?: MutationOptions,
+    eventId: string,
+    response: RsvpResponse,
+    options?: MutationOptions,
   ): Promise<void> {
-    throw new Error("OutlookCalendarProvider.rsvpEvent not yet implemented");
+    // Map our RsvpResponse to the Outlook RSVP endpoint
+    const endpointMap: Record<RsvpResponse, string> = {
+      accepted: "accept",
+      tentative: "tentativelyAccept",
+      declined: "decline",
+    };
+    const action = endpointMap[response];
+
+    // Map sendUpdates to Outlook's sendResponse boolean
+    const sendResponse = options?.sendUpdates !== "none";
+
+    const rsvpResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(eventId)}/${action}`,
+      accessToken,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: GRAPH_PREFER_HEADER,
+        },
+        body: JSON.stringify({ sendResponse }),
+      },
+    );
+
+    // 202 Accepted = success
+    if (rsvpResponse.status === 202) return;
+    if (!rsvpResponse.ok) await handleGraphError(rsvpResponse);
   }
 }
