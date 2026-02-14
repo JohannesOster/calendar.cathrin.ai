@@ -250,7 +250,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
   // Optimistic insert
   addLocalEvent({
     id: tempId,
-    googleEventId: "",
+    providerEventId: "",
     calendarId: calId,
     title,
     start: eventStart,
@@ -310,7 +310,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
             ? {
                 ...e,
                 id: compositeId,
-                googleEventId: serverEvent.id,
+                providerEventId: serverEvent.id,
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
                 end: new Date(serverEvent.end),

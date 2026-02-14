@@ -61,7 +61,7 @@ export async function syncCalendarIncremental(
       const existingEvent = await db.query.serverEvents.findFirst({
         where: and(
           eq(serverEvents.accountId, accountId),
-          eq(serverEvents.googleEventId, cancelledId)
+          eq(serverEvents.providerEventId, cancelledId)
         ),
       });
 
@@ -160,12 +160,12 @@ export async function syncCalendarFull(
       lte(serverEvents.start, timeMax),
       gte(serverEvents.end, timeMin)
     ),
-    columns: { id: true, googleEventId: true },
+    columns: { id: true, providerEventId: true },
   });
 
   let removed = 0;
   for (const existing of existingInRange) {
-    if (!fetchedEventIds.has(existing.googleEventId)) {
+    if (!fetchedEventIds.has(existing.providerEventId)) {
       await db.delete(serverEvents).where(eq(serverEvents.id, existing.id));
       removed++;
     }

@@ -81,7 +81,7 @@ function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void
   const params = new URLSearchParams();
   params.set("calendarId", event.calendarId);
   if (sendUpdates) params.set("sendUpdates", sendUpdates);
-  const url = `/api/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`;
+  const url = `/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`;
   apiFetch<{ success: boolean }>(url, {
     method: "DELETE",
   })

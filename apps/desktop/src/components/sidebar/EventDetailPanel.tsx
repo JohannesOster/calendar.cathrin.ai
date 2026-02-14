@@ -169,12 +169,12 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
 
     if (timer) clearTimeout(timer);
     const eventId = props.eventId;
-    const googleEventId = event.googleEventId;
+    const providerEventId = event.providerEventId;
     const rollback = originalAttendees;
     timer = setTimeout(() => {
       timer = null;
       originalAttendees = null;
-      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
+      apiFetch(`/api/events/${encodeURIComponent(providerEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
         method: "PATCH",
         body: JSON.stringify({ responseStatus: status, sendUpdates: "none" }),
       }).catch((err) => {

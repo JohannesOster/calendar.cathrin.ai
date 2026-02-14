@@ -189,7 +189,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const googleEventId = c.req.param("eventId");
+      const providerEventId = c.req.param("eventId");
       const { sendUpdates, ...patch } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
@@ -198,14 +198,14 @@ export const eventsRoute = new Hono()
       }
 
       const calendarId = c.req.query("calendarId");
-      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
+      const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
 
       try {
         const apiEvent = await updateEventViaGoogle(
-          event.accountId, event.calendarId, googleEventId, patch, event, sendUpdates
+          event.accountId, event.calendarId, providerEventId, patch, event, sendUpdates
         );
 
         // Notify connected clients — include both old and new weeks if event moved
@@ -233,7 +233,7 @@ export const eventsRoute = new Hono()
     }
 
     const userId = c.get("userId");
-    const googleEventId = c.req.param("eventId");
+    const providerEventId = c.req.param("eventId");
     const sendUpdates = c.req.query("sendUpdates") as "all" | "none" | undefined;
 
     const accountIds = await getUserAccountIds(userId);
@@ -242,13 +242,13 @@ export const eventsRoute = new Hono()
     }
 
     const calendarId = c.req.query("calendarId");
-    const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
+    const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
     if (!event) {
       return c.json({ error: "Event not found" }, 404);
     }
 
     try {
-      await deleteEventViaGoogle(event.accountId, event.calendarId, googleEventId, event.id, sendUpdates);
+      await deleteEventViaGoogle(event.accountId, event.calendarId, providerEventId, event.id, sendUpdates);
 
       // Notify connected clients — skip the originating client
       const clientId = c.req.header("X-Client-ID");
@@ -281,7 +281,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const googleEventId = c.req.param("eventId");
+      const providerEventId = c.req.param("eventId");
       const { responseStatus, sendUpdates } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
@@ -290,14 +290,14 @@ export const eventsRoute = new Hono()
       }
 
       const calendarId = c.req.query("calendarId");
-      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
+      const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
 
       try {
         const apiEvent = await rsvpEventViaGoogle(
-          event.accountId, event.calendarId, googleEventId, responseStatus, event, sendUpdates
+          event.accountId, event.calendarId, providerEventId, responseStatus, event, sendUpdates
         );
 
         const clientId = c.req.header("X-Client-ID");
@@ -329,7 +329,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const googleEventId = c.req.param("eventId");
+      const providerEventId = c.req.param("eventId");
       const { targetCalendarId } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
@@ -338,7 +338,7 @@ export const eventsRoute = new Hono()
       }
 
       const calendarId = c.req.query("calendarId");
-      const event = await findUserEvent(accountIds, googleEventId, calendarId?.trim() || undefined);
+      const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -355,7 +355,7 @@ export const eventsRoute = new Hono()
       try {
         const apiEvent = await moveEventViaGoogle(
           event.accountId, event.calendarId, targetCalendarId,
-          googleEventId, event.id, targetOwner.color
+          providerEventId, event.id, targetOwner.color
         );
 
         const clientId = c.req.header("X-Client-ID");

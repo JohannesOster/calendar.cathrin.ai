@@ -755,7 +755,7 @@ function AttendeeList(props: {
     const attendees = props.attendees ?? [];
     const event = events().find(e => e.id === eventId);
     if (!event) return;
-    const eventUrl = `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
+    const eventUrl = `/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
 
     if (isCreationPending() && hasRemovals) {
       // Creation-pending with removals: two-step PATCH to avoid Google
@@ -836,7 +836,7 @@ function AttendeeList(props: {
         setEvents((prev) => prev.map((e) =>
           e.id === eventId ? { ...e, attendees: attendees.length > 0 ? attendees : undefined } : e
         ));
-        apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+        apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
           method: "PATCH",
           body: JSON.stringify({
             attendees: attendees.map(a => ({ email: a.email, name: a.name })),
@@ -891,7 +891,7 @@ function AttendeeList(props: {
     const event = events().find(e => e.id === eventId);
     if (!event) return;
     await apiFetch<ApiCalendarEvent>(
-      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+      `/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
       {
         method: "PATCH",
         body: JSON.stringify({ attendees: null, sendUpdates: "none" }),

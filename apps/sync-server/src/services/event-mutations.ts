@@ -125,7 +125,7 @@ export async function createEventViaGoogle(opts: CreateEventOptions): Promise<Ap
 export async function updateEventViaGoogle(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   patch: {
     summary?: string;
     description?: string;
@@ -194,11 +194,11 @@ export async function updateEventViaGoogle(
     googlePatch.end = { dateTime: existingEvent.end.toISOString(), date: null, timeZone: patchTimeZone };
   }
 
-  console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
+  console.log(`[events] PATCH ${providerEventId} body:`, JSON.stringify(googlePatch));
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
   const updated = await service.patchEvent(
-    calendarId, googleEventId, googlePatch,
+    calendarId, providerEventId, googlePatch,
     sendUpdates !== undefined
       ? { sendUpdates }
       : patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
@@ -318,13 +318,13 @@ export async function updateEventViaGoogle(
 export async function deleteEventViaGoogle(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   eventDbId: string,
   sendUpdates?: "all" | "none"
 ): Promise<void> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  await service.deleteEvent(calendarId, googleEventId, sendUpdates ? { sendUpdates } : undefined);
+  await service.deleteEvent(calendarId, providerEventId, sendUpdates ? { sendUpdates } : undefined);
 
   await db!
     .delete(serverEvents)
@@ -344,13 +344,13 @@ export async function moveEventViaGoogle(
   accountId: string,
   sourceCalendarId: string,
   destinationCalendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   eventDbId: string,
   destinationColor: string | null
 ): Promise<ApiCalendarEvent> {
   const accessToken = await getAccessToken(accountId);
   const service = new GoogleCalendarService(accessToken);
-  await service.moveEvent(sourceCalendarId, googleEventId, destinationCalendarId);
+  await service.moveEvent(sourceCalendarId, providerEventId, destinationCalendarId);
 
   // Google succeeded — update DB. If this fails, the event will vanish from
   // the UI until the next full sync picks it up from the new calendar.
@@ -366,7 +366,7 @@ export async function moveEventViaGoogle(
       })
       .where(eq(serverEvents.id, eventDbId));
   } catch (dbError) {
-    console.error(`[events] CRITICAL: Google moved event ${googleEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
+    console.error(`[events] CRITICAL: Google moved event ${providerEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
     throw dbError;
   }
 
@@ -385,7 +385,7 @@ export async function moveEventViaGoogle(
 export async function rsvpEventViaGoogle(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   responseStatus: "accepted" | "declined" | "tentative",
   existingEvent: ServerEvent,
   sendUpdates?: "all" | "none"
@@ -407,7 +407,7 @@ export async function rsvpEventViaGoogle(
   const service = new GoogleCalendarService(accessToken);
   await service.patchEvent(
     calendarId,
-    googleEventId,
+    providerEventId,
     { attendees: googleAttendees },
     { sendUpdates: sendUpdates ?? "none" }
   );

@@ -510,7 +510,7 @@ export function useEventFormState() {
       prev.map((e) => e.id === eventId ? { ...e, attendees: updated } : e)
     );
 
-    apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
+    apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
       method: "PATCH",
       body: JSON.stringify({ responseStatus, sendUpdates }),
     }).catch((err) => {
@@ -567,7 +567,7 @@ export function useEventFormState() {
       if (!event) return;
       setConferencingLoading(true);
       // PATCH the event with a Meet request
-      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.googleEventId)}`, {
+      apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.providerEventId)}`, {
         method: "PATCH",
         body: JSON.stringify({ conferencing: { type: "meet" } }),
       })

@@ -104,11 +104,11 @@ async function doEnsureWeeksFetched(
         lte(serverEvents.start, end),
         gte(serverEvents.end, start)
       ),
-      columns: { id: true, googleEventId: true },
+      columns: { id: true, providerEventId: true },
     });
 
     for (const existing of existingInRange) {
-      if (!fetchedEventIds.has(existing.googleEventId)) {
+      if (!fetchedEventIds.has(existing.providerEventId)) {
         await db.delete(serverEvents).where(eq(serverEvents.id, existing.id));
       }
     }

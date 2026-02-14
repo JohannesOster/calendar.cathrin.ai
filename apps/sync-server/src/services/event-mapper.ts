@@ -9,7 +9,7 @@ type ServerEvent = InferSelectModel<typeof serverEvents>;
  */
 export function mapServerEventToApi(event: ServerEvent): ApiCalendarEvent {
   return {
-    id: event.googleEventId,
+    id: event.providerEventId,
     calendarId: event.calendarId,
     title: event.title,
     start: event.start.toISOString(),

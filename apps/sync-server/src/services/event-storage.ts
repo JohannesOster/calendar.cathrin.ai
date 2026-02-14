@@ -16,7 +16,7 @@ function buildEventValues(
   return {
     accountId,
     calendarId,
-    googleEventId: event.id,
+    providerEventId: event.id,
     title: event.title,
     start: new Date(event.start),
     end: new Date(event.end),
@@ -75,7 +75,7 @@ export async function upsertServerEvent(
     .insert(serverEvents)
     .values(buildEventValues(event, accountId, calendarId))
     .onConflictDoUpdate({
-      target: [serverEvents.accountId, serverEvents.googleEventId],
+      target: [serverEvents.accountId, serverEvents.providerEventId],
       set: buildEventUpdateSet(event),
     });
 }
@@ -97,7 +97,7 @@ export async function upsertServerEvents(
     .insert(serverEvents)
     .values(events.map((e) => buildEventValues(e, accountId, calendarId)))
     .onConflictDoUpdate({
-      target: [serverEvents.accountId, serverEvents.googleEventId],
+      target: [serverEvents.accountId, serverEvents.providerEventId],
       set: {
         title: sql`excluded.title`,
         start: sql`excluded.start`,

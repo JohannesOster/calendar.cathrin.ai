@@ -75,7 +75,7 @@ export const sessions = pgTable(
 
 /**
  * Server-side event cache
- * Stores events fetched from Google Calendar for quick access
+ * Stores events fetched from calendar providers for quick access
  */
 export const serverEvents = pgTable(
   "events",
@@ -87,7 +87,7 @@ export const serverEvents = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
     calendarId: text("calendar_id").notNull(),
-    googleEventId: text("google_event_id").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
     title: text("title").notNull(),
     start: timestamp("start").notNull(),
     end: timestamp("end").notNull(),
@@ -105,16 +105,16 @@ export const serverEvents = pgTable(
     status: text("status"), // confirmed, tentative, cancelled
     isReadOnly: boolean("is_read_only").default(false),
     readOnlyReason: text("read_only_reason"),
-    raw: jsonb("raw"), // Store raw Google event for future fields
+    raw: jsonb("raw"), // Store raw provider event for future fields
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => [
     index("events_account_calendar_idx").on(table.accountId, table.calendarId),
     index("events_start_end_idx").on(table.start, table.end),
-    uniqueIndex("events_account_google_id_idx").on(
+    uniqueIndex("events_account_provider_id_idx").on(
       table.accountId,
-      table.googleEventId
+      table.providerEventId
     ),
   ]
 );
