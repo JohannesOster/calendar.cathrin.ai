@@ -793,6 +793,9 @@ function AttendeeList(props: {
       props.onRemove(email);
     }
     setPendingRemovals(new Set());
+    // Read attendees from form state (protected by buffer guard against poll overwrites)
+    // instead of from events() store which polling can overwrite with stale server data.
+    const attendees = props.attendees ?? [];
     const event = events().find(e => e.id === eventId);
     if (!event) return;
     const eventUrl = `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
@@ -801,7 +804,7 @@ function AttendeeList(props: {
       // Creation-pending with removals: two-step PATCH to avoid Google
       // sending cancellation emails to never-invited attendees.
       // Step 1: Strip all non-self attendees silently
-      const selfOnly = (event.attendees ?? []).filter(a => a.isSelf);
+      const selfOnly = attendees.filter(a => a.isSelf);
       await apiFetch<ApiCalendarEvent>(eventUrl, {
         method: "PATCH",
         body: JSON.stringify({
@@ -810,26 +813,34 @@ function AttendeeList(props: {
         }),
       });
       // Step 2: Re-add remaining attendees with notifications
-      const remaining = (event.attendees ?? []).filter(a => !a.isSelf);
+      const remaining = attendees.filter(a => !a.isSelf);
       if (remaining.length > 0) {
         const allAttendees = [...selfOnly, ...remaining];
-        await apiFetch<ApiCalendarEvent>(eventUrl, {
+        const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
           method: "PATCH",
           body: JSON.stringify({
             attendees: allAttendees.map(a => ({ email: a.email, name: a.name })),
             sendUpdates: "all",
           }),
         });
+        setEvents((prev) => prev.map((e) =>
+          e.id === eventId ? { ...e, attendees: response.attendees } : e
+        ));
       }
     } else {
       // Normal case: PATCH with current attendees + sendUpdates: "all"
-      await apiFetch<ApiCalendarEvent>(eventUrl, {
+      const response = await apiFetch<ApiCalendarEvent>(eventUrl, {
         method: "PATCH",
         body: JSON.stringify({
-          attendees: (event.attendees ?? []).map(a => ({ email: a.email, name: a.name })),
+          attendees: attendees.map(a => ({ email: a.email, name: a.name })),
           sendUpdates: "all",
         }),
       });
+      // Update store with server-confirmed attendees so clearBuffer's
+      // sync effect reads correct data instead of potentially stale poll data.
+      setEvents((prev) => prev.map((e) =>
+        e.id === eventId ? { ...e, attendees: response.attendees } : e
+      ));
     }
     clearBuffer(eventId);
     removePendingNotification(eventId);
@@ -846,13 +857,19 @@ function AttendeeList(props: {
     setPendingRemovals(new Set());
 
     if (isBuffered(eventId) || hasRemovals) {
-      // Save current attendees silently (covers both buffered edits and pending removals)
+      // Read attendees from form state (protected by buffer guard) not from store
+      const attendees = props.attendees ?? [];
       const event = events().find(e => e.id === eventId);
       if (event) {
+        // Re-assert current attendees in store before clearBuffer so the sync
+        // effect reads correct data (store may have been overwritten by polling).
+        setEvents((prev) => prev.map((e) =>
+          e.id === eventId ? { ...e, attendees: attendees.length > 0 ? attendees : undefined } : e
+        ));
         apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
           method: "PATCH",
           body: JSON.stringify({
-            attendees: (event.attendees ?? []).map(a => ({ email: a.email, name: a.name })),
+            attendees: attendees.map(a => ({ email: a.email, name: a.name })),
             sendUpdates: "none",
           }),
         }).catch(err => console.error("[attendees] Failed to save silently:", err));
