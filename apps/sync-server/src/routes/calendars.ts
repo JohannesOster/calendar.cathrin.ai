@@ -3,12 +3,10 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
-import { getAccessToken, TokenRevokedError } from "../services/token-refresh.js";
-import {
-  GoogleCalendarService,
-  TokenExpiredError,
-} from "../services/google-calendar.js";
-import type { ApiCalendar } from "@cathrin/shared-types";
+import { getAccessToken } from "../services/token-refresh.js";
+import { TokenExpiredError, TokenRevokedError } from "../providers/types.js";
+import { getProvider } from "../providers/registry.js";
+import type { ApiCalendar, Provider } from "@cathrin/shared-types";
 
 interface AccountCalendarsResult {
   accountId: string;
@@ -35,10 +33,9 @@ export const calendarsRoute = new Hono()
       userAccounts.map(async (account) => {
         try {
           // Get a valid access token (refreshes if needed)
+          const provider = getProvider(account.provider as Provider);
           const accessToken = await getAccessToken(account.id);
-
-          const service = new GoogleCalendarService(accessToken);
-          const calendars = await service.fetchCalendarList();
+          const calendars = await provider.getCalendars(accessToken);
 
           return {
             accountId: account.id,

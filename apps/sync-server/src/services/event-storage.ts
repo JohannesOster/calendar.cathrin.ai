@@ -16,7 +16,7 @@ function buildEventValues(
   return {
     accountId,
     calendarId,
-    googleEventId: event.id,
+    providerEventId: event.id,
     title: event.title,
     start: new Date(event.start),
     end: new Date(event.end),
@@ -31,6 +31,7 @@ function buildEventValues(
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
+    icalUid: event.icalUid ?? null,
     status: "confirmed" as const,
     isReadOnly: event.isReadOnly,
     readOnlyReason: event.readOnlyReason ?? null,
@@ -58,6 +59,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
+    icalUid: event.icalUid ?? null,
     updatedAt: new Date(),
   };
 }
@@ -75,7 +77,7 @@ export async function upsertServerEvent(
     .insert(serverEvents)
     .values(buildEventValues(event, accountId, calendarId))
     .onConflictDoUpdate({
-      target: [serverEvents.accountId, serverEvents.googleEventId],
+      target: [serverEvents.accountId, serverEvents.providerEventId],
       set: buildEventUpdateSet(event),
     });
 }
@@ -97,7 +99,7 @@ export async function upsertServerEvents(
     .insert(serverEvents)
     .values(events.map((e) => buildEventValues(e, accountId, calendarId)))
     .onConflictDoUpdate({
-      target: [serverEvents.accountId, serverEvents.googleEventId],
+      target: [serverEvents.accountId, serverEvents.providerEventId],
       set: {
         title: sql`excluded.title`,
         start: sql`excluded.start`,
@@ -115,6 +117,7 @@ export async function upsertServerEvents(
         conferencing: sql`excluded.conferencing`,
         timeZone: sql`excluded.time_zone`,
         attendees: sql`excluded.attendees`,
+        icalUid: sql`excluded.ical_uid`,
         updatedAt: new Date(),
       },
     });

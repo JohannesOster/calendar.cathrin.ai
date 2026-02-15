@@ -35,6 +35,7 @@ import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd, commitCreation, draftTitle, setDraftAttendees } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
+import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { selectedEventId } from "../../stores/event-selection";
@@ -123,9 +124,14 @@ export function TimeSection(props: SectionProps) {
             <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
           </Show>
           <span>{formatDate(s.start()!, s.timeZone())}</span>
-          <Show when={formatDate(s.start()!, s.timeZone()) !== formatDate(s.end()!, s.timeZone())}>
-            <span>{formatDate(s.end()!, s.timeZone())}</span>
-          </Show>
+          {(() => {
+            const displayEnd = s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!;
+            return (
+              <Show when={formatDate(s.start()!, s.timeZone()) !== formatDate(displayEnd, s.timeZone())}>
+                <span>{formatDate(displayEnd, s.timeZone())}</span>
+              </Show>
+            );
+          })()}
         </div>
       </Show>
       {/* All-day toggle, timezone, repeat — organizer only */}
@@ -755,7 +761,7 @@ function AttendeeList(props: {
     const attendees = props.attendees ?? [];
     const event = events().find(e => e.id === eventId);
     if (!event) return;
-    const eventUrl = `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
+    const eventUrl = `/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`;
 
     if (isCreationPending() && hasRemovals) {
       // Creation-pending with removals: two-step PATCH to avoid Google
@@ -836,7 +842,7 @@ function AttendeeList(props: {
         setEvents((prev) => prev.map((e) =>
           e.id === eventId ? { ...e, attendees: attendees.length > 0 ? attendees : undefined } : e
         ));
-        apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+        apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
           method: "PATCH",
           body: JSON.stringify({
             attendees: attendees.map(a => ({ email: a.email, name: a.name })),
@@ -891,7 +897,7 @@ function AttendeeList(props: {
     const event = events().find(e => e.id === eventId);
     if (!event) return;
     await apiFetch<ApiCalendarEvent>(
-      `/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
+      `/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`,
       {
         method: "PATCH",
         body: JSON.stringify({ attendees: null, sendUpdates: "none" }),

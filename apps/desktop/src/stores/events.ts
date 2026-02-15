@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { apiFetch } from "../lib/api";
+import { apiFetch, ApiError } from "../lib/api";
+import { showErrorToast } from "../lib/toast";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 import type { CalendarEvent, EventPatch } from "./event-types";
 import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
@@ -196,7 +197,7 @@ export async function updateEvent(
   }
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
@@ -207,6 +208,9 @@ export async function updateEvent(
     setEvents((prev) =>
       prev.map((e) => (e.id === eventId ? snapshot : e))
     );
+    if (error instanceof ApiError && error.status === 403) {
+      showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+    }
   }
 }
 
@@ -240,7 +244,7 @@ export async function moveEvent(
   );
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.googleEventId)}/move?calendarId=${encodeURIComponent(event.calendarId)}`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}/move?calendarId=${encodeURIComponent(event.calendarId)}`, {
       method: "POST",
       body: JSON.stringify({ targetCalendarId }),
     });
@@ -255,6 +259,9 @@ export async function moveEvent(
           : e
       )
     );
+    if (error instanceof ApiError && error.status === 403) {
+      showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+    }
     throw error;
   }
 }

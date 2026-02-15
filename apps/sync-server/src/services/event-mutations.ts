@@ -1,14 +1,16 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents } from "../db/schema.js";
+import { accounts, serverEvents } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import {
-  GoogleCalendarService,
-  type GoogleEventPatch,
-} from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import type {
+  ProviderEventPatch,
+  MutationOptions,
+  RsvpResponse,
+} from "../providers/types.js";
 import { upsertServerEvent } from "./event-storage.js";
 import { mapServerEventToApi } from "./event-mapper.js";
-import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
+import type { ApiCalendarEvent, Attendee, Provider } from "@cathrin/shared-types";
 import type { InferSelectModel } from "drizzle-orm";
 
 type ServerEvent = InferSelectModel<typeof serverEvents>;
@@ -27,91 +29,59 @@ export interface CreateEventOptions {
   visibility?: string;
   reminders?: { method: string; minutes: number }[];
   colorId?: string;
-  conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
+  conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
   timeZone?: string;
   attendees?: { email: string; name?: string }[];
   sendUpdates?: "all" | "none";
 }
 
 /**
- * Create an event via Google Calendar API and cache it locally.
+ * Create an event via the calendar provider and cache it locally.
  * Returns the ApiCalendarEvent.
  */
-export async function createEventViaGoogle(opts: CreateEventOptions): Promise<ApiCalendarEvent> {
+export async function createEvent(opts: CreateEventOptions): Promise<ApiCalendarEvent> {
   const { accountId, calendarId, title, start, end, isAllDay, calendarColor, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates } = opts;
+
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true, email: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
 
-  const googleEvent = await service.insertEvent(calendarId, {
-    summary: title,
-    start: isAllDay ? { date: start.slice(0, 10) } : { dateTime: start, ...(timeZone && { timeZone }) },
-    end: isAllDay ? { date: end.slice(0, 10) } : { dateTime: end, ...(timeZone && { timeZone }) },
-    location,
-    description,
-    transparency,
-    visibility,
-    ...(reminders !== undefined && {
-      reminders: reminders && reminders.length > 0
-        ? { useDefault: false, overrides: reminders }
-        : { useDefault: true },
-    }),
-    colorId,
-    ...(conferencing?.type === "meet" && {
-      conferenceData: {
-        createRequest: {
-          requestId: crypto.randomUUID(),
-          conferenceSolutionKey: { type: "hangoutsMeet" },
-        },
-      },
-    }),
-    ...(attendees && attendees.length > 0 && {
-      attendees: attendees.map(a => ({ email: a.email, displayName: a.name })),
-    }),
-  }, attendees && attendees.length > 0 ? { sendUpdates: sendUpdates ?? "all" } : undefined);
-
-  // Extract conferencing from Google response
-  const videoEntryPoint = googleEvent.conferenceData?.entryPoints
-    ?.find(ep => ep.entryPointType === "video");
-  const conferencingResult = videoEntryPoint
-    ? { uri: videoEntryPoint.uri, label: googleEvent.conferenceData?.conferenceSolution?.name }
-    : conferencing?.type === "manual" ? { uri: conferencing.uri } : undefined;
-
-  const color = calendarColor || "#4285f4";
-  const eventStart = isAllDay
-    ? new Date(googleEvent.start.date!)
-    : new Date(googleEvent.start.dateTime!);
-  const eventEnd = isAllDay
-    ? new Date(googleEvent.end.date!)
-    : new Date(googleEvent.end.dateTime!);
-
-  const apiEvent: ApiCalendarEvent = {
-    id: googleEvent.id,
-    calendarId,
-    title: googleEvent.summary || title,
-    start: eventStart.toISOString(),
-    end: eventEnd.toISOString(),
-    isAllDay: isAllDay ?? false,
-    color,
-    provider: "google",
-    location: googleEvent.location || location || undefined,
-    description: googleEvent.description || description || undefined,
-    isReadOnly: false,
-    transparency: googleEvent.transparency || transparency || undefined,
-    visibility: googleEvent.visibility || visibility || undefined,
-    reminders: googleEvent.reminders?.overrides || reminders || undefined,
-    colorId: googleEvent.colorId || colorId || undefined,
-    conferencing: conferencingResult,
-    timeZone: timeZone || undefined,
-    attendees: googleEvent.attendees
-      ?.filter(a => !a.resource)
-      .map(a => ({
-        email: a.email,
-        name: a.displayName || undefined,
-        responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
-        isOrganizer: a.organizer || undefined,
-        isSelf: a.self || undefined,
-      })),
+  const mutationOptions: MutationOptions = {
+    calendarColor: calendarColor || undefined,
+    sendUpdates: attendees && attendees.length > 0 ? (sendUpdates ?? "all") : undefined,
+    accountEmail: account.email,
   };
+
+  const apiEvent = await provider.createEvent(
+    accessToken,
+    calendarId,
+    {
+      title,
+      start,
+      end,
+      isAllDay,
+      location,
+      description,
+      transparency,
+      visibility,
+      reminders,
+      colorId,
+      conferencing,
+      attendees,
+      timeZone,
+    },
+    mutationOptions,
+  );
+
+  // Manual conferencing URIs are local-only — overlay after provider call
+  if (conferencing?.type === "manual") {
+    apiEvent.conferencing = { uri: conferencing.uri };
+  }
 
   await upsertServerEvent(db!, apiEvent, accountId, calendarId);
 
@@ -119,13 +89,13 @@ export async function createEventViaGoogle(opts: CreateEventOptions): Promise<Ap
 }
 
 /**
- * Update an event via Google Calendar API and update the local cache.
+ * Update an event via the calendar provider and update the local cache.
  * Returns the updated ApiCalendarEvent.
  */
-export async function updateEventViaGoogle(
+export async function updateEvent(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   patch: {
     summary?: string;
     description?: string;
@@ -137,194 +107,109 @@ export async function updateEventViaGoogle(
     visibility?: string;
     reminders?: { method: string; minutes: number }[] | null;
     colorId?: string | null;
-    conferencing?: { type: "meet" } | { type: "manual"; uri: string } | null;
+    conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
     timeZone?: string;
     attendees?: { email: string; name?: string }[] | null;
   },
   existingEvent: ServerEvent,
   sendUpdates?: "all" | "none"
 ): Promise<ApiCalendarEvent> {
-  const googlePatch: GoogleEventPatch = {};
-  if (patch.summary !== undefined) googlePatch.summary = patch.summary;
-  if (patch.description !== undefined) googlePatch.description = patch.description;
-  if (patch.location !== undefined) googlePatch.location = patch.location;
-  if (patch.transparency !== undefined) googlePatch.transparency = patch.transparency;
-  if (patch.visibility !== undefined) googlePatch.visibility = patch.visibility;
-  if (patch.reminders !== undefined) {
-    googlePatch.reminders = {
-      useDefault: false,
-      overrides: patch.reminders && patch.reminders.length > 0 ? patch.reminders : [],
-    };
-  }
-  if (patch.colorId !== undefined) googlePatch.colorId = patch.colorId ?? null;
-  if (patch.conferencing !== undefined) {
-    if (patch.conferencing === null) {
-      // Remove conferencing
-      googlePatch.conferenceData = null;
-    } else if (patch.conferencing.type === "meet") {
-      googlePatch.conferenceData = {
-        createRequest: {
-          requestId: crypto.randomUUID(),
-          conferenceSolutionKey: { type: "hangoutsMeet" },
-        },
-      };
-    }
-    // Manual URLs don't go through Google's conferenceData — stored locally only
-  }
-  if (patch.attendees !== undefined) {
-    googlePatch.attendees = patch.attendees
-      ? patch.attendees.map(a => ({ email: a.email }))
-      : [];
-  }
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true, email: true },
+  });
+  if (!account) throw new Error("Account not found");
 
-  const useDate = patch.isAllDay ?? existingEvent.isAllDay;
-  const patchTimeZone = !useDate ? patch.timeZone : undefined;
-  if (patch.start !== undefined) {
-    googlePatch.start = useDate
-      ? { date: patch.start.slice(0, 10), dateTime: null }
-      : { dateTime: patch.start, date: null, ...(patchTimeZone && { timeZone: patchTimeZone }) };
-  } else if (patchTimeZone) {
-    googlePatch.start = { dateTime: existingEvent.start.toISOString(), date: null, timeZone: patchTimeZone };
-  }
-  if (patch.end !== undefined) {
-    googlePatch.end = useDate
-      ? { date: patch.end.slice(0, 10), dateTime: null }
-      : { dateTime: patch.end, date: null, ...(patchTimeZone && { timeZone: patchTimeZone }) };
-  } else if (patchTimeZone) {
-    googlePatch.end = { dateTime: existingEvent.end.toISOString(), date: null, timeZone: patchTimeZone };
-  }
-
-  console.log(`[events] PATCH ${googleEventId} body:`, JSON.stringify(googlePatch));
+  const calendarProvider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  const updated = await service.patchEvent(
-    calendarId, googleEventId, googlePatch,
-    sendUpdates !== undefined
-      ? { sendUpdates }
-      : patch.attendees !== undefined ? { sendUpdates: "all" } : undefined,
+
+  // Build provider patch
+  const providerPatch: ProviderEventPatch = {
+    summary: patch.summary,
+    description: patch.description,
+    location: patch.location,
+    start: patch.start,
+    end: patch.end,
+    isAllDay: patch.isAllDay ?? (existingEvent.isAllDay ?? false),
+    transparency: patch.transparency,
+    visibility: patch.visibility,
+    reminders: patch.reminders,
+    colorId: patch.colorId,
+    conferencing: patch.conferencing,
+    attendees: patch.attendees,
+    timeZone: patch.timeZone,
+  };
+
+  // If timeZone changes without dates, include existing dates for the provider
+  // (providers need start/end present to apply a timeZone change)
+  if (patch.timeZone && !patch.start && !(patch.isAllDay ?? existingEvent.isAllDay)) {
+    providerPatch.start = existingEvent.start.toISOString();
+  }
+  if (patch.timeZone && !patch.end && !(patch.isAllDay ?? existingEvent.isAllDay)) {
+    providerPatch.end = existingEvent.end.toISOString();
+  }
+
+  const mutationOptions: MutationOptions = {
+    calendarColor: existingEvent.color || "#4285f4",
+    sendUpdates: sendUpdates !== undefined
+      ? sendUpdates
+      : patch.attendees !== undefined ? "all" : undefined,
+    accountEmail: account.email,
+  };
+
+  console.log(`[events] PATCH ${providerEventId} body:`, JSON.stringify(providerPatch));
+
+  const apiEvent = await calendarProvider.updateEvent(
+    accessToken, calendarId, providerEventId, providerPatch, mutationOptions
   );
 
-  const updatedStart = updated.start.dateTime
-    ? new Date(updated.start.dateTime)
-    : updated.start.date
-      ? new Date(updated.start.date)
-      : existingEvent.start;
-  const updatedEnd = updated.end.dateTime
-    ? new Date(updated.end.dateTime)
-    : updated.end.date
-      ? new Date(updated.end.date)
-      : existingEvent.end;
-
-  await db!
-    .update(serverEvents)
-    .set({
-      title: updated.summary || existingEvent.title,
-      start: updatedStart,
-      end: updatedEnd,
-      isAllDay: !!updated.start.date,
-      location: updated.location || null,
-      description: updated.description || null,
-      transparency: updated.transparency || existingEvent.transparency || null,
-      visibility: updated.visibility || existingEvent.visibility || null,
-      reminders: patch.reminders !== undefined
-        ? (patch.reminders && patch.reminders.length > 0
-          ? (updated.reminders?.overrides || patch.reminders)
-          : null)
-        : (updated.reminders?.overrides || existingEvent.reminders || null),
-      colorId: updated.colorId || null,
-      ...(patch.conferencing !== undefined && {
-        conferencing: (() => {
-          if (patch.conferencing === null) return null;
-          const ep = updated.conferenceData?.entryPoints?.find(e => e.entryPointType === "video");
-          if (ep) return { uri: ep.uri, label: updated.conferenceData?.conferenceSolution?.name };
-          if (patch.conferencing?.type === "manual") return { uri: patch.conferencing.uri };
-          return existingEvent.conferencing;
-        })(),
-      }),
-      ...(patch.timeZone !== undefined && {
-        timeZone: patch.timeZone || null,
-      }),
-      ...(patch.attendees !== undefined && {
-        attendees: updated.attendees
-          ?.filter(a => !a.resource)
-          .map(a => ({
-            email: a.email,
-            name: a.displayName || undefined,
-            responseStatus: (a.responseStatus || "needsAction"),
-            isOrganizer: a.organizer || undefined,
-            isSelf: a.self || undefined,
-          })) ?? null,
-      }),
-      updatedAt: new Date(),
-    })
-    .where(eq(serverEvents.id, existingEvent.id));
-
-  // Resolve conferencing for response
-  const updatedVideoEntryPoint = updated.conferenceData?.entryPoints
-    ?.find(ep => ep.entryPointType === "video");
-  let conferencingResult: { uri: string; label?: string } | undefined;
-  if (patch.conferencing === null) {
-    conferencingResult = undefined;
-  } else if (updatedVideoEntryPoint) {
-    conferencingResult = { uri: updatedVideoEntryPoint.uri, label: updated.conferenceData?.conferenceSolution?.name };
-  } else if (patch.conferencing?.type === "manual") {
-    conferencingResult = { uri: patch.conferencing.uri };
-  } else {
-    conferencingResult = (existingEvent.conferencing as { uri: string; label?: string }) || undefined;
+  // Resolve conferencing:
+  // - Manual URIs are local-only and must be overlaid
+  // - If conferencing wasn't in the patch, preserve existing local value
+  if (patch.conferencing !== undefined) {
+    if (patch.conferencing === null) {
+      apiEvent.conferencing = undefined;
+    } else if (patch.conferencing.type === "manual") {
+      apiEvent.conferencing = { uri: patch.conferencing.uri };
+    }
+  } else if (!apiEvent.conferencing) {
+    apiEvent.conferencing = (existingEvent.conferencing as { uri: string; label?: string }) || undefined;
   }
 
-  return {
-    id: updated.id,
-    calendarId: existingEvent.calendarId,
-    title: updated.summary || existingEvent.title,
-    start: updatedStart.toISOString(),
-    end: updatedEnd.toISOString(),
-    isAllDay: !!updated.start.date,
-    color: existingEvent.color || "#4285f4",
-    provider: "google",
-    location: updated.location || undefined,
-    description: updated.description || undefined,
-    isReadOnly: existingEvent.isReadOnly ?? false,
-    readOnlyReason: existingEvent.readOnlyReason || undefined,
-    transparency: updated.transparency || existingEvent.transparency || undefined,
-    visibility: updated.visibility || existingEvent.visibility || undefined,
-    reminders: patch.reminders !== undefined
-      ? (patch.reminders && patch.reminders.length > 0
-        ? (updated.reminders?.overrides || patch.reminders || undefined)
-        : undefined)
-      : ((updated.reminders?.overrides || existingEvent.reminders) as { method: string; minutes: number }[] | undefined),
-    colorId: updated.colorId || undefined,
-    conferencing: conferencingResult,
-    timeZone: patch.timeZone !== undefined
-      ? (patch.timeZone || undefined)
-      : (existingEvent.timeZone || undefined),
-    attendees: patch.attendees !== undefined
-      ? (updated.attendees
-          ?.filter(a => !a.resource)
-          .map(a => ({
-            email: a.email,
-            name: a.displayName || undefined,
-            responseStatus: (a.responseStatus || "needsAction") as Attendee["responseStatus"],
-            isOrganizer: a.organizer || undefined,
-            isSelf: a.self || undefined,
-          })) || undefined)
-      : (existingEvent.attendees as Attendee[] | undefined),
-  };
+  // Preserve timeZone from patch or existing event if provider didn't return one
+  if (patch.timeZone !== undefined) {
+    apiEvent.timeZone = patch.timeZone || undefined;
+  } else if (!apiEvent.timeZone) {
+    apiEvent.timeZone = existingEvent.timeZone || undefined;
+  }
+
+  await upsertServerEvent(db!, apiEvent, accountId, calendarId);
+
+  return apiEvent;
 }
 
 /**
- * Delete an event via Google Calendar API and remove from local cache.
+ * Delete an event via the calendar provider and remove from local cache.
  */
-export async function deleteEventViaGoogle(
+export async function deleteEvent(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   eventDbId: string,
   sendUpdates?: "all" | "none"
 ): Promise<void> {
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  await service.deleteEvent(calendarId, googleEventId, sendUpdates ? { sendUpdates } : undefined);
+  await provider.deleteEvent(
+    accessToken, calendarId, providerEventId,
+    sendUpdates ? { sendUpdates } : undefined,
+  );
 
   await db!
     .delete(serverEvents)
@@ -332,27 +217,38 @@ export async function deleteEventViaGoogle(
 }
 
 /**
- * Move an event to a different calendar via Google Calendar API.
+ * Move an event to a different calendar via the calendar provider.
  * Updates calendarId and color in the local cache.
  * Returns the updated ApiCalendarEvent.
  *
- * IMPORTANT: Once Google processes the move, the DB MUST be updated —
+ * IMPORTANT: Once the provider processes the move, the DB MUST be updated —
  * otherwise background sync will delete the event from the old calendar's
  * cache and it becomes invisible until the new calendar is re-fetched.
  */
-export async function moveEventViaGoogle(
+export async function moveEvent(
   accountId: string,
   sourceCalendarId: string,
   destinationCalendarId: string,
-  googleEventId: string,
+  providerEventId: string,
   eventDbId: string,
   destinationColor: string | null
 ): Promise<ApiCalendarEvent> {
-  const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  await service.moveEvent(sourceCalendarId, googleEventId, destinationCalendarId);
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
 
-  // Google succeeded — update DB. If this fails, the event will vanish from
+  const calendarProvider = getProvider(account.provider as Provider);
+
+  if (!calendarProvider.moveEvent) {
+    throw new Error(`Provider "${account.provider}" does not support moveEvent`);
+  }
+
+  const accessToken = await getAccessToken(accountId);
+  await calendarProvider.moveEvent(accessToken, sourceCalendarId, providerEventId, destinationCalendarId);
+
+  // Provider succeeded — update DB. If this fails, the event will vanish from
   // the UI until the next full sync picks it up from the new calendar.
   const color = destinationColor || "#4285f4";
 
@@ -366,7 +262,7 @@ export async function moveEventViaGoogle(
       })
       .where(eq(serverEvents.id, eventDbId));
   } catch (dbError) {
-    console.error(`[events] CRITICAL: Google moved event ${googleEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
+    console.error(`[events] CRITICAL: Provider moved event ${providerEventId} to ${destinationCalendarId} but DB update failed:`, dbError);
     throw dbError;
   }
 
@@ -374,42 +270,42 @@ export async function moveEventViaGoogle(
     where: eq(serverEvents.id, eventDbId),
   });
 
-  return mapServerEventToApi(updated!);
+  return mapServerEventToApi(updated!, account.provider as Provider);
 }
 
 /**
- * Update the current user's RSVP status on an event via Google Calendar API.
+ * Update the current user's RSVP status on an event via the calendar provider.
  * Reads the attendees array from DB, updates the self entry's responseStatus,
- * PATCHes to Google, and updates the local cache.
+ * sends to the provider, and updates the local cache.
  */
-export async function rsvpEventViaGoogle(
+export async function rsvpEvent(
   accountId: string,
   calendarId: string,
-  googleEventId: string,
-  responseStatus: "accepted" | "declined" | "tentative",
+  providerEventId: string,
+  responseStatus: RsvpResponse,
   existingEvent: ServerEvent,
   sendUpdates?: "all" | "none"
 ): Promise<ApiCalendarEvent> {
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const calendarProvider = getProvider(account.provider as Provider);
+  const accessToken = await getAccessToken(accountId);
+
   const attendees = (existingEvent.attendees as Attendee[]) || [];
   if (attendees.length === 0) {
     throw new Error("Event has no attendees");
   }
 
-  // Build the Google-format attendees array with updated self status
-  const googleAttendees = attendees.map(a => ({
-    email: a.email,
-    responseStatus: a.isSelf ? responseStatus : a.responseStatus,
-    ...(a.isOrganizer && { organizer: true }),
-    ...(a.isSelf && { self: true }),
-  }));
-
-  const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
-  await service.patchEvent(
-    calendarId,
-    googleEventId,
-    { attendees: googleAttendees },
-    { sendUpdates: sendUpdates ?? "none" }
+  await calendarProvider.rsvpEvent(
+    accessToken, calendarId, providerEventId, responseStatus,
+    {
+      currentAttendees: attendees,
+      sendUpdates: sendUpdates ?? "none",
+    },
   );
 
   // Update attendees in local DB
@@ -425,5 +321,5 @@ export async function rsvpEventViaGoogle(
   return mapServerEventToApi({
     ...existingEvent,
     attendees: updatedAttendees,
-  } as ServerEvent);
+  } as ServerEvent, account.provider as Provider);
 }

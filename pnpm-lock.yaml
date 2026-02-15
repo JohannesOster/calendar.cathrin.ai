@@ -105,6 +105,9 @@ importers:
       postgres:
         specifier: ^3.4.5
         version: 3.4.8
+      windows-iana:
+        specifier: ^5.1.0
+        version: 5.1.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -2123,6 +2126,10 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  windows-iana@5.1.0:
+    resolution: {integrity: sha512-WS7dbeBltaq8JcazH7hVCi17lqZBdQdKppMLk8rUQwz+My6dSRW8dFoQqzSi+UjPrsh7TV5AEnboRKneWy8b/A==}
+    engines: {node: '>=12'}
+
   ws@8.19.0:
     resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
     engines: {node: '>=10.0.0'}
@@ -4087,6 +4094,8 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  windows-iana@5.1.0: {}
 
   ws@8.19.0: {}
 

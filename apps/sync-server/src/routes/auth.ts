@@ -8,6 +8,13 @@ import { renderOAuthSuccessPage } from "../lib/oauth-success-page.js";
 import { createOAuthState, validateOAuthState, pollOAuthState } from "../services/oauth-state.js";
 import { handleOAuthCallback } from "../services/oauth-callback.js";
 import { verifySessionToken } from "../lib/jwt.js";
+import { getProvider } from "../providers/registry.js";
+import {
+  storePkceVerifier,
+  consumePkceVerifier,
+  fetchMicrosoftUserProfile,
+} from "../providers/outlook/index.js";
+import { randomBytes, createHash } from "node:crypto";
 
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
@@ -33,6 +40,13 @@ export const authRoute = new Hono()
     }
 
     c.header("Set-Cookie", `oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
+
+    const provider = c.req.query("provider") || "google";
+
+    if (provider === "outlook") {
+      return c.redirect(`/auth/outlook/login?state=${encodeURIComponent(state)}`);
+    }
+
     return c.redirect("/auth/google");
   })
   .post("/state", async (c) => {
@@ -87,6 +101,9 @@ export const authRoute = new Hono()
     }
     return c.json({ error: result.error }, 404);
   })
+  // =========================================================================
+  // Google OAuth
+  // =========================================================================
   .use(
     "/google",
     googleAuth({
@@ -129,9 +146,10 @@ export const authRoute = new Hono()
       const pendingState = stateMatch ? stateMatch[1] : null;
 
       const { jwt } = await handleOAuthCallback({
+        provider: "google",
         accessToken,
         refreshToken: refreshToken.token,
-        googleUser: { id: googleUser.id, email: googleUser.email },
+        providerUser: { id: googleUser.id, email: googleUser.email },
         pendingState,
       });
 
@@ -148,6 +166,128 @@ export const authRoute = new Hono()
       );
     }
   })
+  // =========================================================================
+  // Outlook OAuth (PKCE)
+  // =========================================================================
+  .get("/outlook/login", async (c) => {
+    const clientId = process.env.MICROSOFT_CLIENT_ID;
+    if (!clientId) {
+      return c.json({ error: "Microsoft OAuth not configured" }, 500);
+    }
+
+    // Use the state from the query parameter (set by /auth/start redirect)
+    const state = c.req.query("state");
+    if (!state) {
+      return c.json({ error: "Missing state parameter" }, 400);
+    }
+
+    // Generate PKCE challenge
+    const codeVerifier = randomBytes(96).toString("base64url");
+    const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+
+    // Store verifier keyed by state — consumed at /callback
+    storePkceVerifier(state, codeVerifier);
+
+    const provider = getProvider("outlook");
+    const redirectUri = `${c.req.url.split("/auth/")[0]}/auth/outlook/callback`;
+
+    const authUrl = provider.getAuthUrl({
+      clientId,
+      redirectUri,
+      scopes: [], // Scopes are set internally by the provider
+      state,
+      codeChallenge,
+      codeChallengeMethod: "S256",
+    });
+
+    return c.redirect(authUrl);
+  })
+  .get("/outlook/callback", async (c) => {
+    if (!db) {
+      return c.html(
+        `<html><body><h1>Error</h1><p>Database not configured</p></body></html>`,
+        500
+      );
+    }
+
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    const error = c.req.query("error");
+    const errorDescription = c.req.query("error_description");
+
+    if (error) {
+      console.error(`[auth/outlook] OAuth error: ${error} — ${errorDescription}`);
+      const safeMessage = (errorDescription || error || "").replace(/[&<>"]/g, (c: string) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] || c
+      );
+      return c.html(
+        `<html><body><h1>Error</h1><p>${safeMessage}</p></body></html>`,
+        400
+      );
+    }
+
+    if (!code || !state) {
+      return c.html(
+        `<html><body><h1>Error</h1><p>Missing authorization code or state</p></body></html>`,
+        400
+      );
+    }
+
+    // Retrieve and consume the PKCE verifier
+    const codeVerifier = consumePkceVerifier(state);
+    if (!codeVerifier) {
+      return c.html(
+        `<html><body><h1>Error</h1><p>PKCE verifier expired or not found. Please try again.</p></body></html>`,
+        400
+      );
+    }
+
+    try {
+      const provider = getProvider("outlook");
+      const redirectUri = `${c.req.url.split("/auth/")[0]}/auth/outlook/callback`;
+
+      // Exchange code for tokens (with PKCE verifier)
+      const tokens = await provider.exchangeCode(code, redirectUri, codeVerifier);
+
+      if (!tokens.refreshToken) {
+        return c.html(
+          `<html><body><h1>Error</h1><p>No refresh token received from Microsoft. Please try again.</p></body></html>`,
+          400
+        );
+      }
+
+      // Fetch user profile from Microsoft Graph
+      const msUser = await fetchMicrosoftUserProfile(tokens.accessToken);
+
+      // Recover the oauth_state cookie (set by /auth/start)
+      const cookieHeader = c.req.header("Cookie") || "";
+      const stateMatch = cookieHeader.match(/oauth_state=([^;]+)/);
+      const pendingState = stateMatch ? stateMatch[1] : null;
+
+      const { jwt } = await handleOAuthCallback({
+        provider: "outlook",
+        accessToken: { token: tokens.accessToken, expires_in: tokens.expiresIn },
+        refreshToken: tokens.refreshToken,
+        providerUser: { id: msUser.id, email: msUser.email },
+        pendingState,
+      });
+
+      if (pendingState) {
+        c.header("Set-Cookie", "oauth_state=; Path=/; HttpOnly; Max-Age=0");
+      }
+
+      return c.html(renderOAuthSuccessPage(jwt));
+    } catch (err) {
+      console.error("[auth/outlook] Callback error:", err);
+      return c.html(
+        `<html><body><h1>Error</h1><p>Failed to connect Outlook: ${err instanceof Error ? err.message : "Unknown error"}</p></body></html>`,
+        500
+      );
+    }
+  })
+  // =========================================================================
+  // Shared
+  // =========================================================================
   .post("/logout", authMiddleware, async (c) => {
     if (!db) {
       return c.json({ error: "Database not configured" }, 500);

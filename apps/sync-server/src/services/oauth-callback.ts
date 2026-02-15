@@ -5,10 +5,13 @@ import { encrypt } from "../lib/crypto.js";
 import { createSessionToken, getSessionExpiresAt } from "../lib/jwt.js";
 import { performInitialSync } from "./initial-sync.js";
 
+import type { Provider } from "@cathrin/shared-types";
+
 interface OAuthCallbackParams {
+  provider: Provider;
   accessToken: { token?: string; expires_in?: number };
   refreshToken: string;
-  googleUser: { id: string; email: string };
+  providerUser: { id: string; email: string };
   pendingState: string | null;
 }
 
@@ -25,7 +28,7 @@ interface OAuthCallbackResult {
 export async function handleOAuthCallback(
   params: OAuthCallbackParams
 ): Promise<OAuthCallbackResult> {
-  const { accessToken, refreshToken, googleUser, pendingState } = params;
+  const { provider, accessToken, refreshToken, providerUser, pendingState } = params;
 
   // Check if this OAuth flow was initiated by an existing user (adding another account)
   let existingUserId: string | null = null;
@@ -46,15 +49,15 @@ export async function handleOAuthCallback(
   }
 
   if (!user) {
-    // First-time OAuth or fallback — find/create by Google email
+    // First-time OAuth or fallback — find/create by provider email
     user = await db!.query.users.findFirst({
-      where: eq(users.email, googleUser.email),
+      where: eq(users.email, providerUser.email),
     });
 
     if (!user) {
       const [newUser] = await db!
         .insert(users)
-        .values({ email: googleUser.email })
+        .values({ email: providerUser.email })
         .returning();
       user = newUser;
     }
@@ -62,7 +65,7 @@ export async function handleOAuthCallback(
 
   // Check if account already exists
   const existingAccount = await db!.query.accounts.findFirst({
-    where: eq(accounts.providerAccountId, googleUser.id),
+    where: eq(accounts.providerAccountId, providerUser.id),
   });
 
   const tokenExpiresAt = accessToken.expires_in
@@ -92,9 +95,9 @@ export async function handleOAuthCallback(
       .insert(accounts)
       .values({
         userId: user.id,
-        provider: "google",
-        providerAccountId: googleUser.id,
-        email: googleUser.email,
+        provider,
+        providerAccountId: providerUser.id,
+        email: providerUser.email,
         encryptedRefreshToken: encrypt(refreshToken),
         encryptedAccessToken: accessToken.token
           ? encrypt(accessToken.token)

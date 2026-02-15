@@ -3,9 +3,11 @@ import { Clock, MapPin, AlignLeft, Users } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
 import { setEvents, events } from "../../stores/events";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, ApiError } from "../../lib/api";
+import { showErrorToast } from "../../lib/toast";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
+import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { sortAttendees, ResponseStatusIcon, STATUS_LABELS } from "./attendee-utils";
 
 interface EventDetailPanelProps {
@@ -32,7 +34,9 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
 
   const dateDisplay = createMemo(() => {
     const start = props.event.start;
-    const end = props.event.end;
+    // All-day events use exclusive end dates (RFC 5545): a single-day event
+    // on Dec 1 has end = Dec 2. Convert to inclusive last day for display.
+    const end = props.event.isAllDay ? getAllDayInclusiveEnd(props.event.end) : props.event.end;
     const sameDay =
       start.getDate() === end.getDate() &&
       start.getMonth() === end.getMonth() &&
@@ -169,12 +173,12 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
 
     if (timer) clearTimeout(timer);
     const eventId = props.eventId;
-    const googleEventId = event.googleEventId;
+    const providerEventId = event.providerEventId;
     const rollback = originalAttendees;
     timer = setTimeout(() => {
       timer = null;
       originalAttendees = null;
-      apiFetch(`/api/events/${encodeURIComponent(googleEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
+      apiFetch(`/api/events/${encodeURIComponent(providerEventId)}/rsvp?calendarId=${encodeURIComponent(event.calendarId)}`, {
         method: "PATCH",
         body: JSON.stringify({ responseStatus: status, sendUpdates: "none" }),
       }).catch((err) => {
@@ -182,6 +186,9 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
         setEvents((prev) =>
           prev.map((e) => e.id === eventId ? { ...e, attendees: rollback } : e)
         );
+        if (err instanceof ApiError && err.status === 403) {
+          showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+        }
       });
     }, 300);
   }

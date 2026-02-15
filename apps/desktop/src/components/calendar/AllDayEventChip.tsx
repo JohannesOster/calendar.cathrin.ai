@@ -6,6 +6,7 @@ import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
 import { formatDateRange, formatChipTimeRange, formatTimeRange } from "../../lib/format-utils";
+import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { ALL_DAY_ROW_HEIGHT, CHIP_BORDER_RADIUS } from "../../constants/layout";
 import { startUnfoldDrag, startAllDayMoveDrag, dragActiveEventId } from "../../stores/event-drag";
 
@@ -167,7 +168,8 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
 
   const ariaLabel = () => {
     const type = hasTimes() ? "multi-day timed event" : "all-day event";
-    const base = `${props.event.title}, ${type}, ${formatDateRange(props.event.start, props.event.end)}`;
+    const displayEnd = props.event.isAllDay ? getAllDayInclusiveEnd(props.event.end) : props.event.end;
+    const base = `${props.event.title}, ${type}, ${formatDateRange(props.event.start, displayEnd)}`;
     const suffix = props.event.isReadOnly ? ", view only" : "";
     if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}${suffix}`;
     return `${base}${suffix}`;

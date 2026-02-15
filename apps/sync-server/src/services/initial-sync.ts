@@ -6,7 +6,8 @@ import {
   fetchedWeeks,
 } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import { GoogleCalendarService } from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import type { Provider } from "@cathrin/shared-types";
 import { getWeeksInRange } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
 import { createWatchChannelsForAccount } from "./watch-manager.js";
@@ -37,9 +38,15 @@ export async function performInitialSync(accountId: string): Promise<void> {
     .where(eq(accounts.id, accountId));
 
   try {
-    // Get access token (will refresh if needed)
+    // Look up provider for this account
+    const account = await db.query.accounts.findFirst({
+      where: eq(accounts.id, accountId),
+      columns: { provider: true, email: true },
+    });
+    if (!account) throw new Error("Account not found");
+
+    const provider = getProvider(account.provider as Provider);
     const accessToken = await getAccessToken(accountId);
-    const service = new GoogleCalendarService(accessToken);
 
     // Calculate date bounds
     const now = new Date();
@@ -56,7 +63,7 @@ export async function performInitialSync(accountId: string): Promise<void> {
     );
 
     // Fetch all calendars
-    const calendars = await service.fetchCalendarList();
+    const calendars = await provider.getCalendars(accessToken);
     console.log(`[initial-sync] Found ${calendars.length} calendars`);
 
     let totalEvents = 0;
@@ -64,13 +71,13 @@ export async function performInitialSync(accountId: string): Promise<void> {
     // Fetch events for each calendar
     for (const calendar of calendars) {
       try {
-        const events = await service.fetchEvents(
-          calendar.id,
-          timeMin.toISOString(),
-          timeMax.toISOString(),
-          calendar.color,
-          calendar.accessRole
-        );
+        const { events } = await provider.getEvents(accessToken, calendar.id, {
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          calendarColor: calendar.color,
+          calendarAccessRole: calendar.accessRole,
+          accountEmail: account.email,
+        });
 
         console.log(
           `[initial-sync] Calendar "${calendar.name}": ${events.length} events`
@@ -81,47 +88,16 @@ export async function performInitialSync(accountId: string): Promise<void> {
 
         totalEvents += events.length;
 
-        // Get syncToken for future incremental syncs
-        // Must paginate through ALL events to get the syncToken
+        // Get syncToken for future incremental syncs via provider abstraction
         let syncToken: string | null = null;
         try {
-          let pageToken: string | undefined;
-          let pageCount = 0;
-
-          // Paginate through all events to get syncToken
-          do {
-            const params = new URLSearchParams({ maxResults: "2500" });
-            if (pageToken) {
-              params.set("pageToken", pageToken);
-            }
-
-            const syncTokenUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`;
-            const syncTokenResponse = await fetch(syncTokenUrl, {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-
-            if (!syncTokenResponse.ok) {
-              console.warn(`[initial-sync] Failed to fetch page for syncToken: ${syncTokenResponse.status}`);
-              break;
-            }
-
-            const syncData = (await syncTokenResponse.json()) as {
-              nextSyncToken?: string;
-              nextPageToken?: string;
-            };
-
-            pageCount++;
-            pageToken = syncData.nextPageToken;
-
-            if (syncData.nextSyncToken) {
-              syncToken = syncData.nextSyncToken;
-              console.log(`[initial-sync] Got syncToken for "${calendar.name}" after ${pageCount} pages`);
-            }
-          } while (pageToken && !syncToken);
-
-          if (!syncToken) {
-            console.warn(`[initial-sync] No syncToken after ${pageCount} pages for "${calendar.name}"`);
-          }
+          syncToken = await provider.getInitialSyncToken(
+            accessToken,
+            calendar.id,
+            timeMin.toISOString(),
+            timeMax.toISOString(),
+          );
+          console.log(`[initial-sync] Got syncToken for "${calendar.name}"`);
         } catch (err) {
           console.error(
             `[initial-sync] Failed to get syncToken for calendar "${calendar.name}":`,

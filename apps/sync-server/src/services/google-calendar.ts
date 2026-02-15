@@ -62,7 +62,7 @@ interface EventDateTime {
   timeZone?: string;
 }
 
-interface GoogleConferenceData {
+export interface GoogleConferenceData {
   createRequest?: {
     requestId: string;
     conferenceSolutionKey: { type: string };
@@ -91,6 +91,7 @@ interface GoogleEvent {
     useDefault: boolean;
     overrides?: { method: string; minutes: number }[];
   };
+  iCalUID?: string;
   conferenceData?: GoogleConferenceData;
   attendees?: {
     email: string;
@@ -468,7 +469,7 @@ export class GoogleCalendarService {
    * Computes `isReadOnly` from calendar-level `accessRole` and event-level
    * permission fields (`guestsCanModify`, `locked`, `organizer.self`).
    */
-  private mapEvent(
+  mapEvent(
     event: GoogleEvent,
     calendarId: string,
     calendarColor: string,
@@ -528,6 +529,7 @@ export class GoogleCalendarService {
       conferencing,
       timeZone: timeZone || undefined,
       attendees: attendees && attendees.length > 0 ? attendees : undefined,
+      icalUid: event.iCalUID || undefined,
     };
   }
 

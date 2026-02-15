@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { apiFetch } from "../lib/api";
+import { apiFetch, ApiError } from "../lib/api";
+import { showErrorToast } from "../lib/toast";
 import {
   deleteCachedEventFromDisk,
   restoreCachedEventToDisk,
@@ -81,7 +82,7 @@ function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void
   const params = new URLSearchParams();
   params.set("calendarId", event.calendarId);
   if (sendUpdates) params.set("sendUpdates", sendUpdates);
-  const url = `/api/events/${encodeURIComponent(event.googleEventId)}?${params.toString()}`;
+  const url = `/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`;
   apiFetch<{ success: boolean }>(url, {
     method: "DELETE",
   })
@@ -94,6 +95,9 @@ function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void
       // Restore on failure — server didn't accept the deletion
       addLocalEvent(event);
       restoreCachedEventToDisk(event);
+      if (error instanceof ApiError && error.status === 403) {
+        showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+      }
     });
 }
 

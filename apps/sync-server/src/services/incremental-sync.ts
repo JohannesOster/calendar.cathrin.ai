@@ -1,11 +1,10 @@
 import { eq, and, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
+import { accounts, serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
-import {
-  GoogleCalendarService,
-  SyncTokenExpiredError,
-} from "./google-calendar.js";
+import { getProvider } from "../providers/registry.js";
+import { SyncTokenExpiredError } from "../providers/types.js";
+import type { Provider } from "@cathrin/shared-types";
 import { getWeekId, getWeeksInRange } from "../lib/week-utils.js";
 import { upsertServerEvents } from "./event-storage.js";
 
@@ -40,16 +39,22 @@ export async function syncCalendarIncremental(
     throw new Error("No syncToken - full sync required");
   }
 
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true, email: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
 
   try {
     const { events, cancelledIds, nextSyncToken } =
-      await service.fetchEventsIncremental(
+      await provider.getEventsIncremental(
+        accessToken,
         calendarId,
         state.syncToken,
-        calendarColor,
-        calendarAccessRole
+        { calendarColor, calendarAccessRole, accountEmail: account.email }
       );
 
     let updated = 0;
@@ -61,7 +66,7 @@ export async function syncCalendarIncremental(
       const existingEvent = await db.query.serverEvents.findFirst({
         where: and(
           eq(serverEvents.accountId, accountId),
-          eq(serverEvents.googleEventId, cancelledId)
+          eq(serverEvents.providerEventId, cancelledId)
         ),
       });
 
@@ -136,17 +141,23 @@ export async function syncCalendarFull(
     throw new Error("Database not configured");
   }
 
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true, email: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  const service = new GoogleCalendarService(accessToken);
 
   // Fetch all events in range
-  const events = await service.fetchEvents(
-    calendarId,
-    timeMin.toISOString(),
-    timeMax.toISOString(),
+  const { events } = await provider.getEvents(accessToken, calendarId, {
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
     calendarColor,
-    calendarAccessRole
-  );
+    calendarAccessRole,
+    accountEmail: account.email,
+  });
 
   // Store events
   await upsertServerEvents(db, events, accountId, calendarId);
@@ -160,12 +171,12 @@ export async function syncCalendarFull(
       lte(serverEvents.start, timeMax),
       gte(serverEvents.end, timeMin)
     ),
-    columns: { id: true, googleEventId: true },
+    columns: { id: true, providerEventId: true },
   });
 
   let removed = 0;
   for (const existing of existingInRange) {
-    if (!fetchedEventIds.has(existing.googleEventId)) {
+    if (!fetchedEventIds.has(existing.providerEventId)) {
       await db.delete(serverEvents).where(eq(serverEvents.id, existing.id));
       removed++;
     }
@@ -177,23 +188,13 @@ export async function syncCalendarFull(
     );
   }
 
-  // Now do a sync request to get the syncToken for future incremental syncs
-  // We need to make a request with no time bounds to get a syncToken
-  const syncTokenResponse = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?maxResults=1`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+  // Get initial sync token from the provider for future incremental syncs
+  const syncToken = await provider.getInitialSyncToken(
+    accessToken,
+    calendarId,
+    timeMin.toISOString(),
+    timeMax.toISOString(),
   );
-
-  if (!syncTokenResponse.ok) {
-    throw new Error(`Failed to get syncToken: ${syncTokenResponse.statusText}`);
-  }
-
-  const syncData = (await syncTokenResponse.json()) as {
-    nextSyncToken?: string;
-  };
-  const syncToken = syncData.nextSyncToken || "";
 
   // Update sync state with token
   await db

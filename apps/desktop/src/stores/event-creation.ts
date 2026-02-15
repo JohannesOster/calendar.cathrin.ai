@@ -3,7 +3,8 @@ import { defaultCalendarId, connectedAccounts } from "./accounts";
 import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
-import { apiFetch } from "../lib/api";
+import { apiFetch, ApiError } from "../lib/api";
+import { showErrorToast } from "../lib/toast";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
@@ -250,7 +251,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
   // Optimistic insert
   addLocalEvent({
     id: tempId,
-    googleEventId: "",
+    providerEventId: "",
     calendarId: calId,
     title,
     start: eventStart,
@@ -294,7 +295,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
       ...(conferencing && {
         conferencing: conferencing.uri
           ? { type: "manual" as const, uri: conferencing.uri }
-          : { type: "meet" as const },
+          : { type: "create" as const },
       }),
       timeZone,
       ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
@@ -310,7 +311,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
             ? {
                 ...e,
                 id: compositeId,
-                googleEventId: serverEvent.id,
+                providerEventId: serverEvent.id,
                 title: serverEvent.title,
                 start: new Date(serverEvent.start),
                 end: new Date(serverEvent.end),
@@ -330,6 +331,9 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     .catch((error) => {
       console.error("[event-creation] Failed to save event:", error);
       removeLocalEvent(tempId);
+      if (error instanceof ApiError && error.status === 403) {
+        showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+      }
     });
 
   return true;

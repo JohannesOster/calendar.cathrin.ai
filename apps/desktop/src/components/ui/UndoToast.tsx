@@ -1,7 +1,6 @@
-import { onCleanup } from "solid-js";
-import { X, Info } from "lucide-solid";
+import { onCleanup, Show } from "solid-js";
+import { X, Info, CircleAlert } from "lucide-solid";
 import {
-  createToaster,
   Toaster,
   Toast,
 } from "@ark-ui/solid/toast";
@@ -10,18 +9,9 @@ import {
   undoDelete,
   confirmDelete,
 } from "../../stores/event-deletion";
-import { AUTO_DISMISS_MS, EXIT_DURATION_MS } from "../../constants/timings";
+import { toaster } from "../../lib/toast";
 
 const undoneIds = new Set<string>();
-
-export const toaster = createToaster({
-  placement: "bottom",
-  duration: AUTO_DISMISS_MS,
-  removeDelay: EXIT_DURATION_MS,
-  max: 5,
-  overlap: false,
-  offsets: "1rem",
-});
 
 export function UndoToastProvider() {
   const unsubDelete = onDeletion((deletion) => {
@@ -64,14 +54,21 @@ export function UndoToastProvider() {
           class="bg-surface-active border border-border text-fg rounded-lg px-4 py-3 min-w-[280px] max-w-[400px] animate-toast-enter data-[state=closed]:animate-toast-exit"
         >
           <div class="flex items-start gap-2">
-            <Info size={16} class="text-fg-muted shrink-0 mt-0.5" />
+            <Show
+              when={toast().type === "error"}
+              fallback={<Info size={16} class="text-fg-muted shrink-0 mt-0.5" />}
+            >
+              <CircleAlert size={16} class="text-red-400 shrink-0 mt-0.5" />
+            </Show>
             <div class="flex-1 min-w-0">
               <Toast.Title class="text-sm font-medium">
                 {toast().title}
               </Toast.Title>
-              <Toast.Description class="text-xs text-fg-muted mt-0.5 truncate">
-                "{toast().description}"
-              </Toast.Description>
+              <Show when={toast().description}>
+                <Toast.Description class="text-xs text-fg-muted mt-0.5 truncate">
+                  {toast().type === "error" ? toast().description : `"${toast().description}"`}
+                </Toast.Description>
+              </Show>
             </div>
             <Toast.CloseTrigger
               class="text-fg-faint hover:text-fg transition-colors shrink-0 -mt-0.5"
@@ -80,13 +77,15 @@ export function UndoToastProvider() {
               <X size={14} />
             </Toast.CloseTrigger>
           </div>
-          <div class="flex justify-end mt-2">
-            <Toast.ActionTrigger
-              class="px-3 py-1 text-xs font-medium text-fg bg-surface-hover hover:bg-border rounded transition-colors"
-            >
-              Undo
-            </Toast.ActionTrigger>
-          </div>
+          <Show when={toast().action}>
+            <div class="flex justify-end mt-2">
+              <Toast.ActionTrigger
+                class="px-3 py-1 text-xs font-medium text-fg bg-surface-hover hover:bg-border rounded transition-colors"
+              >
+                Undo
+              </Toast.ActionTrigger>
+            </div>
+          </Show>
         </Toast.Root>
       )}
     </Toaster>

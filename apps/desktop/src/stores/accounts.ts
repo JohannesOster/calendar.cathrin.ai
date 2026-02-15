@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { startServerOAuth, isAuthenticated } from "./auth";
 import { apiFetch } from "../lib/api";
-import type { SyncStatus } from "@cathrin/shared-types";
+import type { Provider, SyncStatus } from "@cathrin/shared-types";
 
 export interface Calendar {
   id: string;
@@ -14,6 +14,7 @@ export interface Calendar {
 export interface CalendarAccount {
   id: string;
   email: string;
+  provider: Provider;
   calendars: Calendar[];
   syncStatus: SyncStatus;
 }
@@ -98,17 +99,15 @@ export async function initializeAccounts(): Promise<void> {
 }
 
 /**
- * Start the OAuth flow to add a new calendar account
- * Opens the browser to the server OAuth endpoint
- * Accounts will be reloaded automatically when auth completes
+ * Start the OAuth flow to add a new calendar account.
+ * @param provider - "google" or "outlook". Passed to the server auth endpoint.
+ * Accounts will be reloaded automatically when auth completes.
  */
-export async function addAccount(): Promise<void> {
+export async function addAccount(provider: Provider = "google"): Promise<void> {
   setAuthError(null);
 
   try {
-    // Open browser to server OAuth endpoint
-    // The OAuth flow completes async - accounts reload via the auth effect
-    await startServerOAuth();
+    await startServerOAuth(provider);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : String(error);
