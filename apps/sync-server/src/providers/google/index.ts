@@ -191,7 +191,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     accessToken: string,
     calendarId: string,
     syncToken: string,
-    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
+    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole" | "accountEmail">,
   ): Promise<IncrementalSyncResult> {
     return this.withErrorMapping(async () => {
       try {

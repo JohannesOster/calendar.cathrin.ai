@@ -79,6 +79,8 @@ export interface EventFetchOptions {
   timeMax: string;
   calendarColor: string;
   calendarAccessRole?: string;
+  /** Account email — used by Outlook to resolve isSelf on attendees */
+  accountEmail?: string;
 }
 
 export interface EventFetchResult {
@@ -152,6 +154,8 @@ export interface MutationOptions {
   calendarColor?: string;
   /** Calendar access role for computing isReadOnly */
   calendarAccessRole?: string;
+  /** Account email — used by Outlook to resolve isSelf on attendees */
+  accountEmail?: string;
 }
 
 // === Webhooks ===
@@ -217,7 +221,7 @@ export interface CalendarProvider {
     accessToken: string,
     calendarId: string,
     syncToken: string,
-    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">
+    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole" | "accountEmail">
   ): Promise<IncrementalSyncResult>;
 
   /**

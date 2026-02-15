@@ -44,7 +44,7 @@ export async function createEvent(opts: CreateEventOptions): Promise<ApiCalendar
 
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
-    columns: { provider: true },
+    columns: { provider: true, email: true },
   });
   if (!account) throw new Error("Account not found");
 
@@ -54,6 +54,7 @@ export async function createEvent(opts: CreateEventOptions): Promise<ApiCalendar
   const mutationOptions: MutationOptions = {
     calendarColor: calendarColor || undefined,
     sendUpdates: attendees && attendees.length > 0 ? (sendUpdates ?? "all") : undefined,
+    accountEmail: account.email,
   };
 
   const apiEvent = await provider.createEvent(
@@ -115,7 +116,7 @@ export async function updateEvent(
 ): Promise<ApiCalendarEvent> {
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
-    columns: { provider: true },
+    columns: { provider: true, email: true },
   });
   if (!account) throw new Error("Account not found");
 
@@ -153,6 +154,7 @@ export async function updateEvent(
     sendUpdates: sendUpdates !== undefined
       ? sendUpdates
       : patch.attendees !== undefined ? "all" : undefined,
+    accountEmail: account.email,
   };
 
   console.log(`[events] PATCH ${providerEventId} body:`, JSON.stringify(providerPatch));

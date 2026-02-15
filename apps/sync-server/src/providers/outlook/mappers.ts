@@ -139,6 +139,7 @@ export function mapGraphEvent(
   calendarColor: string,
   calendarAccessRole?: string,
   categoryColorMap?: Map<string, string>,
+  accountEmail?: string,
 ): ApiCalendarEvent | null {
   const start = toIso(event.start);
   const end = toIso(event.end);
@@ -165,7 +166,9 @@ export function mapGraphEvent(
       name: a.emailAddress.name || undefined,
       responseStatus: mapResponseStatus(a.status.response),
       isOrganizer: event.organizer?.emailAddress.address === a.emailAddress.address || undefined,
-      // Outlook doesn't have an explicit "self" flag — caller should set it if needed
+      isSelf: accountEmail
+        ? a.emailAddress.address.toLowerCase() === accountEmail.toLowerCase() || undefined
+        : undefined,
     }));
 
   // Detect conferencing from Teams/online meeting

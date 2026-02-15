@@ -81,7 +81,7 @@ async function fetchWeekRange(
 
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
-    columns: { provider: true },
+    columns: { provider: true, email: true },
   });
   if (!account) return 0;
 
@@ -92,6 +92,7 @@ async function fetchWeekRange(
     timeMin: start.toISOString(),
     timeMax: end.toISOString(),
     calendarColor,
+    accountEmail: account.email,
   });
 
   // Store events

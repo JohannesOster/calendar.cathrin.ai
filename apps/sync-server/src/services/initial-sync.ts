@@ -41,7 +41,7 @@ export async function performInitialSync(accountId: string): Promise<void> {
     // Look up provider for this account
     const account = await db.query.accounts.findFirst({
       where: eq(accounts.id, accountId),
-      columns: { provider: true },
+      columns: { provider: true, email: true },
     });
     if (!account) throw new Error("Account not found");
 
@@ -76,6 +76,7 @@ export async function performInitialSync(accountId: string): Promise<void> {
           timeMax: timeMax.toISOString(),
           calendarColor: calendar.color,
           calendarAccessRole: calendar.accessRole,
+          accountEmail: account.email,
         });
 
         console.log(

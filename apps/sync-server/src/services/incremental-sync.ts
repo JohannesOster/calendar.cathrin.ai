@@ -41,7 +41,7 @@ export async function syncCalendarIncremental(
 
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
-    columns: { provider: true },
+    columns: { provider: true, email: true },
   });
   if (!account) throw new Error("Account not found");
 
@@ -54,7 +54,7 @@ export async function syncCalendarIncremental(
         accessToken,
         calendarId,
         state.syncToken,
-        { calendarColor, calendarAccessRole }
+        { calendarColor, calendarAccessRole, accountEmail: account.email }
       );
 
     let updated = 0;
@@ -143,7 +143,7 @@ export async function syncCalendarFull(
 
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
-    columns: { provider: true },
+    columns: { provider: true, email: true },
   });
   if (!account) throw new Error("Account not found");
 
@@ -156,6 +156,7 @@ export async function syncCalendarFull(
     timeMax: timeMax.toISOString(),
     calendarColor,
     calendarAccessRole,
+    accountEmail: account.email,
   });
 
   // Store events

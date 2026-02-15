@@ -423,6 +423,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
           options.calendarColor,
           options.calendarAccessRole,
           categoryColorMap,
+          options.accountEmail,
         );
         if (mapped) events.push(mapped);
       }
@@ -437,7 +438,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
     accessToken: string,
     calendarId: string,
     syncToken: string,
-    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole">,
+    options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole" | "accountEmail">,
   ): Promise<IncrementalSyncResult> {
     const categories = await fetchCategories(accessToken);
     const categoryColorMap = buildCategoryColorMap(categories);
@@ -469,6 +470,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
           options.calendarColor,
           options.calendarAccessRole,
           categoryColorMap,
+          options.accountEmail,
         );
         if (mapped) events.push(mapped);
       }
@@ -559,7 +561,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
 
     const created = (await response.json()) as GraphEvent;
     const calendarColor = options?.calendarColor || "#0078d4";
-    const result = mapGraphEvent(created, calendarId, calendarColor, options?.calendarAccessRole);
+    const result = mapGraphEvent(created, calendarId, calendarColor, options?.calendarAccessRole, undefined, options?.accountEmail);
     if (!result) {
       throw new Error("Failed to map created Outlook event — missing start or end");
     }
@@ -592,7 +594,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
 
     const updated = (await response.json()) as GraphEvent;
     const calendarColor = options?.calendarColor || "#0078d4";
-    const result = mapGraphEvent(updated, _calendarId, calendarColor, options?.calendarAccessRole);
+    const result = mapGraphEvent(updated, _calendarId, calendarColor, options?.calendarAccessRole, undefined, options?.accountEmail);
     if (!result) {
       throw new Error("Failed to map updated Outlook event — missing start or end");
     }

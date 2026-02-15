@@ -81,7 +81,7 @@ async function doEnsureWeeksFetched(
 
     const account = await db!.query.accounts.findFirst({
       where: eq(accounts.id, accountId),
-      columns: { provider: true },
+      columns: { provider: true, email: true },
     });
     if (!account) throw new Error("Account not found");
 
@@ -92,6 +92,7 @@ async function doEnsureWeeksFetched(
       timeMax: end.toISOString(),
       calendarColor,
       calendarAccessRole,
+      accountEmail: account.email,
     });
 
     console.log(
