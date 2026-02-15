@@ -15,7 +15,13 @@
 export type Provider = "google" | "outlook" | "caldav";
 
 /**
- * A participant in a calendar event
+ * A participant in a calendar event.
+ *
+ * `responseStatus` uses canonical values that happen to match Google's API.
+ * Other providers map to these on ingest:
+ * - Outlook: "organizer"/"accepted" → "accepted", "tentativelyAccepted" → "tentative",
+ *   "declined" → "declined", everything else → "needsAction"
+ * - CalDAV/iCloud: map PARTSTAT values to these same canonical values
  */
 export type Attendee = {
   email: string;

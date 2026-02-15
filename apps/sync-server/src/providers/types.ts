@@ -136,6 +136,15 @@ export interface ProviderEventPatch {
 export type RsvpResponse = "accepted" | "declined" | "tentative";
 
 export interface MutationOptions {
+  /**
+   * Whether the provider should send email notifications to attendees.
+   * Canonical values match Google's API; other providers map as follows:
+   * - "all": send to all attendees (Google: sendUpdates=all, Outlook: sendResponse=true)
+   * - "none": suppress notifications (Google: sendUpdates=none, Outlook: sendResponse=false)
+   * - "externalOnly": Google-only — send only to non-Google attendees. Has no Outlook
+   *   equivalent (treated as truthy → sendResponse=true). Avoid for cross-provider code;
+   *   prefer "all" or "none".
+   */
   sendUpdates?: "all" | "externalOnly" | "none";
   /** Current attendees — needed by providers that RSVP via attendee patching (Google) */
   currentAttendees?: Attendee[];
