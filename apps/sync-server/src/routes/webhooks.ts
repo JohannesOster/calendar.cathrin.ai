@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { parseChannelToken, createWatchChannel } from "../services/watch-manager.js";
+import { verifyChannelToken, createWatchChannel } from "../services/watch-manager.js";
 import { debouncedSync } from "../services/webhook-debouncer.js";
 import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
@@ -50,8 +50,8 @@ export const webhooksRoute = new Hono()
       return c.body(null, 200);
     }
 
-    // Parse the token to get accountId and calendarId
-    const parsed = parseChannelToken(channelToken);
+    // Verify the HMAC-signed token
+    const parsed = verifyChannelToken(channelToken);
     if (!parsed) {
       console.warn(`[webhook] Invalid channel token: ${channelToken}`);
       return c.body(null, 200);
@@ -88,7 +88,7 @@ export const webhooksRoute = new Hono()
 
     for (const notification of body.value) {
       // Validate clientState to reject forged webhooks
-      const parsed = parseChannelToken(notification.clientState || "");
+      const parsed = verifyChannelToken(notification.clientState || "");
       if (!parsed) {
         console.warn(`[webhook/outlook] Invalid clientState on notification`);
         continue;
@@ -120,7 +120,7 @@ export const webhooksRoute = new Hono()
     }
 
     for (const notification of body.value) {
-      const parsed = parseChannelToken(notification.clientState || "");
+      const parsed = verifyChannelToken(notification.clientState || "");
       if (!parsed) continue;
 
       const { accountId, calendarId } = parsed;

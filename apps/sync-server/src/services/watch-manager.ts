@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq, lt } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, watchChannels, calendarSyncState } from "../db/schema.js";
@@ -54,7 +55,7 @@ export async function createWatchChannel(
   if (!provider.createWatch) return; // Provider doesn't support webhooks
 
   const accessToken = await getAccessToken(accountId);
-  const token = `accountId=${accountId}&calendarId=${encodeURIComponent(calendarId)}`;
+  const token = signChannelToken(accountId, calendarId);
   const address = getWebhookAddress(account.provider as Provider);
 
   try {
@@ -205,17 +206,60 @@ export async function cleanupAccountChannels(
 }
 
 /**
- * Look up the accountId and calendarId from a channel's token string.
- * Token format: "accountId=X&calendarId=Y"
+ * Build the plaintext payload for a channel token.
  */
-export function parseChannelToken(
+function buildTokenPayload(accountId: string, calendarId: string): string {
+  return `accountId=${accountId}&calendarId=${encodeURIComponent(calendarId)}`;
+}
+
+/**
+ * Get the HMAC signing key from the existing ENCRYPTION_KEY env var.
+ */
+function getSigningKey(): string {
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("ENCRYPTION_KEY environment variable is required");
+  }
+  return key;
+}
+
+/**
+ * Create an HMAC-signed channel token.
+ * Token format: "accountId=X&calendarId=Y&sig=<hex>"
+ */
+export function signChannelToken(accountId: string, calendarId: string): string {
+  const payload = buildTokenPayload(accountId, calendarId);
+  const sig = createHmac("sha256", getSigningKey())
+    .update(payload)
+    .digest("hex");
+  return `${payload}&sig=${sig}`;
+}
+
+/**
+ * Verify an HMAC-signed channel token and extract accountId + calendarId.
+ * Returns null if the signature is missing, invalid, or tampered with.
+ */
+export function verifyChannelToken(
   token: string
 ): { accountId: string; calendarId: string } | null {
   try {
     const params = new URLSearchParams(token);
+    const sig = params.get("sig");
     const accountId = params.get("accountId");
     const calendarId = params.get("calendarId");
-    if (!accountId || !calendarId) return null;
+    if (!sig || !accountId || !calendarId) return null;
+
+    const payload = buildTokenPayload(accountId, calendarId);
+    const expected = createHmac("sha256", getSigningKey())
+      .update(payload)
+      .digest("hex");
+
+    // Timing-safe comparison to prevent timing attacks
+    if (sig.length !== expected.length) return null;
+    const a = Buffer.from(sig, "hex");
+    const b = Buffer.from(expected, "hex");
+    if (!timingSafeEqual(a, b)) return null;
+
     return { accountId, calendarId };
   } catch {
     return null;
