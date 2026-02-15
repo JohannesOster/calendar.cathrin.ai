@@ -31,6 +31,7 @@ function buildEventValues(
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
+    icalUid: event.icalUid ?? null,
     status: "confirmed" as const,
     isReadOnly: event.isReadOnly,
     readOnlyReason: event.readOnlyReason ?? null,
@@ -58,6 +59,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     conferencing: event.conferencing ?? null,
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
+    icalUid: event.icalUid ?? null,
     updatedAt: new Date(),
   };
 }
@@ -115,6 +117,7 @@ export async function upsertServerEvents(
         conferencing: sql`excluded.conferencing`,
         timeZone: sql`excluded.time_zone`,
         attendees: sql`excluded.attendees`,
+        icalUid: sql`excluded.ical_uid`,
         updatedAt: new Date(),
       },
     });

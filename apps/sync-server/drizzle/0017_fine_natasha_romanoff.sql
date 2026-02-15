@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "ical_uid" text;

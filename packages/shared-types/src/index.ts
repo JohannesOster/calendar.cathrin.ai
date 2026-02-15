@@ -62,6 +62,8 @@ export interface ApiCalendarEvent {
   /** IANA timezone identifier, e.g. "America/New_York" */
   timeZone?: string;
   attendees?: Attendee[];
+  /** RFC 5545 iCalendar UID — stable cross-provider identifier for dedup */
+  icalUid?: string;
 }
 
 /**

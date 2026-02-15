@@ -28,5 +28,6 @@ export function mapServerEventToApi(event: ServerEvent, provider?: Provider): Ap
     conferencing: (event.conferencing as { uri: string; label?: string }) || undefined,
     timeZone: event.timeZone || undefined,
     attendees: (event.attendees as Attendee[]) || undefined,
+    icalUid: event.icalUid || undefined,
   };
 }

@@ -55,6 +55,7 @@ export interface GraphEvent {
     response: "none" | "organizer" | "tentativelyAccepted" | "accepted" | "declined" | "notResponded";
     time: string;
   };
+  iCalUId?: string;
   type?: "singleInstance" | "occurrence" | "exception" | "seriesMaster";
   seriesMasterId?: string;
   isCancelled?: boolean;

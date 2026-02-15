@@ -102,6 +102,7 @@ export const serverEvents = pgTable(
     conferencing: jsonb("conferencing"), // { uri, label } or null
     timeZone: text("time_zone"), // IANA timezone identifier, e.g. "America/New_York"
     attendees: jsonb("attendees"), // Array of { email, name?, responseStatus, isOrganizer?, isSelf? }
+    icalUid: text("ical_uid"), // RFC 5545 iCalendar UID for cross-account dedup
     status: text("status"), // confirmed, tentative, cancelled
     isReadOnly: boolean("is_read_only").default(false),
     readOnlyReason: text("read_only_reason"),

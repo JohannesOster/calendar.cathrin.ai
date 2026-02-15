@@ -91,6 +91,7 @@ interface GoogleEvent {
     useDefault: boolean;
     overrides?: { method: string; minutes: number }[];
   };
+  iCalUID?: string;
   conferenceData?: GoogleConferenceData;
   attendees?: {
     email: string;
@@ -528,6 +529,7 @@ export class GoogleCalendarService {
       conferencing,
       timeZone: timeZone || undefined,
       attendees: attendees && attendees.length > 0 ? attendees : undefined,
+      icalUid: event.iCalUID || undefined,
     };
   }
 
