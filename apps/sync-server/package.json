@@ -25,6 +25,7 @@
     "drizzle-orm": "^0.38.3",
     "hono": "^4.6.16",
     "postgres": "^3.4.5",
+    "windows-iana": "^5.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

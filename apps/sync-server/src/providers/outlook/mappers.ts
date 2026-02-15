@@ -5,6 +5,7 @@
 import type { ApiCalendar, ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import type { NewProviderEvent, ProviderEventPatch } from "../types.js";
 import type { GraphCalendar, GraphEvent, GraphCategory, GraphDateTimeTimeZone } from "./types.js";
+import { findIana } from "windows-iana";
 
 // =============================================================================
 // Color mapping
@@ -185,11 +186,17 @@ export function mapGraphEvent(
   // Map transparency from showAs
   const transparency = event.showAs === "free" ? "transparent" : "opaque";
 
-  // Use the Windows timezone name from Outlook — may not be IANA
-  // but preserving it is better than losing it
-  const timeZone = event.start.timeZone !== "UTC" && event.start.timeZone !== "tzone://Microsoft/Utc"
-    ? event.start.timeZone
-    : undefined;
+  // Convert Windows timezone names (e.g. "Pacific Standard Time") to IANA (e.g. "America/Los_Angeles")
+  let timeZone: string | undefined;
+  if (event.start.timeZone !== "UTC" && event.start.timeZone !== "tzone://Microsoft/Utc") {
+    const ianaMatches = findIana(event.start.timeZone);
+    if (ianaMatches.length > 0) {
+      timeZone = ianaMatches[0];
+    } else {
+      console.warn(`[outlook] Unknown Windows timezone: "${event.start.timeZone}", passing through as-is`);
+      timeZone = event.start.timeZone;
+    }
+  }
 
   return {
     id: event.id,
@@ -209,6 +216,7 @@ export function mapGraphEvent(
     conferencing,
     timeZone,
     attendees: attendees && attendees.length > 0 ? attendees : undefined,
+    icalUid: event.iCalUId || undefined,
   };
 }
 
