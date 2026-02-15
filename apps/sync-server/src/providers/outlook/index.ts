@@ -187,14 +187,17 @@ async function handleGraphError(response: Response): Promise<never> {
 // Category Cache
 // =============================================================================
 
-/** Per-token category cache with 1-hour TTL, max 20 entries. */
+/** Per-account category cache with 1-hour TTL, max 20 entries. */
 const categoryCache = new Map<string, { categories: GraphCategory[]; expiresAt: number }>();
 const CATEGORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const CATEGORY_CACHE_MAX_SIZE = 20;
 
-async function fetchCategories(accessToken: string): Promise<GraphCategory[]> {
-  // Use first 16 chars of token as cache key (enough to distinguish tokens)
-  const cacheKey = accessToken.slice(0, 16);
+async function fetchCategories(accessToken: string, accountEmail?: string): Promise<GraphCategory[]> {
+  // Key on stable account email instead of rotating access token (#211)
+  if (!accountEmail) {
+    console.warn("[outlook] fetchCategories called without accountEmail — falling back to token-based cache key");
+  }
+  const cacheKey = accountEmail || accessToken.slice(0, 16);
   const cached = categoryCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.categories;
@@ -393,7 +396,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
     calendarId: string,
     options: EventFetchOptions,
   ): Promise<EventFetchResult> {
-    const categories = await fetchCategories(accessToken);
+    const categories = await fetchCategories(accessToken, options.accountEmail);
     const categoryColorMap = buildCategoryColorMap(categories);
 
     const events: ApiCalendarEvent[] = [];
@@ -440,7 +443,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
     syncToken: string,
     options: Pick<EventFetchOptions, "calendarColor" | "calendarAccessRole" | "accountEmail">,
   ): Promise<IncrementalSyncResult> {
-    const categories = await fetchCategories(accessToken);
+    const categories = await fetchCategories(accessToken, options.accountEmail);
     const categoryColorMap = buildCategoryColorMap(categories);
 
     const events: ApiCalendarEvent[] = [];
