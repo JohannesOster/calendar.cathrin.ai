@@ -3,7 +3,8 @@ import { defaultCalendarId, connectedAccounts } from "./accounts";
 import { setDefaultCalendar } from "./account-ordering";
 import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
-import { apiFetch } from "../lib/api";
+import { apiFetch, ApiError } from "../lib/api";
+import { showErrorToast } from "../lib/toast";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
@@ -330,6 +331,9 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     .catch((error) => {
       console.error("[event-creation] Failed to save event:", error);
       removeLocalEvent(tempId);
+      if (error instanceof ApiError && error.status === 403) {
+        showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+      }
     });
 
   return true;

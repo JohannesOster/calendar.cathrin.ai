@@ -3,7 +3,8 @@ import { Clock, MapPin, AlignLeft, Users } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
 import { setEvents, events } from "../../stores/events";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, ApiError } from "../../lib/api";
+import { showErrorToast } from "../../lib/toast";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
 import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
@@ -185,6 +186,9 @@ function DetailRsvpButtons(props: { eventId: string; currentStatus: Attendee["re
         setEvents((prev) =>
           prev.map((e) => e.id === eventId ? { ...e, attendees: rollback } : e)
         );
+        if (err instanceof ApiError && err.status === 403) {
+          showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+        }
       });
     }, 300);
   }

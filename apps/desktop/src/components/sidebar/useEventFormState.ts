@@ -42,7 +42,8 @@ import { selectedEvent, selectedEventId, deselectEvent } from "../../stores/even
 import { updateEvent, setEvents, events, moveEvent } from "../../stores/events";
 import { dragActiveEventId } from "../../stores/event-drag";
 import type { EventPatch } from "../../stores/event-types";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, ApiError } from "../../lib/api";
+import { showErrorToast } from "../../lib/toast";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 import { connectedAccounts } from "../../stores/accounts";
 import { startBuffering, isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
@@ -519,6 +520,9 @@ export function useEventFormState() {
       setEvents((prev) =>
         prev.map((e) => e.id === eventId ? { ...e, attendees: original } : e)
       );
+      if (err instanceof ApiError && err.status === 403) {
+        showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+      }
     });
   }
 
