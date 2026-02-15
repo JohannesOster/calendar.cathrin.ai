@@ -14,6 +14,15 @@ export interface AllDayLayoutInfo {
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * Convert an all-day event's exclusive end date to the inclusive last day.
+ * Both Google and Outlook use exclusive end dates per RFC 5545: a single-day
+ * event on Dec 1 has end = Dec 2 00:00 UTC. Subtract one day for display.
+ */
+export function getAllDayInclusiveEnd(exclusiveEnd: Date): Date {
+  return new Date(exclusiveEnd.getTime() - MS_PER_DAY);
+}
+
+/**
  * Get the date components (year, month, day) in UTC
  * This is for event dates which come from Google as UTC midnight
  */
@@ -180,7 +189,9 @@ export function calculateAllDayLayouts(
     // startCol: where the event starts in the view (min 0)
     const startCol = Math.max(0, eventStartOffset);
 
-    // endCol: where the event ends in the view (max is last column)
+    // endCol: where the event ends in the view (max is last column).
+    // eventDurationDays already equals the visual span (exclusive end − start),
+    // so −1 converts to the inclusive last column index.
     const eventEndOffset = eventStartOffset + eventDurationDays - 1;
     const endCol = Math.min(totalColumns - 1, eventEndOffset);
 

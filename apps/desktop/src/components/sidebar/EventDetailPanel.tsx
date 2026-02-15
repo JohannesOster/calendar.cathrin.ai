@@ -6,6 +6,7 @@ import { setEvents, events } from "../../stores/events";
 import { apiFetch } from "../../lib/api";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
+import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { sortAttendees, ResponseStatusIcon, STATUS_LABELS } from "./attendee-utils";
 
 interface EventDetailPanelProps {
@@ -32,7 +33,9 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
 
   const dateDisplay = createMemo(() => {
     const start = props.event.start;
-    const end = props.event.end;
+    // All-day events use exclusive end dates (RFC 5545): a single-day event
+    // on Dec 1 has end = Dec 2. Convert to inclusive last day for display.
+    const end = props.event.isAllDay ? getAllDayInclusiveEnd(props.event.end) : props.event.end;
     const sameDay =
       start.getDate() === end.getDate() &&
       start.getMonth() === end.getMonth() &&
