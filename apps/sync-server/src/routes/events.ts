@@ -117,6 +117,7 @@ export const eventsRoute = new Hono()
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).optional(),
         sendUpdates: z.enum(["all", "none"]).optional(),
+        recurrence: z.array(z.string()).optional(),
       })
     ),
     async (c) => {
@@ -125,7 +126,7 @@ export const eventsRoute = new Hono()
       }
 
       const userId = c.get("userId");
-      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates } = c.req.valid("json");
+      const { calendarId, title, start, end, isAllDay, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates, recurrence } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -141,7 +142,7 @@ export const eventsRoute = new Hono()
         const apiEvent = await createEvent({
           accountId: owner.accountId, calendarId, title, start, end, isAllDay,
           calendarColor: owner.color, location, description, transparency,
-          visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates,
+          visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates, recurrence,
         });
 
         // Notify connected clients — skip the originating client (already has optimistic state)

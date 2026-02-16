@@ -33,6 +33,7 @@ export interface CreateEventOptions {
   timeZone?: string;
   attendees?: { email: string; name?: string }[];
   sendUpdates?: "all" | "none";
+  recurrence?: string[];
 }
 
 /**
@@ -40,7 +41,7 @@ export interface CreateEventOptions {
  * Returns the ApiCalendarEvent.
  */
 export async function createEvent(opts: CreateEventOptions): Promise<ApiCalendarEvent> {
-  const { accountId, calendarId, title, start, end, isAllDay, calendarColor, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates } = opts;
+  const { accountId, calendarId, title, start, end, isAllDay, calendarColor, location, description, transparency, visibility, reminders, colorId, conferencing, timeZone, attendees, sendUpdates, recurrence } = opts;
 
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
@@ -74,6 +75,7 @@ export async function createEvent(opts: CreateEventOptions): Promise<ApiCalendar
       conferencing,
       attendees,
       timeZone,
+      recurrence,
     },
     mutationOptions,
   );

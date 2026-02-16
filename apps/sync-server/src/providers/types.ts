@@ -116,6 +116,7 @@ export interface NewProviderEvent {
   conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
   attendees?: { email: string; name?: string }[];
   timeZone?: string;
+  recurrence?: string[];
 }
 
 export interface ProviderEventPatch {

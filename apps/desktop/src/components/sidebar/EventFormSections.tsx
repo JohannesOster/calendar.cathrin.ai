@@ -40,6 +40,9 @@ import { isPendingNotification, removePendingNotification } from "../../stores/p
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { selectedEventId, selectedEvent } from "../../stores/event-selection";
 import { events, setEvents } from "../../stores/events";
+import { draftRecurrence, setDraftRecurrence } from "../../stores/event-creation";
+import { CustomRecurrenceDialog } from "./CustomRecurrenceDialog";
+import { dayCodeFromDate, ordinal, buildRrule } from "../../utils/recurrence-format";
 import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { EventFormState } from "./useEventFormState";
@@ -252,17 +255,7 @@ export function TimeSection(props: SectionProps) {
         <TimezoneSelector state={s} />
       </Show>
       {/* Repeat */}
-      {(() => {
-        const event = selectedEvent();
-        const recurrence = event?.recurrence;
-        const isRecurring = recurrence || event?.recurringEventId;
-        return (
-          <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
-            <Repeat size={14} class="shrink-0" />
-            <span>{isRecurring && recurrence ? formatRecurrence(recurrence, s.start()) : isRecurring ? "Repeats" : "Does not repeat"}</span>
-          </div>
-        );
-      })()}
+      <RecurrenceSelector state={s} />
       </Show>
     </div>
   );
@@ -2157,5 +2150,147 @@ function TimezoneSelector(props: { state: EventFormState }) {
         </Combobox.Content>
       </Combobox.Positioner>
     </Combobox.Root>
+  );
+}
+
+const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAY_NAMES_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function RecurrenceSelector(props: SectionProps) {
+  const s = props.state;
+  const [customOpen, setCustomOpen] = createSignal(false);
+
+  const isEditing = () => s.mode() === "edit";
+
+  // Generate contextual presets based on the event start date
+  const presets = createMemo(() => {
+    const start = s.start();
+    if (!start) return [];
+    const dayName = DAY_NAMES_FULL[start.getDay()];
+    const dayCode = dayCodeFromDate(start);
+    const monthDay = `${MONTH_NAMES_SHORT[start.getMonth()]} ${start.getDate()}`;
+
+    return [
+      { value: "none", label: "Does not repeat", rrule: null as string[] | null },
+      { value: "daily", label: "Daily", rrule: ["RRULE:FREQ=DAILY"] },
+      { value: "weekdays", label: "Every weekday (Mon\u2013Fri)", rrule: ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"] },
+      { value: "weekly", label: `Weekly on ${dayName}`, rrule: [`RRULE:FREQ=WEEKLY;BYDAY=${dayCode}`] },
+      { value: "monthly", label: `Monthly on the ${ordinal(start.getDate())}`, rrule: [`RRULE:FREQ=MONTHLY;BYMONTHDAY=${start.getDate()}`] },
+      { value: "yearly", label: `Annually on ${monthDay}`, rrule: ["RRULE:FREQ=YEARLY"] },
+      { value: "custom", label: "Custom\u2026", rrule: null as string[] | null },
+    ];
+  });
+
+  const currentLabel = createMemo(() => {
+    if (isEditing()) {
+      const ev = selectedEvent();
+      if (ev?.recurrence) return formatRecurrence(ev.recurrence, s.start());
+      if (ev?.recurringEventId) return "Repeats";
+      return "Does not repeat";
+    }
+    const rec = draftRecurrence();
+    if (!rec) return "Does not repeat";
+    return formatRecurrence(rec, s.start());
+  });
+
+  const currentValue = createMemo(() => {
+    const rec = isEditing() ? selectedEvent()?.recurrence : draftRecurrence();
+    if (!rec) return "none";
+    const rrule = rec[0];
+    const match = presets().find(p => p.rrule && p.rrule[0] === rrule);
+    return match?.value ?? "custom";
+  });
+
+  const handleSelect = (value: string) => {
+    if (value === "custom") {
+      setCustomOpen(true);
+      return;
+    }
+    const preset = presets().find(p => p.value === value);
+    if (!preset) return;
+    setDraftRecurrence(preset.rrule);
+  };
+
+  const handleCustomDone = (rrule: string[]) => {
+    setDraftRecurrence(rrule);
+    setCustomOpen(false);
+  };
+
+  // Read-only display for edit mode
+  if (isEditing()) {
+    return (
+      <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
+        <Repeat size={14} class="shrink-0" />
+        <span>{currentLabel()}</span>
+      </div>
+    );
+  }
+
+  const collection = createMemo(() =>
+    createListCollection({
+      items: presets().filter(p => p.value !== "custom"),
+      itemToValue: (item) => item.value,
+      itemToString: (item) => item.label,
+    })
+  );
+
+  return (
+    <>
+      <Select.Root
+        collection={collection()}
+        value={[currentValue()]}
+        onValueChange={(details) => {
+          handleSelect(details.value[0]);
+        }}
+        positioning={{ placement: "bottom-start" }}
+      >
+        <Select.Control>
+          <Select.Trigger
+            aria-label="Repeat"
+            class="flex w-full items-center gap-2 text-sm bg-transparent outline-none border-none cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors text-fg-muted hover:text-fg"
+          >
+            <Repeat size={14} class="shrink-0" />
+            <span class="flex-1 text-left">{currentLabel()}</span>
+            <ChevronDown size={14} class="text-fg-muted shrink-0" />
+          </Select.Trigger>
+        </Select.Control>
+        <Select.Positioner>
+          <Select.Content class="bg-surface border border-border rounded py-1 z-50">
+            <For each={presets()}>
+              {(item) => {
+                if (item.value === "custom") {
+                  return (
+                    <div
+                      class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover outline-none border-t border-border mt-1 pt-1.5"
+                      role="option"
+                      onClick={() => handleSelect("custom")}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelect("custom"); }}
+                      tabIndex={0}
+                    >
+                      {item.label}
+                    </div>
+                  );
+                }
+                return (
+                  <Select.Item
+                    item={item}
+                    class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
+                  >
+                    <Select.ItemText>{item.label}</Select.ItemText>
+                  </Select.Item>
+                );
+              }}
+            </For>
+          </Select.Content>
+        </Select.Positioner>
+        <Select.HiddenSelect />
+      </Select.Root>
+      <CustomRecurrenceDialog
+        open={customOpen()}
+        onClose={() => setCustomOpen(false)}
+        onDone={handleCustomDone}
+        eventStart={s.start()}
+      />
+    </>
   );
 }

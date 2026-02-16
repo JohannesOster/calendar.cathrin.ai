@@ -30,6 +30,7 @@ export const [draftColorId, setDraftColorId] = createSignal<string | null>(null)
 export const [draftConferencing, setDraftConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
 export const [draftTimeZone, setDraftTimeZone] = createSignal<string | undefined>(undefined);
 export const [draftAttendees, setDraftAttendees] = createSignal<Attendee[]>([]);
+export const [draftRecurrence, setDraftRecurrence] = createSignal<string[] | null>(null);
 
 // Commit prompt: shown when user tries to commit/leave with attendees present
 export const [showCommitPrompt, setShowCommitPrompt] = createSignal(false);
@@ -184,6 +185,7 @@ export function cancelCreation(): void {
   setDraftConferencing(null);
   setDraftTimeZone(undefined);
   setDraftAttendees([]);
+  setDraftRecurrence(null);
   setShadowStart(null);
   setShadowEnd(null);
 }
@@ -217,6 +219,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
   const conferencing = draftConferencing();
   const timeZone = draftTimeZone() || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const attendees = draftAttendees();
+  const recurrence = draftRecurrence();
 
   if (!title || !start || !end || !calId) return false;
 
@@ -268,6 +271,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     conferencing,
     timeZone,
     attendees: attendees.length > 0 ? attendees : undefined,
+    recurrence: recurrence ?? undefined,
   });
 
   // Reset creation state
@@ -300,6 +304,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
       timeZone,
       ...(hasAttendees && { attendees: attendees.map(a => ({ email: a.email, name: a.name })) }),
       ...(effectiveSendUpdates && { sendUpdates: effectiveSendUpdates }),
+      ...(recurrence && { recurrence }),
     }),
   })
     .then((serverEvent) => {

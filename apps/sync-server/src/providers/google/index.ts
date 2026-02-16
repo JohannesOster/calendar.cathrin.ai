@@ -283,6 +283,9 @@ export class GoogleCalendarProvider implements CalendarProvider {
               displayName: a.name,
             })),
           }),
+        ...(event.recurrence && event.recurrence.length > 0 && {
+          recurrence: event.recurrence,
+        }),
       },
       options?.sendUpdates ? { sendUpdates: options.sendUpdates } : undefined,
     );
