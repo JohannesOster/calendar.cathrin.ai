@@ -52,6 +52,7 @@ import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
 export type FormMode = "create" | "edit";
+export type RecurrenceEditScope = "single" | "all";
 
 type FieldGroup = "time" | "identity" | "attendees" | "content" | "preferences" | "conferencing";
 
@@ -86,6 +87,12 @@ export function useEventFormState() {
   const [editTimeZone, setEditTimeZone] = createSignal<string | undefined>(undefined);
   const [editAttendees, setEditAttendees] = createSignal<Attendee[]>([]);
   const [conferencingLoading, setConferencingLoading] = createSignal(false);
+
+  // Recurrence scope: once the user picks a scope for a recurring event,
+  // reuse it for subsequent edits in the same editing session.
+  const [editScope, setEditScope] = createSignal<RecurrenceEditScope | null>(null);
+  // When a scope dialog is needed, buffer the patch here until user decides.
+  const [pendingScopePatch, setPendingScopePatch] = createSignal<{ patch: EventPatch; rollback?: EventPatch; eventId: string } | null>(null);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -124,9 +131,56 @@ export function useEventFormState() {
     const rollback = Object.keys(pendingRollback).length > 0 ? { ...pendingRollback } : undefined;
     pendingPatch = {};
     pendingRollback = {};
-    updateEvent(eventId, patchToSend, rollback).catch((err) =>
+
+    // Check if this is a recurring event that needs scope selection
+    const event = events().find(e => e.id === eventId);
+    const isRecurringInstance = event && (event.recurringEventId || event.recurrence);
+
+    if (isRecurringInstance && !editScope()) {
+      // Buffer the patch and wait for scope dialog
+      setPendingScopePatch({ patch: patchToSend, rollback, eventId });
+      return;
+    }
+
+    const scope = editScope() ?? undefined;
+    updateEvent(eventId, patchToSend, rollback, scope).catch((err) =>
       console.error("Failed to save event update:", err)
     );
+  }
+
+  /** Called by the scope dialog when user picks a scope for editing. */
+  function confirmEditScope(scope: RecurrenceEditScope): void {
+    setEditScope(scope);
+    const pending = pendingScopePatch();
+    if (!pending) return;
+    setPendingScopePatch(null);
+    updateEvent(pending.eventId, pending.patch, pending.rollback, scope).catch((err) =>
+      console.error("Failed to save event update:", err)
+    );
+  }
+
+  /** Called by the scope dialog when user cancels. Reverts the change. */
+  function cancelEditScope(): void {
+    const pending = pendingScopePatch();
+    if (pending?.rollback) {
+      // Revert the form signals to original values
+      const rb = pending.rollback;
+      if (rb.title !== undefined) setEditTitle(rb.title ?? "");
+      if (rb.description !== undefined) setEditDescription(rb.description ?? "");
+      if (rb.location !== undefined) setEditLocation(rb.location ?? "");
+      if (rb.start !== undefined) setEditStart(rb.start ?? null);
+      if (rb.end !== undefined) setEditEnd(rb.end ?? null);
+      if (rb.isAllDay !== undefined) setEditIsAllDay(rb.isAllDay ?? false);
+      if (rb.transparency !== undefined) setEditTransparency(rb.transparency ?? "opaque");
+      if (rb.visibility !== undefined) setEditVisibility(rb.visibility ?? "default");
+      // Revert optimistic chip update
+      const eventId = pending.eventId;
+      const event = events().find(e => e.id === eventId);
+      if (event) {
+        setEvents(prev => prev.map(e => e.id === eventId ? { ...e, ...rb } : e));
+      }
+    }
+    setPendingScopePatch(null);
   }
 
   // Flush pending save when deselecting (sidebar closes).
@@ -184,6 +238,8 @@ export function useEventFormState() {
     setEditTimeZone(event.timeZone);
     setEditAttendees(event.attendees ?? []);
     setConferencingLoading(false);
+    setEditScope(null);
+    setPendingScopePatch(null);
     savedTimedStart = null;
     savedTimedEnd = null;
   }));
@@ -822,6 +878,9 @@ export function useEventFormState() {
     editEnd: editEnd as () => Date | null,
     setEditEnd,
     scheduleSave,
+    pendingScopePatch,
+    confirmEditScope,
+    cancelEditScope,
   };
 }
 

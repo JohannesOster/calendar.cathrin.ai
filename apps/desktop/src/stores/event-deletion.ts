@@ -15,6 +15,38 @@ import type { CalendarEvent } from "./event-types";
 import { revalidateWeeksForDates } from "./event-polling";
 
 // =============================================================================
+// Recurrence Scope Selection (for recurring events)
+// =============================================================================
+
+export type RecurrenceScope = "single" | "all";
+
+/** When set, a recurrence scope dialog should be shown for this event before deletion. */
+export const [pendingRecurrenceScopeEvent, setPendingRecurrenceScopeEvent] = createSignal<CalendarEvent | null>(null);
+
+/** Called by the scope dialog: proceed with chosen scope. */
+export function confirmRecurrenceScope(scope: RecurrenceScope): void {
+  const event = pendingRecurrenceScopeEvent();
+  if (!event) return;
+  setPendingRecurrenceScopeEvent(null);
+  // Store scope, then check if attendees dialog is also needed
+  pendingScopeForDelete = scope;
+  if (event.attendees && event.attendees.length > 0) {
+    setPendingDeleteConfirmEvent(event);
+    return;
+  }
+  executeDelete(event, undefined, scope);
+}
+
+/** Called by the scope dialog: cancel. */
+export function cancelRecurrenceScope(): void {
+  setPendingRecurrenceScopeEvent(null);
+  pendingScopeForDelete = undefined;
+}
+
+/** Scope chosen from the recurrence dialog, passed through to the attendee dialog. */
+let pendingScopeForDelete: RecurrenceScope | undefined;
+
+// =============================================================================
 // Delete Confirmation (for events with attendees)
 // =============================================================================
 
@@ -26,12 +58,14 @@ export function confirmDeleteWithChoice(sendUpdates: "all" | "none"): void {
   const event = pendingDeleteConfirmEvent();
   if (!event) return;
   setPendingDeleteConfirmEvent(null);
-  executeDelete(event, sendUpdates);
+  executeDelete(event, sendUpdates, pendingScopeForDelete);
+  pendingScopeForDelete = undefined;
 }
 
 /** Called by the dialog: cancel the delete. */
 export function cancelDeleteConfirm(): void {
   setPendingDeleteConfirmEvent(null);
+  pendingScopeForDelete = undefined;
 }
 
 // =============================================================================
@@ -41,6 +75,7 @@ export function cancelDeleteConfirm(): void {
 export interface PendingDeletion {
   event: CalendarEvent;
   sendUpdates?: "all" | "none";
+  scope?: RecurrenceScope;
 }
 
 // =============================================================================
@@ -78,10 +113,11 @@ export function onDeletion(fn: DeletionListener): () => void {
 /**
  * Fire the actual DELETE API call for an event.
  */
-function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void {
+function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none", scope?: RecurrenceScope): void {
   const params = new URLSearchParams();
   params.set("calendarId", event.calendarId);
   if (sendUpdates) params.set("sendUpdates", sendUpdates);
+  if (scope) params.set("scope", scope);
   const url = `/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`;
   apiFetch<{ success: boolean }>(url, {
     method: "DELETE",
@@ -104,8 +140,8 @@ function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none"): void
 /**
  * Internal: execute the deletion flow (optimistic removal + undo toast).
  */
-function executeDelete(event: CalendarEvent, sendUpdates?: "all" | "none"): void {
-  const deletion: PendingDeletion = { event, sendUpdates };
+function executeDelete(event: CalendarEvent, sendUpdates?: "all" | "none", scope?: RecurrenceScope): void {
+  const deletion: PendingDeletion = { event, sendUpdates, scope };
   pendingMap.set(event.id, deletion);
 
   // Notify toast component
@@ -125,6 +161,12 @@ export function deleteEvent(eventId: string): void {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
   if (event.isReadOnly) return;
+
+  // Recurring events need scope selection first
+  if (event.recurringEventId || event.recurrence) {
+    setPendingRecurrenceScopeEvent(event);
+    return;
+  }
 
   // Events with attendees need confirmation (send cancellation or not?)
   if (event.attendees && event.attendees.length > 0) {
@@ -157,5 +199,5 @@ export function confirmDelete(eventId: string): void {
   if (!pending) return;
 
   pendingMap.delete(eventId);
-  fireDeleteApi(pending.event, pending.sendUpdates);
+  fireDeleteApi(pending.event, pending.sendUpdates, pending.scope);
 }

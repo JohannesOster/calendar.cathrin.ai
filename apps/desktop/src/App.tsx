@@ -12,6 +12,12 @@ import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
+import { RecurrenceScopeDialog } from "./components/ui/RecurrenceScopeDialog";
+import {
+  pendingRecurrenceScopeEvent,
+  confirmRecurrenceScope,
+  cancelRecurrenceScope,
+} from "./stores/event-deletion";
 import { initAuth, isAuthenticated } from "./stores/auth";
 import { initializeAccounts } from "./stores/accounts";
 import {
@@ -176,6 +182,12 @@ function App() {
   return (
     <>
       <UndoToastProvider />
+      <RecurrenceScopeDialog
+        open={!!pendingRecurrenceScopeEvent()}
+        mode="delete"
+        onSelect={(scope) => confirmRecurrenceScope(scope)}
+        onCancel={() => cancelRecurrenceScope()}
+      />
       <DeleteConfirmDialog />
       <AppShell
         header={<CalendarHeader />}

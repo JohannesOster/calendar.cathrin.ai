@@ -184,6 +184,7 @@ export const eventsRoute = new Hono()
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
         sendUpdates: z.enum(["all", "none"]).optional(),
+        scope: z.enum(["single", "all"]).optional(),
       })
     ),
     async (c) => {
@@ -193,7 +194,7 @@ export const eventsRoute = new Hono()
 
       const userId = c.get("userId");
       const providerEventId = c.req.param("eventId");
-      const { sendUpdates, ...patch } = c.req.valid("json");
+      const { sendUpdates, scope, ...patch } = c.req.valid("json");
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -207,8 +208,14 @@ export const eventsRoute = new Hono()
       }
 
       try {
+        // For "all" scope on an instance, redirect to the master event
+        let targetEventId = providerEventId;
+        if (scope === "all" && event.recurringEventId) {
+          targetEventId = event.recurringEventId as string;
+        }
+
         const apiEvent = await updateEvent(
-          event.accountId, event.calendarId, providerEventId, patch, event, sendUpdates
+          event.accountId, event.calendarId, targetEventId, patch, event, sendUpdates
         );
 
         // Notify connected clients — include both old and new weeks if event moved
@@ -238,6 +245,7 @@ export const eventsRoute = new Hono()
     const userId = c.get("userId");
     const providerEventId = c.req.param("eventId");
     const sendUpdates = c.req.query("sendUpdates") as "all" | "none" | undefined;
+    const scope = c.req.query("scope") as "single" | "all" | undefined;
 
     const accountIds = await getUserAccountIds(userId);
     if (accountIds.length === 0) {
@@ -250,8 +258,14 @@ export const eventsRoute = new Hono()
       return c.json({ error: "Event not found" }, 404);
     }
 
+    // For "all" scope on an instance, delete the master event instead
+    let targetEventId = providerEventId;
+    if (scope === "all" && event.recurringEventId) {
+      targetEventId = event.recurringEventId as string;
+    }
+
     try {
-      await deleteEvent(event.accountId, event.calendarId, providerEventId, event.id, sendUpdates);
+      await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates);
 
       // Notify connected clients — skip the originating client
       const clientId = c.req.header("X-Client-ID");

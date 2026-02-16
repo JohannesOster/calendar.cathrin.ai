@@ -111,6 +111,7 @@ export async function updateEvent(
   eventId: string,
   patch: EventPatch,
   rollback?: EventPatch,
+  scope?: "single" | "all",
 ): Promise<void> {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
@@ -194,6 +195,10 @@ export async function updateEvent(
     apiPatch.end = isAllDay
       ? formatDateOnly(patch.end)
       : patch.end.toISOString();
+  }
+
+  if (scope) {
+    (apiPatch as Record<string, unknown>).scope = scope;
   }
 
   try {

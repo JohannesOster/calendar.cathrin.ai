@@ -16,6 +16,7 @@ import {
   CalendarSection,
   RemindersSection,
 } from "./EventFormSections";
+import { RecurrenceScopeDialog } from "../ui/RecurrenceScopeDialog";
 
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
@@ -96,6 +97,12 @@ export function EventForm() {
 
   return (
     <div ref={formRef} class="h-full flex flex-col overflow-hidden" data-event-form>
+      <RecurrenceScopeDialog
+        open={!!state.pendingScopePatch()}
+        mode="edit"
+        onSelect={(scope) => state.confirmEditScope(scope)}
+        onCancel={() => state.cancelEditScope()}
+      />
       <Show when={showCommitPrompt()}>
         <CommitPrompt />
       </Show>
