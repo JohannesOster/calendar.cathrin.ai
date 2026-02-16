@@ -1,4 +1,4 @@
-import { eq, and, inArray, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, lte, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, serverEvents, calendarSyncState, fetchedWeeks } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
@@ -61,7 +61,7 @@ export async function syncCalendarIncremental(
     let deleted = 0;
     const affectedWeekIds = new Set<string>();
 
-    // Delete cancelled events
+    // Delete cancelled events (and all recurring instances if a master is cancelled)
     for (const cancelledId of cancelledIds) {
       const existingEvent = await db.query.serverEvents.findFirst({
         where: and(
@@ -72,10 +72,38 @@ export async function syncCalendarIncremental(
 
       if (existingEvent) {
         affectedWeekIds.add(getWeekId(existingEvent.start));
-        await db
-          .delete(serverEvents)
-          .where(eq(serverEvents.id, existingEvent.id));
-        deleted++;
+
+        // If this is a master recurring event, also delete all instances
+        const isRecurringMaster = existingEvent.recurrence != null;
+        if (isRecurringMaster) {
+          const instances = await db.query.serverEvents.findMany({
+            where: and(
+              eq(serverEvents.accountId, accountId),
+              eq(serverEvents.recurringEventId, cancelledId)
+            ),
+            columns: { id: true, start: true },
+          });
+          for (const inst of instances) {
+            affectedWeekIds.add(getWeekId(inst.start));
+          }
+          await db
+            .delete(serverEvents)
+            .where(
+              and(
+                eq(serverEvents.accountId, accountId),
+                or(
+                  eq(serverEvents.id, existingEvent.id),
+                  eq(serverEvents.recurringEventId, cancelledId),
+                ),
+              )
+            );
+          deleted += 1 + instances.length;
+        } else {
+          await db
+            .delete(serverEvents)
+            .where(eq(serverEvents.id, existingEvent.id));
+          deleted++;
+        }
       }
     }
 
