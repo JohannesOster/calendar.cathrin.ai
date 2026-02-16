@@ -1,7 +1,8 @@
 import { Show, For, createMemo, onCleanup } from "solid-js";
-import { Clock, MapPin, AlignLeft, Users } from "lucide-solid";
+import { Clock, MapPin, AlignLeft, Users, Repeat } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import type { CalendarEvent } from "../../stores/event-types";
+import { formatRecurrence } from "../../utils/recurrence-format";
 import { setEvents, events } from "../../stores/events";
 import { apiFetch, ApiError } from "../../lib/api";
 import { showErrorToast } from "../../lib/toast";
@@ -68,6 +69,16 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
             <span>{dateDisplay()}</span>
           </div>
         </div>
+
+        {/* Recurrence */}
+        <Show when={props.event.recurrence || props.event.recurringEventId}>
+          <div class="px-3 py-2 border-t border-border">
+            <div class="flex items-center gap-2 text-sm text-fg">
+              <Repeat size={14} class="text-fg-muted shrink-0" />
+              <span>{props.event.recurrence ? formatRecurrence(props.event.recurrence, props.event.start) : "Repeats"}</span>
+            </div>
+          </div>
+        </Show>
 
         {/* Location */}
         <Show when={props.event.location}>

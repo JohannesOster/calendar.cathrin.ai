@@ -9,7 +9,7 @@ import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/
 import { snapMinutes } from "../../stores/event-creation";
 import { isPendingNotification } from "../../stores/pending-notifications";
 import { isBuffered } from "../../stores/buffered-attendees";
-import { Users } from "lucide-solid";
+import { Users, Repeat } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
 // Shared signal: all segments of the focused event highlight together
@@ -248,7 +248,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         }}
         tabIndex={0}
         role="button"
-        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${showTzIndicator() ? ` ${tzAbbr()}` : ""}${props.event.isReadOnly ? ", view only" : ""}`}
+        aria-label={`${props.event.title}, ${formatTimeRange(props.event.start, props.event.end)}${showTzIndicator() ? ` ${tzAbbr()}` : ""}${props.event.recurringEventId || props.event.recurrence ? ", recurring" : ""}${props.event.isReadOnly ? ", view only" : ""}`}
         aria-selected={isSelected()}
         onFocus={() => setFocusedEventId(props.event.id)}
         onBlur={() => setFocusedEventId((prev) => prev === props.event.id ? null : prev)}
@@ -290,6 +290,9 @@ export function CalendarEvent(props: CalendarEventProps) {
                     ? formatCompactTime(props.event.start, props.event.timeZone)
                     : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
                 </span>
+                <Show when={props.event.recurringEventId || props.event.recurrence}>
+                  <Repeat size={10} aria-hidden="true" />
+                </Show>
                 <Show when={props.event.attendees && props.event.attendees.length > 1}>
                   <span
                     class="inline-flex items-center gap-0.5"

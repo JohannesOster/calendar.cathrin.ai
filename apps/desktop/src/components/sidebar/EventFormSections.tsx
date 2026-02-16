@@ -38,11 +38,12 @@ import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../li
 import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
-import { selectedEventId } from "../../stores/event-selection";
+import { selectedEventId, selectedEvent } from "../../stores/event-selection";
 import { events, setEvents } from "../../stores/events";
 import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { EventFormState } from "./useEventFormState";
+import { formatRecurrence } from "../../utils/recurrence-format";
 
 interface SectionProps {
   state: EventFormState;
@@ -251,10 +252,17 @@ export function TimeSection(props: SectionProps) {
         <TimezoneSelector state={s} />
       </Show>
       {/* Repeat */}
-      <button class="flex w-full items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors">
-        <Repeat size={14} class="shrink-0" />
-        <span>Does not repeat</span>
-      </button>
+      {(() => {
+        const event = selectedEvent();
+        const recurrence = event?.recurrence;
+        const isRecurring = recurrence || event?.recurringEventId;
+        return (
+          <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
+            <Repeat size={14} class="shrink-0" />
+            <span>{isRecurring && recurrence ? formatRecurrence(recurrence, s.start()) : isRecurring ? "Repeats" : "Does not repeat"}</span>
+          </div>
+        );
+      })()}
       </Show>
     </div>
   );

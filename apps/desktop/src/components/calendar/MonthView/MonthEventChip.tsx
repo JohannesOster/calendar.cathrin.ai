@@ -1,4 +1,5 @@
-import { createMemo } from "solid-js";
+import { Show, createMemo } from "solid-js";
+import { Repeat } from "lucide-solid";
 import type { CalendarEvent } from "../../../stores/event-types";
 import { formatCompactTime } from "../../../lib/format-utils";
 
@@ -20,10 +21,13 @@ export function MonthEventChip(props: MonthEventChipProps) {
       style={{ "--event-color": props.event.color }}
       tabIndex={0}
       role="button"
-      aria-label={`${props.event.title} at ${time()}`}
+      aria-label={`${props.event.title} at ${time()}${props.event.recurringEventId || props.event.recurrence ? ", recurring" : ""}`}
     >
       <span class="shrink-0 opacity-60">{time()}</span>
       <span class="truncate">{props.event.title}</span>
+      <Show when={props.event.recurringEventId || props.event.recurrence}>
+        <Repeat size={10} class="shrink-0 opacity-60" aria-hidden="true" />
+      </Show>
     </div>
   );
 }

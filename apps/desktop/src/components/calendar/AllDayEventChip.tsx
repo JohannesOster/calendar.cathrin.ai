@@ -1,5 +1,5 @@
 import { Show, onMount, onCleanup, createMemo } from "solid-js";
-import { Users } from "lucide-solid";
+import { Users, Repeat } from "lucide-solid";
 import { isPendingNotification } from "../../stores/pending-notifications";
 import { isBuffered } from "../../stores/buffered-attendees";
 import type { CalendarEvent } from "../../stores/event-types";
@@ -170,9 +170,10 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
     const type = hasTimes() ? "multi-day timed event" : "all-day event";
     const displayEnd = props.event.isAllDay ? getAllDayInclusiveEnd(props.event.end) : props.event.end;
     const base = `${props.event.title}, ${type}, ${formatDateRange(props.event.start, displayEnd)}`;
+    const recurring = props.event.recurringEventId || props.event.recurrence ? ", recurring" : "";
     const suffix = props.event.isReadOnly ? ", view only" : "";
-    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}${suffix}`;
-    return `${base}${suffix}`;
+    if (hasTimes()) return `${base}, ${formatTimeRange(props.event.start, props.event.end)}${recurring}${suffix}`;
+    return `${base}${recurring}${suffix}`;
   };
 
   return (
@@ -212,6 +213,9 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         }}
       />
       <span class="truncate ml-0.5">{props.event.title}</span>
+      <Show when={props.event.recurringEventId || props.event.recurrence}>
+        <Repeat size={10} class="shrink-0 opacity-50 ml-1" aria-hidden="true" />
+      </Show>
       <Show when={hasTimes()}>
         <span class="shrink-0 text-2xs opacity-50 ml-1">
           {formatChipTimeRange(props.event.start, props.event.end)}
