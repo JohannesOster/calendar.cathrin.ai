@@ -97,12 +97,11 @@ export function mapGraphCalendar(cal: GraphCalendar): ApiCalendar {
 // =============================================================================
 
 /**
- * Convert an Outlook DateTimeTimeZone to an ISO 8601 string.
+ * Convert an Outlook DateTimeTimeZone to a UTC ISO 8601 string.
  *
  * Outlook returns datetimes like "2024-12-09T20:30:00.0000000" with a
- * separate timeZone field. When the timeZone is UTC, we append "Z".
- * For other time zones, the datetime is already local so we return it as-is
- * (the timeZone is preserved separately).
+ * separate timeZone field. The datetime is local to that timezone, so we
+ * must convert it to UTC before returning.
  */
 function toIso(dt: { dateTime: string; timeZone: string }): string {
   // Trim sub-second precision beyond 3 digits and any trailing zeros
@@ -110,7 +109,25 @@ function toIso(dt: { dateTime: string; timeZone: string }): string {
   if (dt.timeZone === "UTC" || dt.timeZone === "tzone://Microsoft/Utc") {
     return cleaned.endsWith("Z") ? cleaned : cleaned + "Z";
   }
-  return cleaned;
+  // Convert local time in the given timezone to UTC.
+  // Parse the local datetime components and use the timezone to compute UTC.
+  const localDate = new Date(cleaned + "Z"); // parse as if UTC to get the numeric components
+  // Get the UTC offset for this timezone at this time by comparing formatted local time
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: dt.timeZone,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(localDate);
+  const get = (type: string) => parseInt(parts.find(p => p.type === type)?.value ?? "0", 10);
+  const formattedAsLocal = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  // The offset is the difference between what we fed in (as UTC) and what it looks like in the target tz
+  const offsetMs = formattedAsLocal - localDate.getTime();
+  // The actual datetime in the tz is `cleaned`, which represents local time.
+  // To get UTC: parse `cleaned` as components, build a UTC timestamp, then subtract the offset.
+  const utcDate = new Date(localDate.getTime() - offsetMs);
+  return utcDate.toISOString().replace(/\.000Z$/, "Z");
 }
 
 /**
@@ -226,15 +243,32 @@ export function mapGraphEvent(
 
 /**
  * Convert an ISO 8601 string to Outlook DateTimeTimeZone format.
- * Strips the "Z" suffix and uses "UTC" as timeZone.
+ *
+ * Outlook's DateTimeTimeZone interprets the `dateTime` field as a local time
+ * in the specified `timeZone`. So if we receive a UTC ISO string and the
+ * caller wants a non-UTC timezone, we must convert to local time first.
  */
 function toDateTimeTimeZone(
   isoString: string,
   timeZone?: string,
 ): GraphDateTimeTimeZone {
-  // Remove the Z suffix — Outlook DateTimeTimeZone doesn't use it
-  const dateTime = isoString.replace(/Z$/, "");
-  return { dateTime, timeZone: timeZone || "UTC" };
+  const tz = timeZone || "UTC";
+  if (tz === "UTC") {
+    // Strip Z — Outlook expects bare datetime with timeZone: "UTC"
+    return { dateTime: isoString.replace(/Z$/, ""), timeZone: "UTC" };
+  }
+  // Convert UTC to local time in the target timezone
+  const date = new Date(isoString);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? "00";
+  const localDateTime = `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+  return { dateTime: localDateTime, timeZone: tz };
 }
 
 /** Map our attendee format to Outlook attendee format. */
