@@ -29,7 +29,7 @@ export function confirmRecurrenceScope(scope: RecurrenceScope): void {
   if (!event) return;
   setPendingRecurrenceScopeEvent(null);
   // Store scope, then check if attendees dialog is also needed
-  pendingScopeForDelete = scope;
+  setPendingScopeForDelete(scope);
   if (event.attendees && event.attendees.length > 0) {
     setPendingDeleteConfirmEvent(event);
     return;
@@ -40,11 +40,11 @@ export function confirmRecurrenceScope(scope: RecurrenceScope): void {
 /** Called by the scope dialog: cancel. */
 export function cancelRecurrenceScope(): void {
   setPendingRecurrenceScopeEvent(null);
-  pendingScopeForDelete = undefined;
+  setPendingScopeForDelete(undefined);
 }
 
 /** Scope chosen from the recurrence dialog, passed through to the attendee dialog. */
-let pendingScopeForDelete: RecurrenceScope | undefined;
+const [pendingScopeForDelete, setPendingScopeForDelete] = createSignal<RecurrenceScope | undefined>(undefined);
 
 // =============================================================================
 // Delete Confirmation (for events with attendees)
@@ -58,14 +58,14 @@ export function confirmDeleteWithChoice(sendUpdates: "all" | "none"): void {
   const event = pendingDeleteConfirmEvent();
   if (!event) return;
   setPendingDeleteConfirmEvent(null);
-  executeDelete(event, sendUpdates, pendingScopeForDelete);
-  pendingScopeForDelete = undefined;
+  executeDelete(event, sendUpdates, pendingScopeForDelete());
+  setPendingScopeForDelete(undefined);
 }
 
 /** Called by the dialog: cancel the delete. */
 export function cancelDeleteConfirm(): void {
   setPendingDeleteConfirmEvent(null);
-  pendingScopeForDelete = undefined;
+  setPendingScopeForDelete(undefined);
 }
 
 // =============================================================================

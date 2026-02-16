@@ -184,7 +184,6 @@ export const eventsRoute = new Hono()
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
         sendUpdates: z.enum(["all", "none"]).optional(),
-        scope: z.enum(["single", "all"]).optional(),
       })
     ),
     async (c) => {
@@ -194,7 +193,8 @@ export const eventsRoute = new Hono()
 
       const userId = c.get("userId");
       const providerEventId = c.req.param("eventId");
-      const { sendUpdates, scope, ...patch } = c.req.valid("json");
+      const { sendUpdates, ...patch } = c.req.valid("json");
+      const scope = c.req.query("scope") as "single" | "all" | undefined;
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {

@@ -308,7 +308,7 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
           const dateISO = instanceStart.toISOString().slice(0, 10);
 
           addLocalEvent({
-            id: `temp-${tempId}-${dateISO}`,
+            id: `${tempId}-${dateISO}`,
             providerEventId: "",
             calendarId: calId,
             title,

@@ -126,6 +126,8 @@ export function formatRecurrence(recurrence: string[], eventStart: Date): string
     }
 
     case "MONTHLY": {
+      // Note: eventStart should be the specific instance's start date, not the master's,
+      // so the ordinal reflects the correct day for the displayed occurrence.
       const prefix = interval === 1 ? "Monthly" : `Every ${interval} months`;
       base = `${prefix} on the ${ordinal(eventStart.getDate())}`;
       break;

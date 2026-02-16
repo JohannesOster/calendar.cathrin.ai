@@ -2216,26 +2216,21 @@ function RecurrenceSelector(props: SectionProps) {
     setCustomOpen(false);
   };
 
-  // Read-only display for edit mode
-  if (isEditing()) {
-    return (
-      <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
-        <Repeat size={14} class="shrink-0" />
-        <span>{currentLabel()}</span>
-      </div>
-    );
-  }
-
   const collection = createMemo(() =>
     createListCollection({
-      items: presets().filter(p => p.value !== "custom"),
+      items: presets(),
       itemToValue: (item) => item.value,
       itemToString: (item) => item.label,
     })
   );
 
   return (
-    <>
+    <Show when={!isEditing()} fallback={
+      <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
+        <Repeat size={14} class="shrink-0" />
+        <span>{currentLabel()}</span>
+      </div>
+    }>
       <Select.Root
         collection={collection()}
         value={[currentValue()]}
@@ -2257,29 +2252,14 @@ function RecurrenceSelector(props: SectionProps) {
         <Select.Positioner>
           <Select.Content class="bg-surface border border-border rounded py-1 z-50">
             <For each={presets()}>
-              {(item) => {
-                if (item.value === "custom") {
-                  return (
-                    <div
-                      class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover outline-none border-t border-border mt-1 pt-1.5"
-                      role="option"
-                      onClick={() => handleSelect("custom")}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelect("custom"); }}
-                      tabIndex={0}
-                    >
-                      {item.label}
-                    </div>
-                  );
-                }
-                return (
-                  <Select.Item
-                    item={item}
-                    class="flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none"
-                  >
-                    <Select.ItemText>{item.label}</Select.ItemText>
-                  </Select.Item>
-                );
-              }}
+              {(item) => (
+                <Select.Item
+                  item={item}
+                  class={`flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none${item.value === "custom" ? " border-t border-border mt-1 pt-1.5" : ""}`}
+                >
+                  <Select.ItemText>{item.label}</Select.ItemText>
+                </Select.Item>
+              )}
             </For>
           </Select.Content>
         </Select.Positioner>
@@ -2291,6 +2271,6 @@ function RecurrenceSelector(props: SectionProps) {
         onDone={handleCustomDone}
         eventStart={s.start()}
       />
-    </>
+    </Show>
   );
 }

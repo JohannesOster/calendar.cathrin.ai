@@ -197,12 +197,11 @@ export async function updateEvent(
       : patch.end.toISOString();
   }
 
-  if (scope) {
-    (apiPatch as Record<string, unknown>).scope = scope;
-  }
+  const params = new URLSearchParams({ calendarId: event.calendarId });
+  if (scope) params.set("scope", scope);
 
   try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?calendarId=${encodeURIComponent(event.calendarId)}`, {
+    await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
