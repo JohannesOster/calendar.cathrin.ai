@@ -2193,7 +2193,7 @@ function RecurrenceSelector(props: SectionProps) {
 
   const currentLabel = createMemo(() => {
     const rec = s.recurrence();
-    if (rec) return formatRecurrence(rec, s.start());
+    if (rec) return s.start() ? formatRecurrence(rec, s.start()!) : "Repeats";
     // Instances (singleEvents=true) don't carry the RRULE — show generic label
     if (isRecurringInstance()) return "Repeats";
     return "Does not repeat";
