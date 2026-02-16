@@ -2161,12 +2161,15 @@ function RecurrenceSelector(props: SectionProps) {
 
   const isEditing = () => s.mode() === "edit";
 
-  // In edit mode, instances (with recurringEventId but no recurrence rule)
-  // can't have their recurrence changed — only the master can.
-  const isInstance = () => {
+  // Whether this is a recurring event instance (has recurringEventId).
+  // With singleEvents=true, all recurring occurrences are instances — they
+  // carry recurringEventId but no recurrence array (the RRULE lives on the
+  // master). Editing recurrence on an instance routes to the master via
+  // "all" scope, so the selector should still be interactive.
+  const isRecurringInstance = () => {
     if (!isEditing()) return false;
     const ev = selectedEvent();
-    return !!ev?.recurringEventId && !ev?.recurrence;
+    return !!ev?.recurringEventId;
   };
 
   // Generate contextual presets based on the event start date
@@ -2190,12 +2193,10 @@ function RecurrenceSelector(props: SectionProps) {
 
   const currentLabel = createMemo(() => {
     const rec = s.recurrence();
-    if (!rec) {
-      // Instance without its own recurrence rule
-      if (isInstance()) return "Repeats";
-      return "Does not repeat";
-    }
-    return formatRecurrence(rec, s.start());
+    if (rec) return formatRecurrence(rec, s.start());
+    // Instances (singleEvents=true) don't carry the RRULE — show generic label
+    if (isRecurringInstance()) return "Repeats";
+    return "Does not repeat";
   });
 
   const currentValue = createMemo(() => {
@@ -2229,8 +2230,8 @@ function RecurrenceSelector(props: SectionProps) {
     })
   );
 
-  // Read-only for instances (can't change recurrence on a single occurrence)
-  const readOnly = () => isInstance() || (!isEditing() && false) || (isEditing() && !s.isOrganizer());
+  // Read-only only when user is not the organizer
+  const readOnly = () => isEditing() && !s.isOrganizer();
 
   return (
     <Show when={!readOnly()} fallback={
