@@ -3,10 +3,11 @@ import { db } from "../db/index.js";
 import { accounts, serverEvents } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { getProvider } from "../providers/registry.js";
-import type {
-  ProviderEventPatch,
-  MutationOptions,
-  RsvpResponse,
+import {
+  ProviderApiError,
+  type ProviderEventPatch,
+  type MutationOptions,
+  type RsvpResponse,
 } from "../providers/types.js";
 import { upsertServerEvent } from "./event-storage.js";
 import { mapServerEventToApi } from "./event-mapper.js";
@@ -209,10 +210,19 @@ export async function deleteEvent(
 
   const provider = getProvider(account.provider as Provider);
   const accessToken = await getAccessToken(accountId);
-  await provider.deleteEvent(
-    accessToken, calendarId, providerEventId,
-    sendUpdates ? { sendUpdates } : undefined,
-  );
+  try {
+    await provider.deleteEvent(
+      accessToken, calendarId, providerEventId,
+      sendUpdates ? { sendUpdates } : undefined,
+    );
+  } catch (error) {
+    // 404/410 = already deleted on the provider side — still clean up our DB
+    if (error instanceof ProviderApiError && (error.statusCode === 404 || error.statusCode === 410)) {
+      console.log(`[events] Event ${providerEventId} already gone from provider (${error.statusCode}), cleaning up DB`);
+    } else {
+      throw error;
+    }
+  }
 
   if (scope === "all") {
     // Remove the master event and all instances from the DB cache.
