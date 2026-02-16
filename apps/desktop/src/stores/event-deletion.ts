@@ -76,6 +76,8 @@ export interface PendingDeletion {
   event: CalendarEvent;
   sendUpdates?: "all" | "none";
   scope?: RecurrenceScope;
+  /** All events removed (for "all" scope undo). */
+  removedEvents?: CalendarEvent[];
 }
 
 // =============================================================================
@@ -113,7 +115,7 @@ export function onDeletion(fn: DeletionListener): () => void {
 /**
  * Fire the actual DELETE API call for an event.
  */
-function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none", scope?: RecurrenceScope): void {
+function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none", scope?: RecurrenceScope, removedEvents?: CalendarEvent[]): void {
   const params = new URLSearchParams();
   params.set("calendarId", event.calendarId);
   if (sendUpdates) params.set("sendUpdates", sendUpdates);
@@ -129,8 +131,15 @@ function fireDeleteApi(event: CalendarEvent, sendUpdates?: "all" | "none", scope
     .catch((error) => {
       console.error(`[events] Failed to delete event ${event.id}:`, error);
       // Restore on failure — server didn't accept the deletion
-      addLocalEvent(event);
-      restoreCachedEventToDisk(event);
+      if (removedEvents) {
+        for (const e of removedEvents) {
+          addLocalEvent(e);
+          restoreCachedEventToDisk(e);
+        }
+      } else {
+        addLocalEvent(event);
+        restoreCachedEventToDisk(event);
+      }
       if (error instanceof ApiError && error.status === 403) {
         showErrorToast("Permission denied", "You don't have permission to modify this calendar");
       }
@@ -148,8 +157,22 @@ function executeDelete(event: CalendarEvent, sendUpdates?: "all" | "none", scope
   for (const fn of listeners) fn(deletion);
 
   // Optimistic removal from UI + disk cache
-  removeLocalEvent(event.id);
-  deleteCachedEventFromDisk(event.id);
+  if (scope === "all") {
+    // Remove all instances of this recurring series
+    const masterId = event.recurringEventId || event.providerEventId;
+    const allEvents = events();
+    const toRemove = allEvents.filter(
+      e => e.recurringEventId === masterId || e.providerEventId === masterId
+    );
+    deletion.removedEvents = toRemove;
+    for (const e of toRemove) {
+      removeLocalEvent(e.id);
+      deleteCachedEventFromDisk(e.id);
+    }
+  } else {
+    removeLocalEvent(event.id);
+    deleteCachedEventFromDisk(event.id);
+  }
 }
 
 /**
@@ -186,9 +209,16 @@ export function undoDelete(eventId: string): void {
 
   pendingMap.delete(eventId);
 
-  // Restore event to UI + disk cache
-  addLocalEvent(pending.event);
-  restoreCachedEventToDisk(pending.event);
+  // Restore events to UI + disk cache
+  if (pending.removedEvents) {
+    for (const e of pending.removedEvents) {
+      addLocalEvent(e);
+      restoreCachedEventToDisk(e);
+    }
+  } else {
+    addLocalEvent(pending.event);
+    restoreCachedEventToDisk(pending.event);
+  }
 }
 
 /**
@@ -199,5 +229,5 @@ export function confirmDelete(eventId: string): void {
   if (!pending) return;
 
   pendingMap.delete(eventId);
-  fireDeleteApi(pending.event, pending.sendUpdates, pending.scope);
+  fireDeleteApi(pending.event, pending.sendUpdates, pending.scope, pending.removedEvents);
 }
