@@ -2,7 +2,7 @@
  * Cathrin Color System
  *
  * Maps raw provider colors (Google, Outlook, Apple) to a curated palette
- * designed for our light surface (#fcfcfc) with #2d6b8a accent.
+ * designed for our light surface (#fcfcfc) with #212020 accent.
  *
  * Provider colors vary wildly in saturation and brightness. This mapping
  * preserves the user's color *intent* (blue stays blue, green stays green)
@@ -13,7 +13,7 @@
  *   2. Unknown hex → nearest match via OKLab perceptual distance
  *
  * Vivid, contemporary palette. All colors pass ≥4.5:1 contrast against
- * white text on solid bg. Cool-toned graphite complements the teal accent.
+ * white text on solid bg. Cool-toned graphite complements the near-black accent.
  * Must stay in sync with --event-* variables in App.css.
  */
 
