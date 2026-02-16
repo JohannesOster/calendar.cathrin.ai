@@ -4,6 +4,8 @@ import { ChevronDown, ChevronUp, Ellipsis } from "lucide-solid";
 import { Menu } from "@ark-ui/solid/menu";
 import type { CalendarAccount } from "../../../stores/accounts";
 import { SIDEBAR } from "../../../constants/sidebar";
+import googleIcon from "../../../assets/google.svg";
+import outlookIcon from "../../../assets/outlook.svg";
 
 interface AccountItemProps {
   account: CalendarAccount;
@@ -35,6 +37,13 @@ export function SortableAccountItem(props: AccountItemProps) {
           class="group px-2 py-1 rounded cursor-pointer hover:bg-surface-hover select-none flex items-center gap-1"
           onClick={() => props.toggleCollapse()}
         >
+          <img
+            src={props.account.provider === "outlook" ? outlookIcon : googleIcon}
+            alt={props.account.provider}
+            width="13"
+            height="13"
+            class="shrink-0 mr-1"
+          />
           <span class="text-xs font-medium text-fg-muted truncate flex-1 min-w-0">
             {props.account.email}
           </span>
