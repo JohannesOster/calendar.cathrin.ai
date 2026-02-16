@@ -40,7 +40,6 @@ import { isPendingNotification, removePendingNotification } from "../../stores/p
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { selectedEventId, selectedEvent } from "../../stores/event-selection";
 import { events, setEvents } from "../../stores/events";
-import { draftRecurrence, setDraftRecurrence } from "../../stores/event-creation";
 import { CustomRecurrenceDialog } from "./CustomRecurrenceDialog";
 import { dayCodeFromDate, ordinal, buildRrule } from "../../utils/recurrence-format";
 import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
@@ -2162,6 +2161,14 @@ function RecurrenceSelector(props: SectionProps) {
 
   const isEditing = () => s.mode() === "edit";
 
+  // In edit mode, instances (with recurringEventId but no recurrence rule)
+  // can't have their recurrence changed — only the master can.
+  const isInstance = () => {
+    if (!isEditing()) return false;
+    const ev = selectedEvent();
+    return !!ev?.recurringEventId && !ev?.recurrence;
+  };
+
   // Generate contextual presets based on the event start date
   const presets = createMemo(() => {
     const start = s.start();
@@ -2182,19 +2189,17 @@ function RecurrenceSelector(props: SectionProps) {
   });
 
   const currentLabel = createMemo(() => {
-    if (isEditing()) {
-      const ev = selectedEvent();
-      if (ev?.recurrence) return formatRecurrence(ev.recurrence, s.start());
-      if (ev?.recurringEventId) return "Repeats";
+    const rec = s.recurrence();
+    if (!rec) {
+      // Instance without its own recurrence rule
+      if (isInstance()) return "Repeats";
       return "Does not repeat";
     }
-    const rec = draftRecurrence();
-    if (!rec) return "Does not repeat";
     return formatRecurrence(rec, s.start());
   });
 
   const currentValue = createMemo(() => {
-    const rec = isEditing() ? selectedEvent()?.recurrence : draftRecurrence();
+    const rec = s.recurrence();
     if (!rec) return "none";
     const rrule = rec[0];
     const match = presets().find(p => p.rrule && p.rrule[0] === rrule);
@@ -2208,11 +2213,11 @@ function RecurrenceSelector(props: SectionProps) {
     }
     const preset = presets().find(p => p.value === value);
     if (!preset) return;
-    setDraftRecurrence(preset.rrule);
+    s.setRecurrence(preset.rrule);
   };
 
   const handleCustomDone = (rrule: string[]) => {
-    setDraftRecurrence(rrule);
+    s.setRecurrence(rrule);
     setCustomOpen(false);
   };
 
@@ -2224,8 +2229,11 @@ function RecurrenceSelector(props: SectionProps) {
     })
   );
 
+  // Read-only for instances (can't change recurrence on a single occurrence)
+  const readOnly = () => isInstance() || (!isEditing() && false) || (isEditing() && !s.isOrganizer());
+
   return (
-    <Show when={!isEditing()} fallback={
+    <Show when={!readOnly()} fallback={
       <div class="flex w-full items-center gap-2 text-sm text-fg-muted rounded px-2 py-2">
         <Repeat size={14} class="shrink-0" />
         <span>{currentLabel()}</span>

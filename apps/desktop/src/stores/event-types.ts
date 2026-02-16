@@ -45,6 +45,7 @@ export type EventPatch = {
   conferencing?: { uri: string; label?: string } | null;
   timeZone?: string;
   attendees?: Attendee[] | null;
+  recurrence?: string[] | null;
 };
 
 export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {

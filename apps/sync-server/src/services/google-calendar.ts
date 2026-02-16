@@ -133,6 +133,7 @@ export interface GoogleEventPatch {
   colorId?: string | null;
   conferenceData?: GoogleConferenceData | null;
   attendees?: { email: string; responseStatus?: string; self?: boolean; organizer?: boolean }[];
+  recurrence?: string[] | null;
 }
 
 /**

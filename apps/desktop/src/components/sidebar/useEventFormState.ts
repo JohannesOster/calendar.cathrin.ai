@@ -35,6 +35,8 @@ import {
   setShadowStart,
   shadowEnd,
   setShadowEnd,
+  draftRecurrence,
+  setDraftRecurrence,
 } from "../../stores/event-creation";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
@@ -63,6 +65,7 @@ const FIELD_GROUPS: Record<string, FieldGroup> = {
   attendees: "attendees",
   transparency: "preferences", visibility: "preferences", reminders: "preferences", colorId: "preferences",
   conferencing: "conferencing",
+  recurrence: "preferences",
 };
 
 export function useEventFormState() {
@@ -86,6 +89,7 @@ export function useEventFormState() {
   const [editConferencing, setEditConferencing] = createSignal<{ uri: string; label?: string } | null>(null);
   const [editTimeZone, setEditTimeZone] = createSignal<string | undefined>(undefined);
   const [editAttendees, setEditAttendees] = createSignal<Attendee[]>([]);
+  const [editRecurrence, setEditRecurrence] = createSignal<string[] | null>(null);
   const [conferencingLoading, setConferencingLoading] = createSignal(false);
 
   // Recurrence scope: once the user picks a scope for a recurring event,
@@ -237,6 +241,7 @@ export function useEventFormState() {
     setEditConferencing(event.conferencing ?? null);
     setEditTimeZone(event.timeZone);
     setEditAttendees(event.attendees ?? []);
+    setEditRecurrence(event.recurrence ?? null);
     setConferencingLoading(false);
     setEditScope(null);
     setPendingScopePatch(null);
@@ -391,6 +396,23 @@ export function useEventFormState() {
   const setVisibility = (v: "default" | "public" | "private") => {
     if (mode() === "create") { setDraftVisibility(v); }
     else { setEditVisibility(v); scheduleSave({ visibility: v }); flushSave(); }
+  };
+
+  const recurrence = (): string[] | null => mode() === "create" ? draftRecurrence() : editRecurrence();
+  const setRecurrence = (v: string[] | null) => {
+    if (mode() === "create") { setDraftRecurrence(v); }
+    else {
+      setEditRecurrence(v);
+      // Recurrence is a series-level property — always apply to "all" events,
+      // bypassing the scope dialog (which would offer "This event" nonsensically).
+      const eventId = selectedEventId();
+      const event = eventId ? events().find(e => e.id === eventId) : null;
+      if (event && (event.recurringEventId || event.recurrence) && !editScope()) {
+        setEditScope("all");
+      }
+      scheduleSave({ recurrence: v });
+      flushSave();
+    }
   };
 
   const colorId = (): CathrinColorKey | null => mode() === "create" ? (draftColorId() as CathrinColorKey | null) : editColorId();
@@ -877,6 +899,8 @@ export function useEventFormState() {
     setEditStart,
     editEnd: editEnd as () => Date | null,
     setEditEnd,
+    recurrence,
+    setRecurrence,
     scheduleSave,
     pendingScopePatch,
     confirmEditScope,

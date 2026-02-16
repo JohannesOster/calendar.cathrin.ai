@@ -134,6 +134,7 @@ export async function updateEvent(
     ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
     ...(rollback?.timeZone !== undefined && { timeZone: rollback.timeZone }),
     ...(rollback?.attendees !== undefined && { attendees: rollback.attendees ?? undefined }),
+    ...(rollback?.recurrence !== undefined && { recurrence: rollback.recurrence ?? undefined }),
   };
 
   // Apply optimistic update
@@ -155,6 +156,7 @@ export async function updateEvent(
             ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
             ...(patch.timeZone !== undefined && { timeZone: patch.timeZone }),
             ...(patch.attendees !== undefined && { attendees: patch.attendees ?? undefined }),
+            ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
           }
         : e
     )
@@ -184,6 +186,9 @@ export async function updateEvent(
     (apiPatch as Record<string, unknown>).attendees = patch.attendees
       ? patch.attendees.map(a => ({ email: a.email, name: a.name }))
       : null;
+  }
+  if (patch.recurrence !== undefined) {
+    (apiPatch as Record<string, unknown>).recurrence = patch.recurrence;
   }
   const isAllDay = patch.isAllDay ?? event.isAllDay;
   if (patch.start !== undefined) {

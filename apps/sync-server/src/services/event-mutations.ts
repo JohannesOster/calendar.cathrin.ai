@@ -113,6 +113,7 @@ export async function updateEvent(
     conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
     timeZone?: string;
     attendees?: { email: string; name?: string }[] | null;
+    recurrence?: string[] | null;
   },
   existingEvent: ServerEvent,
   sendUpdates?: "all" | "none"
@@ -141,6 +142,7 @@ export async function updateEvent(
     conferencing: patch.conferencing,
     attendees: patch.attendees,
     timeZone: patch.timeZone,
+    recurrence: patch.recurrence,
   };
 
   // If timeZone changes without dates, include existing dates for the provider

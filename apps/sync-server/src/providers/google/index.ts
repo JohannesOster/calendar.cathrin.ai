@@ -365,6 +365,10 @@ export class GoogleCalendarProvider implements CalendarProvider {
         : { dateTime: patch.end, date: null, ...(tz && { timeZone: tz }) };
     }
 
+    if (patch.recurrence !== undefined) {
+      googlePatch.recurrence = patch.recurrence;
+    }
+
     const service = new GoogleCalendarService(accessToken);
     const updated = await service.patchEvent(
       calendarId,

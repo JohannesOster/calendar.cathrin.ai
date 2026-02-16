@@ -134,6 +134,7 @@ export interface ProviderEventPatch {
   conferencing?: { type: "create" } | { type: "manual"; uri: string } | null;
   attendees?: { email: string; name?: string }[] | null;
   timeZone?: string;
+  recurrence?: string[] | null;
 }
 
 export type RsvpResponse = "accepted" | "declined" | "tentative";

@@ -184,6 +184,7 @@ export const eventsRoute = new Hono()
         timeZone: z.string().optional(),
         attendees: z.array(z.object({ email: z.string().email(), name: z.string().optional() })).nullable().optional(),
         sendUpdates: z.enum(["all", "none"]).optional(),
+        recurrence: z.array(z.string()).nullable().optional(),
       })
     ),
     async (c) => {
