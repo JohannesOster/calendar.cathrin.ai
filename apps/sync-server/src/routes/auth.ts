@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import { sessions, users } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { renderOAuthSuccessPage } from "../lib/oauth-success-page.js";
+import { renderOAuthErrorPage } from "../lib/oauth-error-page.js";
 import { createOAuthState, validateOAuthState, pollOAuthState } from "../services/oauth-state.js";
 import { handleOAuthCallback } from "../services/oauth-callback.js";
 import { verifySessionToken } from "../lib/jwt.js";
@@ -116,10 +117,7 @@ export const authRoute = new Hono()
   )
   .get("/google", async (c) => {
     if (!db) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>Database not configured</p></body></html>`,
-        500
-      );
+      return c.html(renderOAuthErrorPage("Database not configured"), 500);
     }
 
     const accessToken = c.get("token");
@@ -127,17 +125,11 @@ export const authRoute = new Hono()
     const googleUser = c.get("user-google");
 
     if (!accessToken || !googleUser?.email || !googleUser?.id) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>Failed to get user info from Google</p></body></html>`,
-        400
-      );
+      return c.html(renderOAuthErrorPage("Failed to get user info from Google"), 400);
     }
 
     if (!refreshToken?.token) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>No refresh token received. Please revoke access and try again.</p></body></html>`,
-        400
-      );
+      return c.html(renderOAuthErrorPage("No refresh token received. Please revoke access and try again."), 400);
     }
 
     try {
@@ -157,12 +149,12 @@ export const authRoute = new Hono()
         c.header("Set-Cookie", "oauth_state=; Path=/; HttpOnly; Max-Age=0");
       }
 
-      return c.html(renderOAuthSuccessPage(jwt));
+      return c.html(renderOAuthSuccessPage(jwt, "google"));
     } catch (error) {
       console.error("OAuth callback error:", error);
       return c.html(
-        `<html><body><h1>Error</h1><p>Failed to save account: ${error instanceof Error ? error.message : "Unknown error"}</p></body></html>`,
-        500
+        renderOAuthErrorPage(`Failed to save account: ${error instanceof Error ? error.message : "Unknown error"}`),
+        500,
       );
     }
   })
@@ -204,10 +196,7 @@ export const authRoute = new Hono()
   })
   .get("/outlook/callback", async (c) => {
     if (!db) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>Database not configured</p></body></html>`,
-        500
-      );
+      return c.html(renderOAuthErrorPage("Database not configured"), 500);
     }
 
     const code = c.req.query("code");
@@ -217,29 +206,17 @@ export const authRoute = new Hono()
 
     if (error) {
       console.error(`[auth/outlook] OAuth error: ${error} — ${errorDescription}`);
-      const safeMessage = (errorDescription || error || "").replace(/[&<>"]/g, (c: string) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] || c
-      );
-      return c.html(
-        `<html><body><h1>Error</h1><p>${safeMessage}</p></body></html>`,
-        400
-      );
+      return c.html(renderOAuthErrorPage(errorDescription || error || "Unknown error"), 400);
     }
 
     if (!code || !state) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>Missing authorization code or state</p></body></html>`,
-        400
-      );
+      return c.html(renderOAuthErrorPage("Missing authorization code or state"), 400);
     }
 
     // Retrieve and consume the PKCE verifier
     const codeVerifier = consumePkceVerifier(state);
     if (!codeVerifier) {
-      return c.html(
-        `<html><body><h1>Error</h1><p>PKCE verifier expired or not found. Please try again.</p></body></html>`,
-        400
-      );
+      return c.html(renderOAuthErrorPage("PKCE verifier expired or not found. Please try again."), 400);
     }
 
     try {
@@ -250,10 +227,7 @@ export const authRoute = new Hono()
       const tokens = await provider.exchangeCode(code, redirectUri, codeVerifier);
 
       if (!tokens.refreshToken) {
-        return c.html(
-          `<html><body><h1>Error</h1><p>No refresh token received from Microsoft. Please try again.</p></body></html>`,
-          400
-        );
+        return c.html(renderOAuthErrorPage("No refresh token received from Microsoft. Please try again."), 400);
       }
 
       // Fetch user profile from Microsoft Graph
@@ -276,12 +250,12 @@ export const authRoute = new Hono()
         c.header("Set-Cookie", "oauth_state=; Path=/; HttpOnly; Max-Age=0");
       }
 
-      return c.html(renderOAuthSuccessPage(jwt));
+      return c.html(renderOAuthSuccessPage(jwt, "outlook"));
     } catch (err) {
       console.error("[auth/outlook] Callback error:", err);
       return c.html(
-        `<html><body><h1>Error</h1><p>Failed to connect Outlook: ${err instanceof Error ? err.message : "Unknown error"}</p></body></html>`,
-        500
+        renderOAuthErrorPage(`Failed to connect Outlook: ${err instanceof Error ? err.message : "Unknown error"}`),
+        500,
       );
     }
   })

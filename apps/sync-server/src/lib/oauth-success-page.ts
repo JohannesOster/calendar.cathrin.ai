@@ -1,53 +1,40 @@
-export function renderOAuthSuccessPage(jwt: string): string {
-  return `<!DOCTYPE html>
-        <html>
-          <head>
-            <title>Connected!</title>
-            <meta name="session-token" content="${jwt}">
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                background: #f5f5f5;
-              }
-              .container {
-                text-align: center;
-                padding: 2rem;
-                background: white;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              h1 { color: #10b981; margin-bottom: 0.5rem; }
-              p { color: #666; }
-              .token {
-                margin-top: 1rem;
-                padding: 0.5rem;
-                background: #f0f0f0;
-                border-radius: 4px;
-                font-family: monospace;
-                font-size: 0.75rem;
-                word-break: break-all;
-                max-width: 400px;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>Connected!</h1>
-              <p>Your calendar account has been connected.</p>
-              <p>You can close this window.</p>
-              <div class="token" id="token" style="display: none;">${jwt}</div>
-            </div>
-            <script>
-              // Notify the desktop app via custom protocol or window message
-              if (window.opener) {
-                window.opener.postMessage({ type: 'oauth-success', token: '${jwt}' }, '*');
-              }
-            </script>
-          </body>
-        </html>`;
+import { oauthPageShell } from "./oauth-page-shell.js";
+
+export function renderOAuthSuccessPage(
+  jwt: string,
+  provider?: string,
+): string {
+  const providerLabel = provider === "outlook" ? "Outlook" : "Google";
+
+  return oauthPageShell({
+    title: "Connected — Cathrin",
+    body: `
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="16" fill="#212020"/>
+          <path class="checkmark" d="M10 16.5L14 20.5L22 12.5" stroke="#fcfcfc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <h1>You're all set</h1>
+      <p>Your ${providerLabel} calendar is connected.<br/>Head back to Cathrin.</p>
+      <div class="token" id="token" style="display:none;">${jwt}</div>
+    `,
+    extraStyles: `
+      .checkmark {
+        stroke-dasharray: 24;
+        stroke-dashoffset: 24;
+        animation: draw 0.4s ease-out 0.2s forwards;
+      }
+      @keyframes draw {
+        to { stroke-dashoffset: 0; }
+      }
+    `,
+    script: `
+      if (window.opener) {
+        window.opener.postMessage({ type: 'oauth-success', token: '${jwt}' }, '*');
+      }
+      // Attempt to close — works in some browsers when tab was opened programmatically
+      setTimeout(function() { window.close(); }, 3000);
+    `,
+  });
 }
