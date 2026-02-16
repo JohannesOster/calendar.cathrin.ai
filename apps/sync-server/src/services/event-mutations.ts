@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, serverEvents } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
@@ -198,7 +198,8 @@ export async function deleteEvent(
   calendarId: string,
   providerEventId: string,
   eventDbId: string,
-  sendUpdates?: "all" | "none"
+  sendUpdates?: "all" | "none",
+  scope?: "single" | "all"
 ): Promise<void> {
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
@@ -213,9 +214,22 @@ export async function deleteEvent(
     sendUpdates ? { sendUpdates } : undefined,
   );
 
-  await db!
-    .delete(serverEvents)
-    .where(eq(serverEvents.id, eventDbId));
+  if (scope === "all") {
+    // Remove the master event and all instances from the DB cache.
+    // The master's providerEventId becomes the recurringEventId for instances.
+    await db!
+      .delete(serverEvents)
+      .where(
+        or(
+          eq(serverEvents.id, eventDbId),
+          eq(serverEvents.recurringEventId, providerEventId),
+        )
+      );
+  } else {
+    await db!
+      .delete(serverEvents)
+      .where(eq(serverEvents.id, eventDbId));
+  }
 }
 
 /**

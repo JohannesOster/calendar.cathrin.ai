@@ -265,7 +265,7 @@ export const eventsRoute = new Hono()
     }
 
     try {
-      await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates);
+      await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates, scope);
 
       // Notify connected clients — skip the originating client
       const clientId = c.req.header("X-Client-ID");
