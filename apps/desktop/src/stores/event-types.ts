@@ -28,6 +28,7 @@ export interface CalendarEvent {
   attendees?: Attendee[];
   recurrence?: string[];
   recurringEventId?: string;
+  createdAt?: Date;
 }
 
 export type EventPatch = {

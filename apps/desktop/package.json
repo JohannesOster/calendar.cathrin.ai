@@ -25,6 +25,7 @@
     "@thisbeyond/solid-dnd": "^0.7.5",
     "gsap": "^3.14.2",
     "lucide-solid": "^0.562.0",
+    "rrule": "^2.8.1",
     "solid-js": "^1.9.3"
   },
   "devDependencies": {

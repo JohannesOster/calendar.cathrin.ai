@@ -1,13 +1,15 @@
 import { createSignal } from "solid-js";
 import { defaultCalendarId, connectedAccounts } from "./accounts";
 import { setDefaultCalendar } from "./account-ordering";
-import { addLocalEvent, removeLocalEvent, setEvents } from "./events";
+import { addLocalEvent, setEvents } from "./events";
 import { revalidateWeeksForDates } from "./event-polling";
 import { apiFetch, ApiError } from "../lib/api";
 import { showErrorToast } from "../lib/toast";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
+import { RRule } from "rrule";
+import { centerDate } from "./calendar-navigation";
 import { addPendingNotification } from "./pending-notifications";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
 
@@ -251,7 +253,9 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     apiEnd = end.toISOString();
   }
 
-  // Optimistic insert
+  const now = new Date();
+
+  // Optimistic insert — master event
   addLocalEvent({
     id: tempId,
     providerEventId: "",
@@ -272,7 +276,65 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     timeZone,
     attendees: attendees.length > 0 ? attendees : undefined,
     recurrence: recurrence ?? undefined,
+    createdAt: now,
   });
+
+  // Expand RRULE to generate optimistic instances in the visible range
+  if (recurrence && recurrence.length > 0) {
+    const rruleStr = recurrence.find(r => r.startsWith("RRULE:") || r.startsWith("FREQ="));
+    if (rruleStr) {
+      try {
+        const center = centerDate();
+        const rangeStart = new Date(center);
+        rangeStart.setDate(rangeStart.getDate() - 30);
+        const rangeEnd = new Date(center);
+        rangeEnd.setDate(rangeEnd.getDate() + 60);
+
+        const durationMs = eventEnd.getTime() - eventStart.getTime();
+        const rule = RRule.fromString(rruleStr.replace(/^RRULE:/, ""));
+        // Override dtstart to match the event start
+        const ruleWithStart = new RRule({
+          ...rule.origOptions,
+          dtstart: eventStart,
+        });
+        const occurrences = ruleWithStart.between(rangeStart, rangeEnd, true);
+
+        for (const occ of occurrences) {
+          // Skip the first occurrence — it's the master event we already added
+          if (occ.getTime() === eventStart.getTime()) continue;
+
+          const instanceStart = occ;
+          const instanceEnd = new Date(occ.getTime() + durationMs);
+          const dateISO = instanceStart.toISOString().slice(0, 10);
+
+          addLocalEvent({
+            id: `temp-${tempId}-${dateISO}`,
+            providerEventId: "",
+            calendarId: calId,
+            title,
+            start: instanceStart,
+            end: instanceEnd,
+            isAllDay,
+            color,
+            location,
+            description,
+            isReadOnly: false,
+            transparency,
+            visibility,
+            reminders: reminders.length > 0 ? reminders : undefined,
+            colorId: colorKey ?? undefined,
+            conferencing,
+            timeZone,
+            attendees: attendees.length > 0 ? attendees : undefined,
+            recurringEventId: tempId,
+            createdAt: now,
+          });
+        }
+      } catch (err) {
+        console.warn("[event-creation] Failed to expand RRULE:", err);
+      }
+    }
+  }
 
   // Reset creation state
   cancelCreation();
@@ -335,7 +397,8 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
     })
     .catch((error) => {
       console.error("[event-creation] Failed to save event:", error);
-      removeLocalEvent(tempId);
+      // Remove master + all expanded instances
+      setEvents(prev => prev.filter(e => e.id !== tempId && e.recurringEventId !== tempId));
       if (error instanceof ApiError && error.status === 403) {
         showErrorToast("Permission denied", "You don't have permission to modify this calendar");
       }

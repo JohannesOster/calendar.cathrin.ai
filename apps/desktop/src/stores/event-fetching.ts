@@ -17,6 +17,7 @@ import {
   replaceEventsOnDisk,
 } from "../lib/event-cache";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
+import { TEMP_EVENT_TTL_MS } from "../constants/calendar";
 import type { CalendarEvent } from "./event-types";
 import { convertApiEvent } from "./event-types";
 import {
@@ -111,10 +112,33 @@ export function replaceEventsInRange(
   );
   const newEventIds = new Set(filtered.map((e) => e.id));
 
+  // Collect recurringEventIds from server response to detect when server has expanded a series
+  const serverRecurringIds = new Set(
+    filtered.filter(e => e.recurringEventId).map(e => e.recurringEventId!)
+  );
+
   const kept = existingEvents.filter((event) => {
     // Never touch the event being dragged — its local state is authoritative
     if (dragId && event.id === dragId) return true;
     if (pendingMap.has(event.id)) return false;
+
+    // Preserve temp recurring instances whose series hasn't arrived from server yet
+    if (event.id.startsWith("temp-") && event.recurringEventId
+        && !serverRecurringIds.has(event.recurringEventId)) {
+      // Purge stale temp instances past TTL
+      if (event.createdAt && Date.now() - event.createdAt.getTime() > TEMP_EVENT_TTL_MS) {
+        return false;
+      }
+      return true;
+    }
+    // Also preserve temp master events (have recurrence but no recurringEventId)
+    if (event.id.startsWith("temp-") && event.recurrence && !event.recurringEventId) {
+      if (event.createdAt && Date.now() - event.createdAt.getTime() > TEMP_EVENT_TTL_MS) {
+        return false;
+      }
+      return true;
+    }
+
     const overlaps =
       event.start.getTime() <= endMs && event.end.getTime() >= startMs;
     return !overlaps || newEventIds.has(event.id);

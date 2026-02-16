@@ -135,6 +135,9 @@ export const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** Hours before current time to show on initial load */
 export const INITIAL_SCROLL_OFFSET_HOURS = 2;
 
+/** Max lifetime for optimistic temp recurring instances before purging (ms) */
+export const TEMP_EVENT_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 /** Minimum scroll movement (px) to register direction change */
 export const DIRECTION_THRESHOLD_PX = 10;
 
