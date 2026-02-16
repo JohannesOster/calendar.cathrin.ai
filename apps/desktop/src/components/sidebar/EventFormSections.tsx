@@ -2274,12 +2274,16 @@ function RecurrenceSelector(props: SectionProps) {
         </Select.Positioner>
         <Select.HiddenSelect />
       </Select.Root>
-      <CustomRecurrenceDialog
-        open={customOpen()}
-        onClose={() => setCustomOpen(false)}
-        onDone={handleCustomDone}
-        eventStart={s.start()}
-      />
+      <Show when={s.start()}>
+        {(start) => (
+          <CustomRecurrenceDialog
+            open={customOpen()}
+            onClose={() => setCustomOpen(false)}
+            onDone={handleCustomDone}
+            eventStart={start()}
+          />
+        )}
+      </Show>
     </Show>
   );
 }
