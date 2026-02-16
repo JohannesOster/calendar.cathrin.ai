@@ -26,6 +26,8 @@ export interface CalendarEvent {
   conferencing?: { uri: string; label?: string } | null;
   timeZone?: string;
   attendees?: Attendee[];
+  recurrence?: string[];
+  recurringEventId?: string;
 }
 
 export type EventPatch = {
@@ -66,5 +68,7 @@ export function convertApiEvent(event: ApiCalendarEvent): CalendarEvent {
     conferencing: event.conferencing ?? undefined,
     timeZone: event.timeZone,
     attendees: event.attendees,
+    recurrence: event.recurrence,
+    recurringEventId: event.recurringEventId,
   };
 }

@@ -32,6 +32,8 @@ function buildEventValues(
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
     icalUid: event.icalUid ?? null,
+    recurrence: event.recurrence ?? null,
+    recurringEventId: event.recurringEventId ?? null,
     status: "confirmed" as const,
     isReadOnly: event.isReadOnly,
     readOnlyReason: event.readOnlyReason ?? null,
@@ -60,6 +62,8 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
     timeZone: event.timeZone ?? null,
     attendees: event.attendees ?? null,
     icalUid: event.icalUid ?? null,
+    recurrence: event.recurrence ?? null,
+    recurringEventId: event.recurringEventId ?? null,
     updatedAt: new Date(),
   };
 }
@@ -118,6 +122,8 @@ export async function upsertServerEvents(
         timeZone: sql`excluded.time_zone`,
         attendees: sql`excluded.attendees`,
         icalUid: sql`excluded.ical_uid`,
+        recurrence: sql`excluded.recurrence`,
+        recurringEventId: sql`excluded.recurring_event_id`,
         updatedAt: new Date(),
       },
     });

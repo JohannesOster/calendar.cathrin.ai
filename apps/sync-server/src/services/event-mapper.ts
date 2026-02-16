@@ -29,5 +29,7 @@ export function mapServerEventToApi(event: ServerEvent, provider?: Provider): Ap
     timeZone: event.timeZone || undefined,
     attendees: (event.attendees as Attendee[]) || undefined,
     icalUid: event.icalUid || undefined,
+    recurrence: (event.recurrence as string[]) || undefined,
+    recurringEventId: event.recurringEventId || undefined,
   };
 }

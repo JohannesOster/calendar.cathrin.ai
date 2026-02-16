@@ -92,6 +92,8 @@ interface GoogleEvent {
     overrides?: { method: string; minutes: number }[];
   };
   iCalUID?: string;
+  recurrence?: string[];
+  recurringEventId?: string;
   conferenceData?: GoogleConferenceData;
   attendees?: {
     email: string;
@@ -530,6 +532,8 @@ export class GoogleCalendarService {
       timeZone: timeZone || undefined,
       attendees: attendees && attendees.length > 0 ? attendees : undefined,
       icalUid: event.iCalUID || undefined,
+      recurrence: event.recurrence || undefined,
+      recurringEventId: event.recurringEventId || undefined,
     };
   }
 

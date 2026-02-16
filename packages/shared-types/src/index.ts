@@ -64,6 +64,10 @@ export interface ApiCalendarEvent {
   attendees?: Attendee[];
   /** RFC 5545 iCalendar UID — stable cross-provider identifier for dedup */
   icalUid?: string;
+  /** RRULE array for master recurring events, e.g. ["RRULE:FREQ=WEEKLY;BYDAY=TU"] */
+  recurrence?: string[];
+  /** Provider event ID of the master recurring event (present on instances) */
+  recurringEventId?: string;
 }
 
 /**
