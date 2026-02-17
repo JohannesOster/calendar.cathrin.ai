@@ -221,210 +221,209 @@ export async function updateEvent(
   scope?: "single" | "all" | "following",
   sendUpdates?: "all" | "none",
 ): Promise<void> {
-  const event = events().find((e) => e.id === eventId);
-  if (!event) return;
+  const preEvent = events().find((e) => e.id === eventId);
+  if (!preEvent) return;
 
-  const masterId = event.recurringEventId || event.providerEventId;
+  const masterId = preEvent.recurringEventId || preEvent.providerEventId;
   return withSeriesLock(masterId, async () => {
-  // Re-read event inside lock — it may have changed while queued
-  const lockedEvent = events().find((e) => e.id === eventId);
-  if (!lockedEvent) return;
+    // Re-read event inside lock — it may have changed while queued
+    const event = events().find((e) => e.id === eventId);
+    if (!event) return;
 
-  // Snapshot for rollback — merge in any explicit rollback values so the
-  // snapshot reflects the true pre-mutation state even when the caller
-  // pre-mutated the signal (e.g. during drag).
-  const event = lockedEvent;
-  const snapshot: CalendarEvent = {
-    ...event,
-    ...(rollback?.title !== undefined && { title: rollback.title }),
-    ...(rollback?.description !== undefined && { description: rollback.description }),
-    ...(rollback?.location !== undefined && { location: rollback.location }),
-    ...(rollback?.start !== undefined && { start: rollback.start }),
-    ...(rollback?.end !== undefined && { end: rollback.end }),
-    ...(rollback?.isAllDay !== undefined && { isAllDay: rollback.isAllDay }),
-    ...(rollback?.transparency !== undefined && { transparency: rollback.transparency }),
-    ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
-    ...(rollback?.reminders !== undefined && { reminders: rollback.reminders }),
-    ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
-    ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
-    ...(rollback?.timeZone !== undefined && { timeZone: rollback.timeZone }),
-    ...(rollback?.attendees !== undefined && { attendees: rollback.attendees ?? undefined }),
-    ...(rollback?.recurrence !== undefined && { recurrence: rollback.recurrence ?? undefined }),
-  };
+    // Snapshot for rollback — merge in any explicit rollback values so the
+    // snapshot reflects the true pre-mutation state even when the caller
+    // pre-mutated the signal (e.g. during drag).
+    const snapshot: CalendarEvent = {
+      ...event,
+      ...(rollback?.title !== undefined && { title: rollback.title }),
+      ...(rollback?.description !== undefined && { description: rollback.description }),
+      ...(rollback?.location !== undefined && { location: rollback.location }),
+      ...(rollback?.start !== undefined && { start: rollback.start }),
+      ...(rollback?.end !== undefined && { end: rollback.end }),
+      ...(rollback?.isAllDay !== undefined && { isAllDay: rollback.isAllDay }),
+      ...(rollback?.transparency !== undefined && { transparency: rollback.transparency }),
+      ...(rollback?.visibility !== undefined && { visibility: rollback.visibility }),
+      ...(rollback?.reminders !== undefined && { reminders: rollback.reminders }),
+      ...(rollback?.colorId !== undefined && { colorId: rollback.colorId }),
+      ...(rollback?.conferencing !== undefined && { conferencing: rollback.conferencing }),
+      ...(rollback?.timeZone !== undefined && { timeZone: rollback.timeZone }),
+      ...(rollback?.attendees !== undefined && { attendees: rollback.attendees ?? undefined }),
+      ...(rollback?.recurrence !== undefined && { recurrence: rollback.recurrence ?? undefined }),
+    };
 
-  // Identify sibling events for series-wide optimistic updates
-  const isSeries = scope === "all" || scope === "following";
+    // Identify sibling events for series-wide optimistic updates
+    const isSeries = scope === "all" || scope === "following";
 
-  // Compute time deltas for sibling patching (preserve each sibling's own time)
-  const startDeltaMs = patch.start ? patch.start.getTime() - snapshot.start.getTime() : 0;
-  const endDeltaMs = patch.end ? patch.end.getTime() - snapshot.end.getTime() : 0;
+    // Compute time deltas for sibling patching (preserve each sibling's own time)
+    const startDeltaMs = patch.start ? patch.start.getTime() - snapshot.start.getTime() : 0;
+    const endDeltaMs = patch.end ? patch.end.getTime() - snapshot.end.getTime() : 0;
 
-  // Build the non-time fields to spread onto siblings
-  const siblingFieldPatch = {
-    ...(patch.title !== undefined && { title: patch.title }),
-    ...(patch.description !== undefined && { description: patch.description }),
-    ...(patch.location !== undefined && { location: patch.location }),
-    ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
-    ...(patch.transparency !== undefined && { transparency: patch.transparency }),
-    ...(patch.visibility !== undefined && { visibility: patch.visibility }),
-    ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
-  };
+    // Build the non-time fields to spread onto siblings
+    const siblingFieldPatch = {
+      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.description !== undefined && { description: patch.description }),
+      ...(patch.location !== undefined && { location: patch.location }),
+      ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
+      ...(patch.transparency !== undefined && { transparency: patch.transparency }),
+      ...(patch.visibility !== undefined && { visibility: patch.visibility }),
+      ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
+    };
 
-  // Snapshot all affected siblings for rollback
-  let siblingSnapshots: CalendarEvent[] = [];
-  if (isSeries) {
-    const allEvts = events();
-    siblingSnapshots = allEvts.filter((e) => {
-      if (e.id === eventId) return false; // primary event handled by main snapshot
-      // Only match siblings on the same calendar to avoid cross-account false positives
-      if (e.calendarId !== event.calendarId) return false;
-      const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
-      if (!isSibling) return false;
-      if (scope === "following") {
-        return new Date(e.start).getTime() >= snapshot.start.getTime();
-      }
-      return true;
-    }).map((e) => ({ ...e }));
-  }
-
-  // RRULE re-expansion: when recurrence changes (or is added to a standalone event),
-  // remove old siblings and expand new instances
-  const isAddingRecurrence = patch.recurrence !== undefined && patch.recurrence.length > 0 && !event.recurrence && !event.recurringEventId;
-  const isRecurrenceChange = (patch.recurrence !== undefined && isSeries) || isAddingRecurrence;
-  const addedTempIds: string[] = [];
-
-  if (isRecurrenceChange) {
-    addedTempIds.push(
-      ...applyRecurrenceReExpansion(eventId, event, patch, snapshot, masterId, scope, siblingSnapshots)
-    );
-    if (patch.recurrence && patch.recurrence.length > 0) {
-      markSeriesDirty(masterId, addedTempIds, patch.recurrence);
-    }
-  } else {
-    // Apply optimistic update (non-recurrence changes)
-    setEvents((prev) =>
-      prev.map((e) => {
-        // Primary event: apply the full patch directly
-        if (e.id === eventId) {
-          return {
-            ...e,
-            ...(patch.title !== undefined && { title: patch.title }),
-            ...(patch.description !== undefined && { description: patch.description }),
-            ...(patch.location !== undefined && { location: patch.location }),
-            ...(patch.start !== undefined && { start: patch.start }),
-            ...(patch.end !== undefined && { end: patch.end }),
-            ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
-            ...(patch.transparency !== undefined && { transparency: patch.transparency }),
-            ...(patch.visibility !== undefined && { visibility: patch.visibility }),
-            ...(patch.reminders !== undefined && { reminders: patch.reminders ?? undefined }),
-            ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
-            ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
-            ...(patch.timeZone !== undefined && { timeZone: patch.timeZone }),
-            ...(patch.attendees !== undefined && { attendees: patch.attendees ?? undefined }),
-            ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
-          };
+    // Snapshot all affected siblings for rollback
+    let siblingSnapshots: CalendarEvent[] = [];
+    if (isSeries) {
+      const allEvts = events();
+      siblingSnapshots = allEvts.filter((e) => {
+        if (e.id === eventId) return false; // primary event handled by main snapshot
+        // Only match siblings on the same calendar to avoid cross-account false positives
+        if (e.calendarId !== event.calendarId) return false;
+        const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
+        if (!isSibling) return false;
+        if (scope === "following") {
+          return new Date(e.start).getTime() >= snapshot.start.getTime();
         }
+        return true;
+      }).map((e) => ({ ...e }));
+    }
 
-        // Sibling events: apply series-wide fields + time deltas
-        if (isSeries && e.calendarId === event.calendarId) {
-          const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
-          if (isSibling) {
-            if (scope === "following" && new Date(e.start).getTime() < snapshot.start.getTime()) {
-              return e; // past sibling — don't touch
-            }
+    // RRULE re-expansion: when recurrence changes (or is added to a standalone event),
+    // remove old siblings and expand new instances
+    const isAddingRecurrence = patch.recurrence !== undefined && patch.recurrence.length > 0 && !event.recurrence && !event.recurringEventId;
+    const isRecurrenceChange = (patch.recurrence !== undefined && isSeries) || isAddingRecurrence;
+    const addedTempIds: string[] = [];
+
+    if (isRecurrenceChange) {
+      addedTempIds.push(
+        ...applyRecurrenceReExpansion(eventId, event, patch, snapshot, masterId, scope, siblingSnapshots)
+      );
+      if (patch.recurrence && patch.recurrence.length > 0) {
+        markSeriesDirty(masterId, addedTempIds, patch.recurrence);
+      }
+    } else {
+      // Apply optimistic update (non-recurrence changes)
+      setEvents((prev) =>
+        prev.map((e) => {
+          // Primary event: apply the full patch directly
+          if (e.id === eventId) {
             return {
               ...e,
-              ...siblingFieldPatch,
-              ...(startDeltaMs !== 0 && { start: new Date(e.start.getTime() + startDeltaMs) }),
-              ...(endDeltaMs !== 0 && { end: new Date(e.end.getTime() + endDeltaMs) }),
+              ...(patch.title !== undefined && { title: patch.title }),
+              ...(patch.description !== undefined && { description: patch.description }),
+              ...(patch.location !== undefined && { location: patch.location }),
+              ...(patch.start !== undefined && { start: patch.start }),
+              ...(patch.end !== undefined && { end: patch.end }),
+              ...(patch.isAllDay !== undefined && { isAllDay: patch.isAllDay }),
+              ...(patch.transparency !== undefined && { transparency: patch.transparency }),
+              ...(patch.visibility !== undefined && { visibility: patch.visibility }),
+              ...(patch.reminders !== undefined && { reminders: patch.reminders ?? undefined }),
+              ...(patch.colorId !== undefined && { colorId: patch.colorId ?? undefined }),
+              ...(patch.conferencing !== undefined && { conferencing: patch.conferencing }),
+              ...(patch.timeZone !== undefined && { timeZone: patch.timeZone }),
+              ...(patch.attendees !== undefined && { attendees: patch.attendees ?? undefined }),
+              ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
             };
           }
-        }
 
-        return e;
-      })
-    );
-  }
+          // Sibling events: apply series-wide fields + time deltas
+          if (isSeries && e.calendarId === event.calendarId) {
+            const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
+            if (isSibling) {
+              if (scope === "following" && new Date(e.start).getTime() < snapshot.start.getTime()) {
+                return e; // past sibling — don't touch
+              }
+              return {
+                ...e,
+                ...siblingFieldPatch,
+                ...(startDeltaMs !== 0 && { start: new Date(e.start.getTime() + startDeltaMs) }),
+                ...(endDeltaMs !== 0 && { end: new Date(e.end.getTime() + endDeltaMs) }),
+              };
+            }
+          }
 
-  // Build API patch body
-  const apiPatch: Record<string, string | boolean> = {};
-  if (patch.title !== undefined) apiPatch.summary = patch.title;
-  if (patch.description !== undefined) apiPatch.description = patch.description;
-  if (patch.location !== undefined) apiPatch.location = patch.location;
-  if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
-  if (patch.transparency !== undefined) apiPatch.transparency = patch.transparency;
-  if (patch.visibility !== undefined) apiPatch.visibility = patch.visibility;
-  if (patch.reminders !== undefined) (apiPatch as Record<string, unknown>).reminders = patch.reminders;
-  if (patch.colorId !== undefined) {
-    (apiPatch as Record<string, unknown>).colorId = patch.colorId ? cathrinKeyToGoogleColorId(patch.colorId) : null;
-  }
-  if (patch.conferencing !== undefined) {
-    if (patch.conferencing === null) {
-      (apiPatch as Record<string, unknown>).conferencing = null;
-    } else if (patch.conferencing.uri) {
-      (apiPatch as Record<string, unknown>).conferencing = { type: "manual", uri: patch.conferencing.uri };
+          return e;
+        })
+      );
     }
-  }
-  if (patch.timeZone !== undefined) (apiPatch as Record<string, unknown>).timeZone = patch.timeZone;
-  if (patch.attendees !== undefined) {
-    (apiPatch as Record<string, unknown>).attendees = patch.attendees
-      ? patch.attendees.map(a => ({ email: a.email, name: a.name }))
-      : null;
-  }
-  if (patch.recurrence !== undefined) {
-    (apiPatch as Record<string, unknown>).recurrence = patch.recurrence;
-  }
-  const isAllDay = patch.isAllDay ?? event.isAllDay;
-  if (patch.start !== undefined) {
-    apiPatch.start = isAllDay
-      ? formatDateOnly(patch.start)
-      : patch.start.toISOString();
-  }
-  if (patch.end !== undefined) {
-    apiPatch.end = isAllDay
-      ? formatDateOnly(patch.end)
-      : patch.end.toISOString();
-  }
 
-  const params = new URLSearchParams({ calendarId: event.calendarId });
-  if (scope) params.set("scope", scope);
-
-  // Include sendUpdates in the body (not query param) for the PATCH
-  if (sendUpdates) (apiPatch as Record<string, unknown>).sendUpdates = sendUpdates;
-
-  try {
-    await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {
-      method: "PATCH",
-      body: JSON.stringify(apiPatch),
-    });
-    // After recurrence changes, mark server confirmed and delay revalidation
-    // to let the provider propagate the RRULE mutation before we re-fetch.
-    if (isRecurrenceChange) {
-      markServerConfirmed(masterId);
-      const dates = [snapshot.start, patch.start ?? snapshot.start];
-      // First revalidation: server may still return stale instances, but the
-      // dirty-flag system keeps optimistic instances alive until the server
-      // returns matching recurrence. Second revalidation catches slower providers.
-      setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_FIRST_MS);
-      setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_SECOND_MS);
-    } else {
-      const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
-      for (const s of siblingSnapshots) {
-        datesToRevalidate.push(s.start);
+    // Build API patch body
+    const apiPatch: Record<string, string | boolean> = {};
+    if (patch.title !== undefined) apiPatch.summary = patch.title;
+    if (patch.description !== undefined) apiPatch.description = patch.description;
+    if (patch.location !== undefined) apiPatch.location = patch.location;
+    if (patch.isAllDay !== undefined) apiPatch.isAllDay = patch.isAllDay;
+    if (patch.transparency !== undefined) apiPatch.transparency = patch.transparency;
+    if (patch.visibility !== undefined) apiPatch.visibility = patch.visibility;
+    if (patch.reminders !== undefined) (apiPatch as Record<string, unknown>).reminders = patch.reminders;
+    if (patch.colorId !== undefined) {
+      (apiPatch as Record<string, unknown>).colorId = patch.colorId ? cathrinKeyToGoogleColorId(patch.colorId) : null;
+    }
+    if (patch.conferencing !== undefined) {
+      if (patch.conferencing === null) {
+        (apiPatch as Record<string, unknown>).conferencing = null;
+      } else if (patch.conferencing.uri) {
+        (apiPatch as Record<string, unknown>).conferencing = { type: "manual", uri: patch.conferencing.uri };
       }
-      _revalidateWeeksForDates?.(...datesToRevalidate);
     }
-  } catch (error) {
-    console.error(`[events] Failed to update event ${eventId}:`, error);
-    rollbackOptimisticUpdate(eventId, snapshot, siblingSnapshots, addedTempIds);
-    if (isRecurrenceChange) {
-      clearDirty(masterId);
+    if (patch.timeZone !== undefined) (apiPatch as Record<string, unknown>).timeZone = patch.timeZone;
+    if (patch.attendees !== undefined) {
+      (apiPatch as Record<string, unknown>).attendees = patch.attendees
+        ? patch.attendees.map(a => ({ email: a.email, name: a.name }))
+        : null;
     }
-    if (error instanceof ApiError && error.status === 403) {
-      showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+    if (patch.recurrence !== undefined) {
+      (apiPatch as Record<string, unknown>).recurrence = patch.recurrence;
     }
-  }
-  }); // withSeriesLock
+    const isAllDay = patch.isAllDay ?? event.isAllDay;
+    if (patch.start !== undefined) {
+      apiPatch.start = isAllDay
+        ? formatDateOnly(patch.start)
+        : patch.start.toISOString();
+    }
+    if (patch.end !== undefined) {
+      apiPatch.end = isAllDay
+        ? formatDateOnly(patch.end)
+        : patch.end.toISOString();
+    }
+
+    const params = new URLSearchParams({ calendarId: event.calendarId });
+    if (scope) params.set("scope", scope);
+
+    // Include sendUpdates in the body (not query param) for the PATCH
+    if (sendUpdates) (apiPatch as Record<string, unknown>).sendUpdates = sendUpdates;
+
+    try {
+      await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify(apiPatch),
+      });
+      // After recurrence changes, mark server confirmed and delay revalidation
+      // to let the provider propagate the RRULE mutation before we re-fetch.
+      if (isRecurrenceChange) {
+        markServerConfirmed(masterId);
+        const dates = [snapshot.start, patch.start ?? snapshot.start];
+        // First revalidation: server may still return stale instances, but the
+        // dirty-flag system keeps optimistic instances alive until the server
+        // returns matching recurrence. Second revalidation catches slower providers.
+        setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_FIRST_MS);
+        setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_SECOND_MS);
+      } else {
+        const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
+        for (const s of siblingSnapshots) {
+          datesToRevalidate.push(s.start);
+        }
+        _revalidateWeeksForDates?.(...datesToRevalidate);
+      }
+    } catch (error) {
+      console.error(`[events] Failed to update event ${eventId}:`, error);
+      rollbackOptimisticUpdate(eventId, snapshot, siblingSnapshots, addedTempIds);
+      if (isRecurrenceChange) {
+        clearDirty(masterId);
+      }
+      if (error instanceof ApiError && error.status === 403) {
+        showErrorToast("Permission denied", "You don't have permission to modify this calendar");
+      }
+    }
+  });
 }
 
 // =============================================================================
