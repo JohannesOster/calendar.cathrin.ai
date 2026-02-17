@@ -74,7 +74,15 @@ export async function findUserEvent(accountIds: string[], providerEventId: strin
     conditions.push(eq(serverEvents.calendarId, calendarId));
   }
 
-  return db.query.serverEvents.findFirst({
+  const event = await db.query.serverEvents.findFirst({
     where: and(...conditions),
   });
+
+  // Instance ID format: masterId_dateT — fall back to finding the master
+  if (!event && providerEventId.includes("_")) {
+    const masterId = providerEventId.split("_")[0];
+    return findUserEvent(accountIds, masterId, calendarId);
+  }
+
+  return event;
 }

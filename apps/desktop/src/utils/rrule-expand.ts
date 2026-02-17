@@ -115,8 +115,8 @@ export function expandRRule(
   for (const utcOcc of utcOccurrences) {
     const occ = fromFakeUTC(utcOcc);
 
-    // Skip the master occurrence (±5min tolerance for edge cases)
-    if (Math.abs(occ.getTime() - dtstart.getTime()) < 300_000) continue;
+    // Skip the master occurrence (±60s tolerance for edge cases)
+    if (Math.abs(occ.getTime() - dtstart.getTime()) < 60_000) continue;
 
     // Skip EXDATE-excluded occurrences
     if (excluded.exactMs.has(occ.getTime())) continue;

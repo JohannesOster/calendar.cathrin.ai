@@ -60,11 +60,6 @@ export function getSetVisibleWeeksForPolling(): ((weeks: Set<string>) => void) |
 }
 
 // =============================================================================
-// Helpers
-// =============================================================================
-
-
-// =============================================================================
 // Optimistic Local Events
 // =============================================================================
 
@@ -96,6 +91,103 @@ export function removeLocalEvent(eventId: string): void {
 // =============================================================================
 // Event Updates (Optimistic)
 // =============================================================================
+
+/**
+ * Apply RRULE re-expansion: remove old siblings, update primary event,
+ * and expand new instances from the changed recurrence rule.
+ * Returns IDs of the newly created temp instances (for rollback).
+ */
+function applyRecurrenceReExpansion(
+  eventId: string,
+  event: CalendarEvent,
+  patch: EventPatch,
+  snapshot: CalendarEvent,
+  masterId: string,
+  scope: "single" | "all" | "following" | undefined,
+  siblingSnapshots: CalendarEvent[],
+): string[] {
+  const addedTempIds: string[] = [];
+  const siblingIds = new Set(siblingSnapshots.map((e) => e.id));
+
+  // Update the primary event + remove affected siblings
+  setEvents((prev) => {
+    const filtered = prev.filter((e) => !siblingIds.has(e.id));
+    return filtered.map((e) =>
+      e.id === eventId
+        ? {
+            ...e,
+            ...(patch.title !== undefined && { title: patch.title }),
+            ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
+            // When removing recurrence, clear the instance link so the event
+            // appears as a standalone event in the UI (no "Repeats" label).
+            ...(patch.recurrence === null && e.recurringEventId && { recurringEventId: undefined }),
+          }
+        : e
+    );
+  });
+
+  // Re-expand new RRULE if recurrence is being set (not removed)
+  if (patch.recurrence && patch.recurrence.length > 0) {
+    try {
+      const dtstart = patch.start ?? snapshot.start;
+      const durationMs = (patch.end ?? snapshot.end).getTime() - dtstart.getTime();
+      const instances = expandRRule(patch.recurrence, dtstart, durationMs, centerDate());
+
+      const newEvents: CalendarEvent[] = [];
+      for (const inst of instances) {
+        if (scope === "following" && inst.start.getTime() < snapshot.start.getTime()) continue;
+
+        const dateISO = inst.start.toISOString().slice(0, 10);
+        const tempInstanceId = `${eventId}-rrule-${dateISO}`;
+        addedTempIds.push(tempInstanceId);
+        newEvents.push({
+          ...event,
+          id: tempInstanceId,
+          providerEventId: "",
+          start: inst.start,
+          end: inst.end,
+          recurringEventId: masterId,
+          recurrence: undefined,
+          rruleExpandedAt: Date.now(),
+          ...(patch.title !== undefined && { title: patch.title }),
+        });
+      }
+
+      if (newEvents.length > 0) {
+        setEvents((prev) => [...prev, ...newEvents]);
+      }
+    } catch (err) {
+      console.warn("[events] Failed to re-expand RRULE:", err);
+    }
+  }
+
+  return addedTempIds;
+}
+
+/**
+ * Rollback an optimistic update: restore primary event + siblings,
+ * remove any temp RRULE instances that were added.
+ */
+function rollbackOptimisticUpdate(
+  eventId: string,
+  snapshot: CalendarEvent,
+  siblingSnapshots: CalendarEvent[],
+  addedTempIds: string[],
+): void {
+  const tempIdSet = new Set(addedTempIds);
+  const snapshotMap = new Map<string, CalendarEvent>();
+  snapshotMap.set(eventId, snapshot);
+  for (const s of siblingSnapshots) {
+    snapshotMap.set(s.id, s);
+  }
+  setEvents((prev) => {
+    const filtered = tempIdSet.size > 0 ? prev.filter((e) => !tempIdSet.has(e.id)) : prev;
+    const restored = filtered.map((e) => snapshotMap.get(e.id) ?? e);
+    const restoredIds = new Set(restored.map((e) => e.id));
+    const missingSnapshots = siblingSnapshots.filter((s) => !restoredIds.has(s.id));
+    return missingSnapshots.length > 0 ? [...restored, ...missingSnapshots] : restored;
+  });
+}
 
 /**
  * Update an event optimistically: apply patch locally, then PATCH API.
@@ -176,64 +268,12 @@ export async function updateEvent(
   // remove old siblings and expand new instances
   const isAddingRecurrence = patch.recurrence !== undefined && patch.recurrence.length > 0 && !event.recurrence && !event.recurringEventId;
   const isRecurrenceChange = (patch.recurrence !== undefined && isSeries) || isAddingRecurrence;
-  let addedTempIds: string[] = [];
+  const addedTempIds: string[] = [];
 
   if (isRecurrenceChange) {
-    // Determine siblings to remove (they're already snapshotted in siblingSnapshots)
-    const siblingIds = new Set(siblingSnapshots.map((e) => e.id));
-
-    // Update the primary event + remove affected siblings
-    setEvents((prev) => {
-      const filtered = prev.filter((e) => !siblingIds.has(e.id));
-      return filtered.map((e) =>
-        e.id === eventId
-          ? {
-              ...e,
-              ...(patch.title !== undefined && { title: patch.title }),
-              ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
-              // When removing recurrence, clear the instance link so the event
-              // appears as a standalone event in the UI (no "Repeats" label).
-              ...(patch.recurrence === null && e.recurringEventId && { recurringEventId: undefined }),
-            }
-          : e
-      );
-    });
-
-    // Re-expand new RRULE if recurrence is being set (not removed)
-    if (patch.recurrence && patch.recurrence.length > 0) {
-      try {
-        const dtstart = patch.start ?? snapshot.start;
-        const durationMs = (patch.end ?? snapshot.end).getTime() - dtstart.getTime();
-        const instances = expandRRule(patch.recurrence, dtstart, durationMs, centerDate());
-
-        const newEvents: CalendarEvent[] = [];
-        for (const inst of instances) {
-          // For "following" scope, only add instances from the split point onward
-          if (scope === "following" && inst.start.getTime() < snapshot.start.getTime()) continue;
-
-          const dateISO = inst.start.toISOString().slice(0, 10);
-          const tempInstanceId = `${eventId}-rrule-${dateISO}`;
-          addedTempIds.push(tempInstanceId);
-          newEvents.push({
-            ...event,
-            id: tempInstanceId,
-            providerEventId: "",
-            start: inst.start,
-            end: inst.end,
-            recurringEventId: masterId,
-            recurrence: undefined,
-            rruleExpandedAt: Date.now(),
-            ...(patch.title !== undefined && { title: patch.title }),
-          });
-        }
-
-        if (newEvents.length > 0) {
-          setEvents((prev) => [...prev, ...newEvents]);
-        }
-      } catch (err) {
-        console.warn("[events] Failed to re-expand RRULE:", err);
-      }
-    }
+    addedTempIds.push(
+      ...applyRecurrenceReExpansion(eventId, event, patch, snapshot, masterId, scope, siblingSnapshots)
+    );
   } else {
     // Apply optimistic update (non-recurrence changes)
     setEvents((prev) =>
@@ -351,23 +391,7 @@ export async function updateEvent(
     }
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
-    // Rollback: restore primary event + siblings, remove any temp RRULE instances
-    const tempIdSet = new Set(addedTempIds);
-    const snapshotMap = new Map<string, CalendarEvent>();
-    snapshotMap.set(eventId, snapshot);
-    for (const s of siblingSnapshots) {
-      snapshotMap.set(s.id, s);
-    }
-    setEvents((prev) => {
-      // Remove temp instances added during RRULE re-expansion
-      const filtered = tempIdSet.size > 0 ? prev.filter((e) => !tempIdSet.has(e.id)) : prev;
-      // Restore snapshots and re-add removed siblings
-      const restored = filtered.map((e) => snapshotMap.get(e.id) ?? e);
-      // Add back siblings that were removed during RRULE re-expansion
-      const restoredIds = new Set(restored.map((e) => e.id));
-      const missingSnapshots = siblingSnapshots.filter((s) => !restoredIds.has(s.id));
-      return missingSnapshots.length > 0 ? [...restored, ...missingSnapshots] : restored;
-    });
+    rollbackOptimisticUpdate(eventId, snapshot, siblingSnapshots, addedTempIds);
     if (error instanceof ApiError && error.status === 403) {
       showErrorToast("Permission denied", "You don't have permission to modify this calendar");
     }

@@ -131,10 +131,6 @@ export async function deleteAccount(accountId: string): Promise<void> {
 }
 
 /**
- * Toggle calendar visibility for a specific calendar
- * Visibility is stored locally as a client-side preference
- */
-/**
  * Look up the provider (google/outlook) for a given calendar ID.
  */
 export function getProviderForCalendar(calendarId: string): Provider | undefined {

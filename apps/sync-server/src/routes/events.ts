@@ -15,7 +15,7 @@ import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../servi
 import { createEvent, updateEvent, deleteEvent, moveEvent, rsvpEvent, splitOutlookSeriesEdit, truncateOutlookSeriesDelete } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 import { notifyUser } from "../services/ws-manager.js";
-import type { Provider } from "@cathrin/shared-types";
+import type { Provider, ApiCalendarEvent } from "@cathrin/shared-types";
 import { getWeekId } from "../lib/week-utils.js";
 
 const querySchema = z
@@ -203,12 +203,7 @@ export const eventsRoute = new Hono()
       }
 
       const calendarId = c.req.query("calendarId");
-      let event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
-      if (!event && providerEventId.includes("_")) {
-        // Instance ID format: masterId_dateT — try finding the master
-        const masterId = providerEventId.split("_")[0];
-        event = await findUserEvent(accountIds, masterId, calendarId?.trim() || undefined);
-      }
+      const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -249,9 +244,12 @@ export const eventsRoute = new Hono()
           });
 
           if (account?.provider === "google" && (scope === "all" || scope === "following")) {
+            // Capture master event data before deleting, so we can attempt restore on failure
+            let restoreSource = event;
             if (scope === "all") {
-              // Delete the entire series via the master event
               const masterId = event.recurringEventId as string;
+              const master = await findUserEvent(accountIds, masterId, event.calendarId);
+              if (master) restoreSource = master;
               await deleteEvent(event.accountId, event.calendarId, masterId, event.id, sendUpdates, "all", event.start);
             } else {
               // "following": delete with the instance ID — Google truncates the master's RRULE
@@ -260,7 +258,7 @@ export const eventsRoute = new Hono()
             }
 
             // Re-create the edited instance as a standalone event
-            let apiEvent;
+            let apiEvent: ApiCalendarEvent;
             try {
               apiEvent = await createEvent({
                 accountId: event.accountId,
@@ -281,23 +279,27 @@ export const eventsRoute = new Hono()
                 // No recurrence — this is now a standalone event
               });
             } catch (createError) {
-              // Create failed after delete — attempt to restore the original series
+              // Create failed after delete — best-effort restore of the original series.
+              // Note: this creates a new Google event (different ID), so it won't perfectly
+              // match the old series, but it preserves the recurrence rule and event data.
               console.error("[events] Create failed after delete, attempting restore:", createError);
               try {
                 await createEvent({
-                  accountId: event.accountId,
-                  calendarId: event.calendarId,
-                  title: event.title,
-                  start: event.start.toISOString(),
-                  end: event.end.toISOString(),
-                  isAllDay: event.isAllDay ?? undefined,
-                  location: event.location ?? undefined,
-                  description: event.description ?? undefined,
-                  transparency: (event.transparency ?? undefined) as string | undefined,
-                  visibility: (event.visibility ?? undefined) as string | undefined,
-                  reminders: event.reminders as { method: string; minutes: number }[] | undefined,
-                  colorId: event.colorId ?? undefined,
-                  recurrence: event.recurrence as string[] | undefined,
+                  accountId: restoreSource.accountId,
+                  calendarId: restoreSource.calendarId,
+                  title: restoreSource.title,
+                  start: restoreSource.start.toISOString(),
+                  end: restoreSource.end.toISOString(),
+                  isAllDay: restoreSource.isAllDay ?? undefined,
+                  location: restoreSource.location ?? undefined,
+                  description: restoreSource.description ?? undefined,
+                  transparency: (restoreSource.transparency ?? undefined) as string | undefined,
+                  visibility: (restoreSource.visibility ?? undefined) as string | undefined,
+                  reminders: restoreSource.reminders as { method: string; minutes: number }[] | undefined,
+                  colorId: restoreSource.colorId ?? undefined,
+                  recurrence: restoreSource.recurrence as string[] | undefined,
+                  timeZone: restoreSource.timeZone as string | undefined,
+                  attendees: restoreSource.attendees as { email: string; name?: string }[] | undefined,
                   sendUpdates,
                 });
                 console.log("[events] Successfully restored original series after failed create");
@@ -434,11 +436,7 @@ export const eventsRoute = new Hono()
     }
 
     const calendarId = c.req.query("calendarId");
-    let event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
-    if (!event && providerEventId.includes("_")) {
-      const masterId = providerEventId.split("_")[0];
-      event = await findUserEvent(accountIds, masterId, calendarId?.trim() || undefined);
-    }
+    const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
     if (!event) {
       return c.json({ error: "Event not found" }, 404);
     }
