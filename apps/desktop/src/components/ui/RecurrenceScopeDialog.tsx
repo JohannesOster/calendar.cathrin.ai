@@ -26,6 +26,7 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
 
   const title = () => props.mode === "delete" ? "Delete recurring event" : "Edit recurring event";
   const actionLabel = () => props.mode === "delete" ? "Delete" : "Continue";
+  const WARNING_CLASSES = "mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200";
 
   return (
     <Dialog.Root
@@ -86,19 +87,19 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
             </div>
 
             <Show when={props.hasAttendees && scope() === "following"}>
-              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+              <div class={WARNING_CLASSES}>
                 Attendees will receive a cancellation for future events in this series and a new invitation for the updated series.
               </div>
             </Show>
 
             <Show when={scope() === "following" && props.mode === "edit"}>
-              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+              <div class={WARNING_CLASSES}>
                 Individually edited events after this date will be reset to match the new series.
               </div>
             </Show>
 
             <Show when={scope() === "all" && props.mode === "edit"}>
-              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+              <div class={WARNING_CLASSES}>
                 Individually edited events in this series will be reset to match.
               </div>
             </Show>

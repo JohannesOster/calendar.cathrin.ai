@@ -377,6 +377,19 @@ export class GoogleCalendarProvider implements CalendarProvider {
       options?.sendUpdates ? { sendUpdates: options.sendUpdates } : undefined,
     );
 
+    // Read-back verification: Google has a known bug where RRULE changes
+    // return 200 with a new etag but silently discard the recurrence change.
+    // Detect this by comparing what we sent with what came back.
+    if (patch.recurrence !== undefined) {
+      const sent = patch.recurrence ?? [];
+      const returned = updated.recurrence ?? [];
+      if (JSON.stringify(sent) !== JSON.stringify(returned)) {
+        throw new Error(
+          "RRULE change was silently rejected by Google"
+        );
+      }
+    }
+
     const calendarColor = options?.calendarColor || "#4285f4";
     const result = service.mapEvent(
       updated,

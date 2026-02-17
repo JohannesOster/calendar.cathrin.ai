@@ -309,13 +309,41 @@ export const eventsRoute = new Hono()
               throw createError;
             }
 
+            // Invalidate fetchedWeeks so revalidation triggers a fresh fetch.
+            // The deleted series likely spanned many weeks beyond just the start.
+            const affectedWeekIds = new Set<string>();
+            affectedWeekIds.add(getWeekId(event.start));
+            affectedWeekIds.add(getWeekId(new Date(apiEvent.start)));
+            // Invalidate a broad range around the event to cover the old series span
+            const rangeStart = new Date(event.start);
+            rangeStart.setDate(rangeStart.getDate() - 7);
+            const rangeEnd = new Date(event.start);
+            rangeEnd.setDate(rangeEnd.getDate() + 60);
+            for (const wk of getWeeksInRange(rangeStart, rangeEnd)) {
+              affectedWeekIds.add(wk);
+            }
+
+            const calendarAccounts = await db!.query.accounts.findMany({
+              where: inArray(accounts.id, accountIds),
+              columns: { id: true },
+            });
+            const calAccIds = calendarAccounts.map(a => a.id);
+
+            if (calAccIds.length > 0) {
+              await db!.delete(fetchedWeeks).where(
+                and(
+                  inArray(fetchedWeeks.accountId, calAccIds),
+                  eq(fetchedWeeks.calendarId, event.calendarId),
+                  inArray(fetchedWeeks.weekId, Array.from(affectedWeekIds)),
+                )
+              );
+            }
+
+            // §27: Notify all affected weeks, not just the start weeks
             const clientId = c.req.header("X-Client-ID");
-            const weekIds = new Set<string>();
-            weekIds.add(getWeekId(event.start));
-            weekIds.add(getWeekId(new Date(apiEvent.start)));
             notifyUser(userId, {
               type: "weeks_changed",
-              weekIds: Array.from(weekIds),
+              weekIds: Array.from(affectedWeekIds),
               source: "mutation",
             }, clientId);
 

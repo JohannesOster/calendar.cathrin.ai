@@ -317,19 +317,19 @@ export async function splitOutlookSeriesEdit(
     accessToken, calendarId, masterId, splitDate, providerPatch, mutationOptions,
   );
 
-  // Clean up future instances from DB (next sync will re-fetch)
-  await db!
-    .delete(serverEvents)
-    .where(
-      and(
-        eq(serverEvents.calendarId, calendarId),
-        eq(serverEvents.recurringEventId, masterId),
-        gte(serverEvents.start, new Date(splitDate)),
-      )
-    );
-
-  // Cache the new series master
-  await upsertServerEvent(db!, apiEvent, accountId, calendarId);
+  // Clean up future instances and cache new master atomically
+  await db!.transaction(async (tx) => {
+    await tx
+      .delete(serverEvents)
+      .where(
+        and(
+          eq(serverEvents.calendarId, calendarId),
+          eq(serverEvents.recurringEventId, masterId),
+          gte(serverEvents.start, new Date(splitDate)),
+        )
+      );
+    await upsertServerEvent(tx, apiEvent, accountId, calendarId);
+  });
 
   return apiEvent;
 }

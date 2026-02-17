@@ -1,9 +1,20 @@
 import { sql } from "drizzle-orm";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { serverEvents } from "../db/schema.js";
 import type { db as dbType } from "../db/index.js";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
+import type * as schema from "../db/schema.js";
 
 type Db = NonNullable<typeof dbType>;
+type DbTransaction = PgTransaction<
+  PostgresJsQueryResultHKT,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
+/** Accepts both the root db instance and a transaction */
+export type DbOrTx = Db | DbTransaction;
 
 /**
  * Build the values object for a server event upsert
@@ -72,7 +83,7 @@ function buildEventUpdateSet(event: ApiCalendarEvent) {
  * Upsert a single event into the server cache
  */
 export async function upsertServerEvent(
-  db: Db,
+  db: DbOrTx,
   event: ApiCalendarEvent,
   accountId: string,
   calendarId: string
