@@ -2201,7 +2201,12 @@ function RecurrenceSelector(props: SectionProps) {
 
   const currentValue = createMemo(() => {
     const rec = s.recurrence();
-    if (!rec) return "none";
+    if (!rec) {
+      // Recurring instances don't carry the RRULE — use a sentinel value
+      // so "Does not repeat" isn't pre-selected (which would prevent onValueChange)
+      if (isRecurringInstance()) return "inherited";
+      return "none";
+    }
     const rrule = rec[0];
     const match = presets().find(p => p.rrule && p.rrule[0] === rrule);
     return match?.value ?? "custom";
