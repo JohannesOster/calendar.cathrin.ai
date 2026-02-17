@@ -2201,12 +2201,7 @@ function RecurrenceSelector(props: SectionProps) {
 
   const currentValue = createMemo(() => {
     const rec = s.recurrence();
-    if (!rec) {
-      // Recurring instances don't carry the RRULE — use a sentinel value
-      // so "Does not repeat" isn't pre-selected (which would prevent onValueChange)
-      if (isRecurringInstance()) return "inherited";
-      return "none";
-    }
+    if (!rec) return "none";
     const rrule = rec[0];
     const match = presets().find(p => p.rrule && p.rrule[0] === rrule);
     return match?.value ?? "custom";
@@ -2219,7 +2214,21 @@ function RecurrenceSelector(props: SectionProps) {
     }
     const preset = presets().find(p => p.value === value);
     if (!preset) return;
+    // For recurring instances, "none" → null is a real change even though
+    // currentValue is already "none" (instances don't carry the RRULE).
+    // Ark UI won't fire onValueChange for same-value, so this is only
+    // reached when the value actually differs or the component is forced.
     s.setRecurrence(preset.rrule);
+  };
+
+  // Ark UI Select won't fire onValueChange when picking the already-selected value.
+  // For recurring instances, currentValue is "none" (no RRULE on instance) but
+  // selecting "Does not repeat" IS a meaningful change (removes recurrence from the series).
+  // Use onInteractOutside as a fallback won't work — instead, use an Item click handler.
+  const handleItemClick = (value: string) => {
+    if (value === currentValue() && isRecurringInstance()) {
+      handleSelect(value);
+    }
   };
 
   const handleCustomDone = (rrule: string[]) => {
@@ -2270,6 +2279,7 @@ function RecurrenceSelector(props: SectionProps) {
                 <Select.Item
                   item={item}
                   class={`flex items-center px-3 py-1.5 text-xs text-fg cursor-pointer hover:bg-surface-hover data-[highlighted]:bg-surface-hover outline-none${item.value === "custom" ? " border-t border-border mt-1 pt-1.5" : ""}`}
+                  onClick={() => handleItemClick(item.value)}
                 >
                   <Select.ItemText>{item.label}</Select.ItemText>
                 </Select.Item>
