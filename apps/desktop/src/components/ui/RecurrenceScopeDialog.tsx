@@ -67,7 +67,10 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
                   onChange={() => setScope("following")}
                   class="accent-fg"
                 />
-                <span class="text-sm text-fg">This and following events</span>
+                <div>
+                  <span class="text-sm text-fg">This and following events</span>
+                  <span class="block text-xs text-fg-muted">Creates a new series starting from this event</span>
+                </div>
               </label>
               <label class="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded hover:bg-surface-hover transition-colors">
                 <input
@@ -85,6 +88,18 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
             <Show when={props.hasAttendees && scope() === "following"}>
               <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
                 Attendees will receive a cancellation for future events in this series and a new invitation for the updated series.
+              </div>
+            </Show>
+
+            <Show when={scope() === "following" && props.mode === "edit"}>
+              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+                Individually edited events after this date will be reset to match the new series.
+              </div>
+            </Show>
+
+            <Show when={scope() === "all" && props.mode === "edit"}>
+              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+                Individually edited events in this series will be reset to match.
               </div>
             </Show>
 

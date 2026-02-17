@@ -398,8 +398,9 @@ export function useEventFormState() {
       setEditColorId(event.colorId ?? null);
     }
 
-    // Recurrence group
-    if (!isGroupDirty("recurrence")) {
+    // Recurrence group — also skip when scope dialog is open (pendingScopePatch
+    // buffers the recurrence change; sync would clobber editRecurrence with stale data)
+    if (!isGroupDirty("recurrence") && !pendingScopePatch()) {
       setEditRecurrence(event.recurrence ?? null);
     }
 
