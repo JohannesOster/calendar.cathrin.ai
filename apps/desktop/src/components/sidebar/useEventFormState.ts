@@ -54,7 +54,7 @@ import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../
 import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 
 export type FormMode = "create" | "edit";
-export type RecurrenceEditScope = "single" | "all";
+export type RecurrenceEditScope = "single" | "all" | "following";
 
 type FieldGroup = "time" | "identity" | "attendees" | "content" | "preferences" | "conferencing";
 
@@ -96,7 +96,8 @@ export function useEventFormState() {
   // reuse it for subsequent edits in the same editing session.
   const [editScope, setEditScope] = createSignal<RecurrenceEditScope | null>(null);
   // When a scope dialog is needed, buffer the patch here until user decides.
-  const [pendingScopePatch, setPendingScopePatch] = createSignal<{ patch: EventPatch; rollback?: EventPatch; eventId: string } | null>(null);
+  // isRecurrenceChange: when true, "This event" is hidden in the scope dialog.
+  const [pendingScopePatch, setPendingScopePatch] = createSignal<{ patch: EventPatch; rollback?: EventPatch; eventId: string; isRecurrenceChange?: boolean } | null>(null);
 
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
@@ -177,12 +178,18 @@ export function useEventFormState() {
       if (rb.isAllDay !== undefined) setEditIsAllDay(rb.isAllDay ?? false);
       if (rb.transparency !== undefined) setEditTransparency(rb.transparency ?? "opaque");
       if (rb.visibility !== undefined) setEditVisibility(rb.visibility ?? "default");
+      if (rb.recurrence !== undefined) setEditRecurrence(rb.recurrence ?? null);
       // Revert optimistic chip update
       const eventId = pending.eventId;
       const event = events().find(e => e.id === eventId);
       if (event) {
         setEvents(prev => prev.map(e => e.id === eventId ? { ...e, ...rb } : e));
       }
+    } else if (pending?.isRecurrenceChange) {
+      // Recurrence changes don't always have rollback — revert from event store
+      const eventId = pending.eventId;
+      const event = events().find(e => e.id === eventId);
+      if (event) setEditRecurrence(event.recurrence ?? null);
     }
     setPendingScopePatch(null);
   }
@@ -403,14 +410,19 @@ export function useEventFormState() {
     if (mode() === "create") { setDraftRecurrence(v); }
     else {
       setEditRecurrence(v);
-      // Recurrence is a series-level property — always apply to "all" events,
-      // bypassing the scope dialog (which would offer "This event" nonsensically).
+      scheduleSave({ recurrence: v });
+      // Recurrence changes need scope selection but "This event" makes no sense —
+      // the dialog will show only "This and following" and "All events".
       const eventId = selectedEventId();
       const event = eventId ? events().find(e => e.id === eventId) : null;
       if (event && (event.recurringEventId || event.recurrence) && !editScope()) {
-        setEditScope("all");
+        const patch = { ...pendingPatch };
+        const rollback = Object.keys(pendingRollback).length > 0 ? { ...pendingRollback } : undefined;
+        pendingPatch = {};
+        pendingRollback = {};
+        setPendingScopePatch({ patch, rollback, eventId, isRecurrenceChange: true });
+        return;
       }
-      scheduleSave({ recurrence: v });
       flushSave();
     }
   };

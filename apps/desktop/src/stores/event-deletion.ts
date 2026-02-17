@@ -18,7 +18,7 @@ import { revalidateWeeksForDates } from "./event-polling";
 // Recurrence Scope Selection (for recurring events)
 // =============================================================================
 
-export type RecurrenceScope = "single" | "all";
+export type RecurrenceScope = "single" | "all" | "following";
 
 /** When set, a recurrence scope dialog should be shown for this event before deletion. */
 export const [pendingRecurrenceScopeEvent, setPendingRecurrenceScopeEvent] = createSignal<CalendarEvent | null>(null);

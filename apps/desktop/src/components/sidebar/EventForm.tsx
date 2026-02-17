@@ -100,6 +100,7 @@ export function EventForm() {
       <RecurrenceScopeDialog
         open={!!state.pendingScopePatch()}
         mode="edit"
+        hideThisEvent={state.pendingScopePatch()?.isRecurrenceChange}
         onSelect={(scope) => state.confirmEditScope(scope)}
         onCancel={() => state.cancelEditScope()}
       />

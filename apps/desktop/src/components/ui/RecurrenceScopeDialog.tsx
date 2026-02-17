@@ -1,18 +1,26 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, createEffect, on, Show } from "solid-js";
 import { Dialog } from "@ark-ui/solid/dialog";
 import { Portal } from "solid-js/web";
 
-export type RecurrenceScope = "single" | "all";
+export type RecurrenceScope = "single" | "all" | "following";
 
 interface RecurrenceScopeDialogProps {
   open: boolean;
   mode: "edit" | "delete";
+  /** Hide "This event" option (e.g. for recurrence rule changes where single makes no sense). */
+  hideThisEvent?: boolean;
   onSelect: (scope: RecurrenceScope) => void;
   onCancel: () => void;
 }
 
 export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
-  const [scope, setScope] = createSignal<RecurrenceScope>("single");
+  const defaultScope = () => props.hideThisEvent ? "following" : "single";
+  const [scope, setScope] = createSignal<RecurrenceScope>(defaultScope());
+
+  // Reset selection when dialog opens or hideThisEvent changes
+  createEffect(on(() => props.open, (open) => {
+    if (open) setScope(defaultScope());
+  }));
 
   const title = () => props.mode === "delete" ? "Delete recurring event" : "Edit recurring event";
   const actionLabel = () => props.mode === "delete" ? "Delete" : "Continue";
@@ -35,16 +43,29 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
             </Dialog.Title>
 
             <div class="space-y-2 mb-4" role="radiogroup" aria-label="Scope">
+              <Show when={!props.hideThisEvent}>
+                <label class="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded hover:bg-surface-hover transition-colors">
+                  <input
+                    type="radio"
+                    name="recurrence-scope"
+                    value="single"
+                    checked={scope() === "single"}
+                    onChange={() => setScope("single")}
+                    class="accent-fg"
+                  />
+                  <span class="text-sm text-fg">This event</span>
+                </label>
+              </Show>
               <label class="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded hover:bg-surface-hover transition-colors">
                 <input
                   type="radio"
                   name="recurrence-scope"
-                  value="single"
-                  checked={scope() === "single"}
-                  onChange={() => setScope("single")}
+                  value="following"
+                  checked={scope() === "following"}
+                  onChange={() => setScope("following")}
                   class="accent-fg"
                 />
-                <span class="text-sm text-fg">This event</span>
+                <span class="text-sm text-fg">This and following events</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded hover:bg-surface-hover transition-colors">
                 <input

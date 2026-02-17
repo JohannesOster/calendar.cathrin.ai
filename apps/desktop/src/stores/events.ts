@@ -111,7 +111,7 @@ export async function updateEvent(
   eventId: string,
   patch: EventPatch,
   rollback?: EventPatch,
-  scope?: "single" | "all",
+  scope?: "single" | "all" | "following",
 ): Promise<void> {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
