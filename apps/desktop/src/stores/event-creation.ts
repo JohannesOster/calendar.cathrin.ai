@@ -8,7 +8,7 @@ import { showErrorToast } from "../lib/toast";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
-import { RRule } from "rrule";
+import { expandRRule } from "../utils/rrule-expand";
 import { centerDate } from "./calendar-navigation";
 import { addPendingNotification } from "./pending-notifications";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
@@ -281,58 +281,37 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
 
   // Expand RRULE to generate optimistic instances in the visible range
   if (recurrence && recurrence.length > 0) {
-    const rruleStr = recurrence.find(r => r.startsWith("RRULE:") || r.startsWith("FREQ="));
-    if (rruleStr) {
-      try {
-        const center = centerDate();
-        const rangeStart = new Date(center);
-        rangeStart.setDate(rangeStart.getDate() - 30);
-        const rangeEnd = new Date(center);
-        rangeEnd.setDate(rangeEnd.getDate() + 60);
+    try {
+      const durationMs = eventEnd.getTime() - eventStart.getTime();
+      const instances = expandRRule(recurrence, eventStart, durationMs, centerDate());
 
-        const durationMs = eventEnd.getTime() - eventStart.getTime();
-        const rule = RRule.fromString(rruleStr.replace(/^RRULE:/, ""));
-        // Override dtstart to match the event start
-        const ruleWithStart = new RRule({
-          ...rule.origOptions,
-          dtstart: eventStart,
+      for (const inst of instances) {
+        const dateISO = inst.start.toISOString().slice(0, 10);
+        addLocalEvent({
+          id: `${tempId}-${dateISO}`,
+          providerEventId: "",
+          calendarId: calId,
+          title,
+          start: inst.start,
+          end: inst.end,
+          isAllDay,
+          color,
+          location,
+          description,
+          isReadOnly: false,
+          transparency,
+          visibility,
+          reminders: reminders.length > 0 ? reminders : undefined,
+          colorId: colorKey ?? undefined,
+          conferencing,
+          timeZone,
+          attendees: attendees.length > 0 ? attendees : undefined,
+          recurringEventId: tempId,
+          createdAt: now,
         });
-        const occurrences = ruleWithStart.between(rangeStart, rangeEnd, true);
-
-        for (const occ of occurrences) {
-          // Skip the first occurrence — it's the master event we already added
-          if (occ.getTime() === eventStart.getTime()) continue;
-
-          const instanceStart = occ;
-          const instanceEnd = new Date(occ.getTime() + durationMs);
-          const dateISO = instanceStart.toISOString().slice(0, 10);
-
-          addLocalEvent({
-            id: `${tempId}-${dateISO}`,
-            providerEventId: "",
-            calendarId: calId,
-            title,
-            start: instanceStart,
-            end: instanceEnd,
-            isAllDay,
-            color,
-            location,
-            description,
-            isReadOnly: false,
-            transparency,
-            visibility,
-            reminders: reminders.length > 0 ? reminders : undefined,
-            colorId: colorKey ?? undefined,
-            conferencing,
-            timeZone,
-            attendees: attendees.length > 0 ? attendees : undefined,
-            recurringEventId: tempId,
-            createdAt: now,
-          });
-        }
-      } catch (err) {
-        console.warn("[event-creation] Failed to expand RRULE:", err);
       }
+    } catch (err) {
+      console.warn("[event-creation] Failed to expand RRULE:", err);
     }
   }
 
