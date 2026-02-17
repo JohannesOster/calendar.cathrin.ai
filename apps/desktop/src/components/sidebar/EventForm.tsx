@@ -17,6 +17,7 @@ import {
   RemindersSection,
 } from "./EventFormSections";
 import { RecurrenceScopeDialog } from "../ui/RecurrenceScopeDialog";
+import { selectedEvent } from "../../stores/event-selection";
 
 export function EventForm() {
   let titleInputRef: HTMLInputElement | undefined;
@@ -101,15 +102,23 @@ export function EventForm() {
         open={!!state.pendingScopePatch()}
         mode="edit"
         hideThisEvent={state.pendingScopePatch()?.isRecurrenceChange}
+        hasAttendees={!!(selectedEvent()?.attendees?.length)}
         onSelect={(scope) => state.confirmEditScope(scope)}
         onCancel={() => state.cancelEditScope()}
       />
+      <Show when={state.pendingNotifyPatch()}>
+        <EditNotifyPrompt
+          onNotify={() => state.confirmNotify("all")}
+          onSilent={() => state.confirmNotify("none")}
+          onCancel={() => state.cancelNotify()}
+        />
+      </Show>
       <Show when={showCommitPrompt()}>
         <CommitPrompt />
       </Show>
       <div
         class="flex-1 overflow-y-auto scrollbar-hidden"
-        classList={{ "opacity-50 pointer-events-none select-none": showCommitPrompt() }}
+        classList={{ "opacity-50 pointer-events-none select-none": showCommitPrompt() || !!state.pendingNotifyPatch() }}
       >
         {/* Title input */}
         <div class="px-3 pt-3 pb-2">
@@ -136,6 +145,39 @@ export function EventForm() {
         <CalendarSection state={state} />
         <RemindersSection state={state} />
       </div>
+    </div>
+  );
+}
+
+function EditNotifyPrompt(props: {
+  onNotify: () => void;
+  onSilent: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div class="mx-3 mt-3 mb-1 border border-border rounded-lg bg-surface overflow-hidden">
+      <p class="text-xs text-fg-muted px-3 py-2 border-b border-border">
+        This change affects attendees
+      </p>
+      <button
+        ref={(el) => requestAnimationFrame(() => el.focus())}
+        class="w-full text-left text-sm text-accent hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent font-medium"
+        onClick={() => props.onNotify()}
+      >
+        Notify attendees
+      </button>
+      <button
+        class="w-full text-left text-sm text-fg hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+        onClick={() => props.onSilent()}
+      >
+        Save without emailing
+      </button>
+      <button
+        class="w-full text-left text-sm text-fg-muted hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+        onClick={() => props.onCancel()}
+      >
+        Undo change
+      </button>
     </div>
   );
 }

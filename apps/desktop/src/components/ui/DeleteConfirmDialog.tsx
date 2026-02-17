@@ -6,6 +6,7 @@ import {
   confirmDeleteWithChoice,
   cancelDeleteConfirm,
 } from "../../stores/event-deletion";
+import { getProviderForCalendar } from "../../stores/accounts";
 
 export function DeleteConfirmDialog() {
   const isOpen = () => pendingDeleteConfirmEvent() !== null;
@@ -26,6 +27,7 @@ export function DeleteConfirmDialog() {
             <Show when={pendingDeleteConfirmEvent()}>
               {(event) => {
                 const othersCount = () => event().attendees!.filter(a => !a.isSelf).length;
+                const isOutlook = () => getProviderForCalendar(event().calendarId) === "outlook";
                 return (
                 <>
                   <Dialog.Title class="text-sm font-medium text-fg mb-1">
@@ -41,12 +43,19 @@ export function DeleteConfirmDialog() {
                     >
                       {othersCount() === 1 ? "Send cancellation" : `Send ${othersCount()} cancellations`}
                     </button>
-                    <button
-                      class="w-full text-sm py-2 px-3 rounded-lg bg-surface-hover text-fg hover:bg-border transition-colors cursor-pointer border-none outline-none"
-                      onClick={() => confirmDeleteWithChoice("none")}
-                    >
-                      Delete without notifying
-                    </button>
+                    <Show when={!isOutlook()}>
+                      <button
+                        class="w-full text-sm py-2 px-3 rounded-lg bg-surface-hover text-fg hover:bg-border transition-colors cursor-pointer border-none outline-none"
+                        onClick={() => confirmDeleteWithChoice("none")}
+                      >
+                        Delete without notifying
+                      </button>
+                    </Show>
+                    <Show when={isOutlook()}>
+                      <p class="text-xs text-fg-muted text-center px-2">
+                        Outlook automatically notifies attendees of cancellations.
+                      </p>
+                    </Show>
                     <button
                       class="w-full text-sm py-2 px-3 rounded-lg text-fg-muted hover:text-fg transition-colors cursor-pointer border-none outline-none bg-transparent"
                       onClick={() => cancelDeleteConfirm()}

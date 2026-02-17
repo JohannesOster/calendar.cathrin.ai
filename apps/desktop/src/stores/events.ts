@@ -114,6 +114,7 @@ export async function updateEvent(
   patch: EventPatch,
   rollback?: EventPatch,
   scope?: "single" | "all" | "following",
+  sendUpdates?: "all" | "none",
 ): Promise<void> {
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
@@ -317,6 +318,9 @@ export async function updateEvent(
 
   const params = new URLSearchParams({ calendarId: event.calendarId });
   if (scope) params.set("scope", scope);
+
+  // Include sendUpdates in the body (not query param) for the PATCH
+  if (sendUpdates) (apiPatch as Record<string, unknown>).sendUpdates = sendUpdates;
 
   try {
     await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {

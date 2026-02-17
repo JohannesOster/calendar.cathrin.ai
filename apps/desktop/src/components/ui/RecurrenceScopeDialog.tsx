@@ -9,6 +9,8 @@ interface RecurrenceScopeDialogProps {
   mode: "edit" | "delete";
   /** Hide "This event" option (e.g. for recurrence rule changes where single makes no sense). */
   hideThisEvent?: boolean;
+  /** Show attendee warning when "following" is selected. */
+  hasAttendees?: boolean;
   onSelect: (scope: RecurrenceScope) => void;
   onCancel: () => void;
 }
@@ -79,6 +81,12 @@ export function RecurrenceScopeDialog(props: RecurrenceScopeDialogProps) {
                 <span class="text-sm text-fg">All events</span>
               </label>
             </div>
+
+            <Show when={props.hasAttendees && scope() === "following"}>
+              <div class="mb-3 px-2 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-relaxed dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-200">
+                Attendees will receive a cancellation for future events in this series and a new invitation for the updated series.
+              </div>
+            </Show>
 
             <div class="flex justify-end gap-2">
               <button

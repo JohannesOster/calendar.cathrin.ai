@@ -47,7 +47,7 @@ import type { EventPatch } from "../../stores/event-types";
 import { apiFetch, ApiError } from "../../lib/api";
 import { showErrorToast } from "../../lib/toast";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
-import { connectedAccounts } from "../../stores/accounts";
+import { connectedAccounts, getProviderForCalendar } from "../../stores/accounts";
 import { startBuffering, isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { addPendingNotification } from "../../stores/pending-notifications";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
@@ -99,6 +99,12 @@ export function useEventFormState() {
   // isRecurrenceChange: when true, "This event" is hidden in the scope dialog.
   const [pendingScopePatch, setPendingScopePatch] = createSignal<{ patch: EventPatch; rollback?: EventPatch; eventId: string; isRecurrenceChange?: boolean } | null>(null);
 
+  // When an edit affects attendees (time/location/recurrence change on event with attendees),
+  // buffer here to show notification choice before sending.
+  const [pendingNotifyPatch, setPendingNotifyPatch] = createSignal<{
+    patch: EventPatch; rollback?: EventPatch; eventId: string; scope?: RecurrenceEditScope;
+  } | null>(null);
+
   const mode = createMemo<FormMode>(() => isCreating() ? "create" : "edit");
 
   // ===========================================================================
@@ -128,6 +134,41 @@ export function useEventFormState() {
     return Object.keys(pendingPatch).some((key) => FIELD_GROUPS[key] === group);
   }
 
+  /** Check if a patch includes fields that would trigger attendee notifications. */
+  function isAttendeeAffectingPatch(patch: EventPatch): boolean {
+    return patch.start !== undefined || patch.end !== undefined
+      || patch.location !== undefined || patch.recurrence !== undefined;
+  }
+
+  /**
+   * Dispatch a patch to the server, or buffer it for notification choice
+   * if the event has attendees and the patch affects them.
+   */
+  function dispatchUpdate(
+    eventId: string, patch: EventPatch, rollback: EventPatch | undefined,
+    scope: RecurrenceEditScope | undefined,
+  ): void {
+    const event = events().find(e => e.id === eventId);
+    const hasAttendees = event?.attendees && event.attendees.length > 0;
+
+    if (hasAttendees && isAttendeeAffectingPatch(patch)) {
+      // Outlook auto-notifies — skip the prompt
+      if (getProviderForCalendar(event!.calendarId) === "outlook") {
+        updateEvent(eventId, patch, rollback, scope, "all").catch((err) =>
+          console.error("Failed to save event update:", err)
+        );
+        return;
+      }
+      // Buffer for notification choice
+      setPendingNotifyPatch({ patch, rollback, eventId, scope });
+      return;
+    }
+
+    updateEvent(eventId, patch, rollback, scope).catch((err) =>
+      console.error("Failed to save event update:", err)
+    );
+  }
+
   function flushSave(overrideEventId?: string): void {
     const eventId = overrideEventId ?? activeEditEventId ?? selectedEventId();
     if (!eventId || Object.keys(pendingPatch).length === 0) return;
@@ -148,9 +189,7 @@ export function useEventFormState() {
     }
 
     const scope = editScope() ?? undefined;
-    updateEvent(eventId, patchToSend, rollback, scope).catch((err) =>
-      console.error("Failed to save event update:", err)
-    );
+    dispatchUpdate(eventId, patchToSend, rollback, scope);
   }
 
   /** Called by the scope dialog when user picks a scope for editing. */
@@ -159,9 +198,7 @@ export function useEventFormState() {
     const pending = pendingScopePatch();
     if (!pending) return;
     setPendingScopePatch(null);
-    updateEvent(pending.eventId, pending.patch, pending.rollback, scope).catch((err) =>
-      console.error("Failed to save event update:", err)
-    );
+    dispatchUpdate(pending.eventId, pending.patch, pending.rollback, scope);
   }
 
   /** Called by the scope dialog when user cancels. Reverts the change. */
@@ -194,12 +231,54 @@ export function useEventFormState() {
     setPendingScopePatch(null);
   }
 
+  /** Called by the notification prompt: proceed with chosen sendUpdates. */
+  function confirmNotify(sendUpdates: "all" | "none"): void {
+    const pending = pendingNotifyPatch();
+    if (!pending) return;
+    setPendingNotifyPatch(null);
+    updateEvent(pending.eventId, pending.patch, pending.rollback, pending.scope, sendUpdates).catch((err) =>
+      console.error("Failed to save event update:", err)
+    );
+  }
+
+  /** Called by the notification prompt: cancel — revert optimistic changes. */
+  function cancelNotify(): void {
+    const pending = pendingNotifyPatch();
+    if (!pending) return;
+    setPendingNotifyPatch(null);
+    // Revert form signals
+    const rb = pending.rollback;
+    if (rb) {
+      if (rb.start !== undefined) setEditStart(rb.start ?? null);
+      if (rb.end !== undefined) setEditEnd(rb.end ?? null);
+      if (rb.location !== undefined) setEditLocation(rb.location ?? "");
+      if (rb.recurrence !== undefined) setEditRecurrence(rb.recurrence ?? null);
+      // Revert optimistic store update
+      const eventId = pending.eventId;
+      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, ...rb } : e));
+    }
+  }
+
+  /** Flush a pending notification patch silently (navigate-away). */
+  function flushPendingNotify(eventId?: string): void {
+    const pending = pendingNotifyPatch();
+    if (!pending) return;
+    if (eventId && pending.eventId !== eventId) return;
+    setPendingNotifyPatch(null);
+    // Save silently + add pending notification dot
+    updateEvent(pending.eventId, pending.patch, pending.rollback, pending.scope, "none").catch((err) =>
+      console.error("Failed to save event update:", err)
+    );
+    addPendingNotification(pending.eventId);
+  }
+
   // Flush pending save when deselecting (sidebar closes).
   // Note: this effect may be disposed by <Show> before it runs. onCleanup
   // below is the guaranteed fallback using activeEditEventId.
   createEffect(on(selectedEventId, (id, prevId) => {
     if (!id && prevId) {
       if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+      flushPendingNotify(prevId);
       flushBufferedAttendees(prevId);
       flushSave(prevId);
     }
@@ -209,6 +288,7 @@ export function useEventFormState() {
   // already null by the time <Show> disposes this component.
   onCleanup(() => {
     if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+    flushPendingNotify();
     if (activeEditEventId) flushBufferedAttendees(activeEditEventId);
     flushSave();
   });
@@ -225,6 +305,7 @@ export function useEventFormState() {
     // Flush pending saves for the previous event before switching
     if (prevId && prevId !== id) {
       if (reminderFlushTimer) { clearTimeout(reminderFlushTimer); reminderFlushTimer = null; }
+      flushPendingNotify(prevId);
       flushBufferedAttendees(prevId);
       flushSave(prevId);
     }
@@ -917,6 +998,9 @@ export function useEventFormState() {
     pendingScopePatch,
     confirmEditScope,
     cancelEditScope,
+    pendingNotifyPatch,
+    confirmNotify,
+    cancelNotify,
   };
 }
 

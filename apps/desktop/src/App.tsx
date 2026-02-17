@@ -185,6 +185,7 @@ function App() {
       <RecurrenceScopeDialog
         open={!!pendingRecurrenceScopeEvent()}
         mode="delete"
+        hasAttendees={!!(pendingRecurrenceScopeEvent()?.attendees?.length)}
         onSelect={(scope) => confirmRecurrenceScope(scope)}
         onCancel={() => cancelRecurrenceScope()}
       />
