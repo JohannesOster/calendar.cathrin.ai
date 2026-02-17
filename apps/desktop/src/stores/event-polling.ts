@@ -30,6 +30,7 @@ const POLL_INTERVAL_MS = STALE_THRESHOLD_MS;
 let currentVisibleWeeks: Set<string> = new Set();
 let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 const revalidatingWeeks = new Set<string>();
+const pendingRevalidation = new Set<string>();
 
 // =============================================================================
 // Revalidation
@@ -37,7 +38,8 @@ const revalidatingWeeks = new Set<string>();
 
 async function revalidateWeekBackground(weekId: string): Promise<void> {
   if (revalidatingWeeks.has(weekId)) {
-    console.log(`[events] Skipping revalidation for ${weekId} - already in progress`);
+    pendingRevalidation.add(weekId);
+    console.log(`[events] Queued revalidation for ${weekId} - already in progress`);
     return;
   }
 
@@ -59,6 +61,12 @@ async function revalidateWeekBackground(weekId: string): Promise<void> {
     console.warn(`[events] Failed to revalidate ${weekId}:`, error);
   } finally {
     revalidatingWeeks.delete(weekId);
+    if (pendingRevalidation.has(weekId)) {
+      pendingRevalidation.delete(weekId);
+      revalidateWeekBackground(weekId).catch((err) =>
+        console.warn(`[events] Queued revalidation failed for ${weekId}:`, err)
+      );
+    }
   }
 }
 

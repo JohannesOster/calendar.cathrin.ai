@@ -7,7 +7,24 @@ import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import { RRULE_REVALIDATE_FIRST_MS, RRULE_REVALIDATE_SECOND_MS } from "../constants/calendar";
 import { expandRRule } from "../utils/rrule-expand";
 import { formatDateOnly } from "../utils/date-format";
+import { markSeriesDirty, markServerConfirmed, clearDirty } from "./event-dirty";
 import { centerDate } from "./calendar-navigation";
+
+// =============================================================================
+// Per-series mutation lock
+// =============================================================================
+
+const seriesLocks = new Map<string, Promise<void>>();
+
+async function withSeriesLock(seriesId: string, fn: () => Promise<void>): Promise<void> {
+  const existing = seriesLocks.get(seriesId);
+  const chained = (existing ?? Promise.resolve()).then(fn, fn);
+  seriesLocks.set(seriesId, chained);
+  chained.finally(() => {
+    if (seriesLocks.get(seriesId) === chained) seriesLocks.delete(seriesId);
+  });
+  return chained;
+}
 
 // =============================================================================
 // Signals
@@ -207,9 +224,16 @@ export async function updateEvent(
   const event = events().find((e) => e.id === eventId);
   if (!event) return;
 
+  const masterId = event.recurringEventId || event.providerEventId;
+  return withSeriesLock(masterId, async () => {
+  // Re-read event inside lock — it may have changed while queued
+  const lockedEvent = events().find((e) => e.id === eventId);
+  if (!lockedEvent) return;
+
   // Snapshot for rollback — merge in any explicit rollback values so the
   // snapshot reflects the true pre-mutation state even when the caller
   // pre-mutated the signal (e.g. during drag).
+  const event = lockedEvent;
   const snapshot: CalendarEvent = {
     ...event,
     ...(rollback?.title !== undefined && { title: rollback.title }),
@@ -230,7 +254,6 @@ export async function updateEvent(
 
   // Identify sibling events for series-wide optimistic updates
   const isSeries = scope === "all" || scope === "following";
-  const masterId = event.recurringEventId || event.providerEventId;
 
   // Compute time deltas for sibling patching (preserve each sibling's own time)
   const startDeltaMs = patch.start ? patch.start.getTime() - snapshot.start.getTime() : 0;
@@ -274,6 +297,9 @@ export async function updateEvent(
     addedTempIds.push(
       ...applyRecurrenceReExpansion(eventId, event, patch, snapshot, masterId, scope, siblingSnapshots)
     );
+    if (patch.recurrence && patch.recurrence.length > 0) {
+      markSeriesDirty(masterId, addedTempIds, patch.recurrence);
+    }
   } else {
     // Apply optimistic update (non-recurrence changes)
     setEvents((prev) =>
@@ -371,15 +397,14 @@ export async function updateEvent(
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    // After recurrence changes, delay revalidation to let Google propagate
-    // the RRULE mutation before we re-fetch. Without this delay, Google may
-    // return stale expanded instances that overwrite our correct optimistic state.
+    // After recurrence changes, mark server confirmed and delay revalidation
+    // to let the provider propagate the RRULE mutation before we re-fetch.
     if (isRecurrenceChange) {
+      markServerConfirmed(masterId);
       const dates = [snapshot.start, patch.start ?? snapshot.start];
-      // First revalidation: Google may still return stale instances, but
-      // rruleExpandedAt protection in replaceEventsInRange keeps optimistic
-      // instances alive for 15s. Second revalidation at 20s catches the
-      // propagated change after protection expires.
+      // First revalidation: server may still return stale instances, but the
+      // dirty-flag system keeps optimistic instances alive until the server
+      // returns matching recurrence. Second revalidation catches slower providers.
       setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_FIRST_MS);
       setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_SECOND_MS);
     } else {
@@ -392,10 +417,14 @@ export async function updateEvent(
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
     rollbackOptimisticUpdate(eventId, snapshot, siblingSnapshots, addedTempIds);
+    if (isRecurrenceChange) {
+      clearDirty(masterId);
+    }
     if (error instanceof ApiError && error.status === 403) {
       showErrorToast("Permission denied", "You don't have permission to modify this calendar");
     }
   }
+  }); // withSeriesLock
 }
 
 // =============================================================================

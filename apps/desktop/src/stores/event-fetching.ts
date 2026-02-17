@@ -17,7 +17,8 @@ import {
   replaceEventsOnDisk,
 } from "../lib/event-cache";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
-import { TEMP_EVENT_TTL_MS, RRULE_PROTECTION_MS } from "../constants/calendar";
+import { TEMP_EVENT_TTL_MS } from "../constants/calendar";
+import { isSeriesDirty, clearDirtyIfMatching } from "./event-dirty";
 import type { CalendarEvent } from "./event-types";
 import { convertApiEvent } from "./event-types";
 import {
@@ -103,13 +104,13 @@ export function replaceEventsInRange(
   const pendingMap = getPendingDeletionMap();
   const dragId = dragActiveEventId();
 
-  // Identify series with recent RRULE-expanded optimistic instances.
-  // Server data for these series is likely stale (Google eventual consistency),
-  // so we exclude server instances for protected series entirely.
+  // Identify series with pending recurrence mutations (dirty flag).
+  // Server data for these series is likely stale (eventual consistency),
+  // so we exclude server instances for dirty series entirely.
   const protectedSeriesIds = new Set<string>();
   for (const event of existingEvents) {
     if (event.id.includes("-rrule-") && event.recurringEventId
-        && event.rruleExpandedAt && Date.now() - event.rruleExpandedAt < RRULE_PROTECTION_MS) {
+        && isSeriesDirty(event.recurringEventId)) {
       protectedSeriesIds.add(event.recurringEventId);
     }
   }
@@ -130,6 +131,16 @@ export function replaceEventsInRange(
   const serverRecurringIds = new Set(
     filtered.filter(e => e.recurringEventId).map(e => e.recurringEventId!)
   );
+
+  // Clear dirty flags before the `kept` filter below. If the server returned a master
+  // with matching recurrence, its expanded instances in `filtered` are authoritative,
+  // so `isSeriesDirty()` below correctly drops optimistic instances in the same pass.
+  for (const event of filtered) {
+    if (event.recurrence && event.recurrence.length > 0) {
+      const seriesId = event.providerEventId || event.id;
+      clearDirtyIfMatching(seriesId, event.recurrence);
+    }
+  }
 
   const kept = existingEvents.filter((event) => {
     // Never touch the event being dragged — its local state is authoritative
@@ -161,10 +172,9 @@ export function replaceEventsInRange(
       if (!serverRecurringIds.has(event.recurringEventId)) {
         return true;
       }
-      // Even when server returned instances for this series, protect recent
-      // optimistic instances — Google's eventual consistency means the server
-      // may still be returning stale expanded instances from a previous RRULE.
-      if (event.rruleExpandedAt && Date.now() - event.rruleExpandedAt < RRULE_PROTECTION_MS) {
+      // Keep optimistic instances while the series is dirty (mutation not
+      // yet confirmed or server hasn't returned matching recurrence).
+      if (isSeriesDirty(event.recurringEventId)) {
         return true;
       }
     }
