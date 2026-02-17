@@ -329,7 +329,13 @@ export async function updateEvent(
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    _revalidateWeeksForDates?.(snapshot.start, patch.start ?? snapshot.start);
+    // Revalidate the primary event's week + all sibling weeks so the server
+    // response replaces any stale cached instances (especially after recurrence changes).
+    const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
+    for (const s of siblingSnapshots) {
+      datesToRevalidate.push(s.start);
+    }
+    _revalidateWeeksForDates?.(...datesToRevalidate);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
     // Rollback: restore primary event + siblings, remove any temp RRULE instances

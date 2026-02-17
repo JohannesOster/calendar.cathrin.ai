@@ -255,6 +255,31 @@ export const eventsRoute = new Hono()
           event.accountId, event.calendarId, targetEventId, patch, targetEvent, sendUpdates
         );
 
+        // When recurrence changes on a series, the old expanded instances in our
+        // DB cache are stale (Google replaces them). Clean them up so revalidation
+        // doesn't serve stale data back to the client.
+        if (patch.recurrence !== undefined && (scope === "all" || scope === "following")) {
+          const masterId = event.recurringEventId ?? providerEventId;
+          if (scope === "all") {
+            // Remove all cached instances of this series
+            await db!.delete(serverEvents).where(
+              and(
+                eq(serverEvents.calendarId, event.calendarId),
+                eq(serverEvents.recurringEventId, masterId),
+              )
+            );
+          } else if (scope === "following") {
+            // Remove cached instances from the split point onwards
+            await db!.delete(serverEvents).where(
+              and(
+                eq(serverEvents.calendarId, event.calendarId),
+                eq(serverEvents.recurringEventId, masterId),
+                gte(serverEvents.start, event.start),
+              )
+            );
+          }
+        }
+
         // Notify connected clients — include both old and new weeks if event moved
         const clientId = c.req.header("X-Client-ID");
         const weekIds = new Set<string>();
