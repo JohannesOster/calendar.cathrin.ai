@@ -165,6 +165,8 @@ export async function updateEvent(
     const allEvts = events();
     siblingSnapshots = allEvts.filter((e) => {
       if (e.id === eventId) return false; // primary event handled by main snapshot
+      // Only match siblings on the same calendar to avoid cross-account false positives
+      if (e.calendarId !== event.calendarId) return false;
       const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
       if (!isSibling) return false;
       if (scope === "following") {
@@ -256,7 +258,7 @@ export async function updateEvent(
         }
 
         // Sibling events: apply series-wide fields + time deltas
-        if (isSeries) {
+        if (isSeries && e.calendarId === event.calendarId) {
           const isSibling = e.recurringEventId === masterId || e.providerEventId === masterId;
           if (isSibling) {
             if (scope === "following" && new Date(e.start).getTime() < snapshot.start.getTime()) {

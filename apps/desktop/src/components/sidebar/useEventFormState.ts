@@ -56,7 +56,7 @@ import { SYSTEM_TIMEZONE } from "../../constants/calendar";
 export type FormMode = "create" | "edit";
 export type RecurrenceEditScope = "single" | "all" | "following";
 
-type FieldGroup = "time" | "identity" | "attendees" | "content" | "preferences" | "conferencing";
+type FieldGroup = "time" | "identity" | "attendees" | "content" | "preferences" | "conferencing" | "recurrence";
 
 const FIELD_GROUPS: Record<string, FieldGroup> = {
   start: "time", end: "time", isAllDay: "time", timeZone: "time",
@@ -65,7 +65,7 @@ const FIELD_GROUPS: Record<string, FieldGroup> = {
   attendees: "attendees",
   transparency: "preferences", visibility: "preferences", reminders: "preferences", colorId: "preferences",
   conferencing: "conferencing",
-  recurrence: "preferences",
+  recurrence: "recurrence",
 };
 
 export function useEventFormState() {
@@ -398,6 +398,11 @@ export function useEventFormState() {
       setEditColorId(event.colorId ?? null);
     }
 
+    // Recurrence group
+    if (!isGroupDirty("recurrence")) {
+      setEditRecurrence(event.recurrence ?? null);
+    }
+
     // Conferencing group: skip if dirty or loading
     if (!isGroupDirty("conferencing") && !conferencingLoading()) {
       setEditConferencing(event.conferencing ?? null);
@@ -490,6 +495,10 @@ export function useEventFormState() {
   const setRecurrence = (v: string[] | null) => {
     if (mode() === "create") { setDraftRecurrence(v); }
     else {
+      if (pendingRollback.recurrence === undefined) {
+        const event = selectedEvent();
+        if (event) pendingRollback.recurrence = event.recurrence ?? null;
+      }
       setEditRecurrence(v);
       scheduleSave({ recurrence: v });
       // Recurrence changes need scope selection but "This event" makes no sense —

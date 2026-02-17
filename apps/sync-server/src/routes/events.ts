@@ -203,7 +203,12 @@ export const eventsRoute = new Hono()
       }
 
       const calendarId = c.req.query("calendarId");
-      const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
+      let event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
+      if (!event && providerEventId.includes("_")) {
+        // Instance ID format: masterId_dateT — try finding the master
+        const masterId = providerEventId.split("_")[0];
+        event = await findUserEvent(accountIds, masterId, calendarId?.trim() || undefined);
+      }
       if (!event) {
         return c.json({ error: "Event not found" }, 404);
       }
@@ -238,12 +243,16 @@ export const eventsRoute = new Hono()
         // For "all" scope on an instance, redirect to the master event.
         // For "following" scope on Google, pass the instance ID directly — Google handles the split.
         let targetEventId = providerEventId;
+        let targetEvent = event;
         if (scope === "all" && event.recurringEventId) {
           targetEventId = event.recurringEventId as string;
+          // Look up the master event so the provider gets correct existingEvent metadata
+          const masterEvent = await findUserEvent(accountIds, targetEventId, event.calendarId);
+          if (masterEvent) targetEvent = masterEvent;
         }
 
         const apiEvent = await updateEvent(
-          event.accountId, event.calendarId, targetEventId, patch, event, sendUpdates
+          event.accountId, event.calendarId, targetEventId, patch, targetEvent, sendUpdates
         );
 
         // Notify connected clients — include both old and new weeks if event moved
@@ -281,7 +290,11 @@ export const eventsRoute = new Hono()
     }
 
     const calendarId = c.req.query("calendarId");
-    const event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
+    let event = await findUserEvent(accountIds, providerEventId, calendarId?.trim() || undefined);
+    if (!event && providerEventId.includes("_")) {
+      const masterId = providerEventId.split("_")[0];
+      event = await findUserEvent(accountIds, masterId, calendarId?.trim() || undefined);
+    }
     if (!event) {
       return c.json({ error: "Event not found" }, 404);
     }

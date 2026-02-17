@@ -366,7 +366,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     }
 
     if (patch.recurrence !== undefined) {
-      googlePatch.recurrence = patch.recurrence;
+      googlePatch.recurrence = patch.recurrence ?? [];
     }
 
     const service = new GoogleCalendarService(accessToken);
