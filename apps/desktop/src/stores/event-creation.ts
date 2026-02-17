@@ -343,19 +343,23 @@ export function commitCreation(sendUpdates?: "all" | "none"): boolean {
       const compositeId = `${calId}/${serverEvent.id}`;
       // Swap temp ID with server-assigned ID
       setEvents((prev) =>
-        prev.map((e) =>
-          e.id === tempId
-            ? {
-                ...e,
-                id: compositeId,
-                providerEventId: serverEvent.id,
-                title: serverEvent.title,
-                start: new Date(serverEvent.start),
-                end: new Date(serverEvent.end),
-                conferencing: serverEvent.conferencing ?? e.conferencing,
-              }
-            : e
-        )
+        prev.map((e) => {
+          if (e.id === tempId) {
+            return {
+              ...e,
+              id: compositeId,
+              providerEventId: serverEvent.id,
+              title: serverEvent.title,
+              start: new Date(serverEvent.start),
+              end: new Date(serverEvent.end),
+              conferencing: serverEvent.conferencing ?? e.conferencing,
+            };
+          }
+          if (e.recurringEventId === tempId) {
+            return { ...e, recurringEventId: compositeId };
+          }
+          return e;
+        })
       );
       // Only track as pending notification if user didn't explicitly choose
       // (sendUpdates was not provided — shouldn't happen with new flow, but kept as safety)
