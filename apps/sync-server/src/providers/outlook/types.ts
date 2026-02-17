@@ -58,6 +58,7 @@ export interface GraphEvent {
   iCalUId?: string;
   type?: "singleInstance" | "occurrence" | "exception" | "seriesMaster";
   seriesMasterId?: string;
+  recurrence?: GraphRecurrence;
   isCancelled?: boolean;
   // Delta sync annotation for deleted events
   "@removed"?: { reason: string };
@@ -78,6 +79,31 @@ export interface GraphCategory {
 
 export interface GraphCategoryListResponse {
   value: GraphCategory[];
+}
+
+// === Recurrence ===
+
+export interface GraphRecurrencePattern {
+  type: "daily" | "weekly" | "absoluteMonthly" | "relativeMonthly" | "absoluteYearly" | "relativeYearly";
+  interval: number;
+  daysOfWeek?: string[];
+  dayOfMonth?: number;
+  month?: number;
+  firstDayOfWeek?: string;
+  index?: "first" | "second" | "third" | "fourth" | "last";
+}
+
+export interface GraphRecurrenceRange {
+  type: "endDate" | "noEnd" | "numbered";
+  startDate: string; // yyyy-MM-dd
+  endDate?: string;  // yyyy-MM-dd
+  numberOfOccurrences?: number;
+  recurrenceTimeZone?: string;
+}
+
+export interface GraphRecurrence {
+  pattern: GraphRecurrencePattern;
+  range: GraphRecurrenceRange;
 }
 
 // === Error ===

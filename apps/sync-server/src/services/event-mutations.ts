@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { accounts, serverEvents } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
 import { getProvider } from "../providers/registry.js";
+import { OutlookCalendarProvider } from "../providers/outlook/index.js";
 import {
   ProviderApiError,
   type ProviderEventPatch,
@@ -258,6 +259,113 @@ export async function deleteEvent(
       .delete(serverEvents)
       .where(eq(serverEvents.id, eventDbId));
   }
+}
+
+/**
+ * Outlook-specific: split a recurring series at the instance's date and apply an edit.
+ * Truncates the original master and creates a new series from the split point.
+ */
+export async function splitOutlookSeriesEdit(
+  accountId: string,
+  calendarId: string,
+  masterId: string,
+  splitDate: string,
+  patch: {
+    summary?: string;
+    description?: string;
+    location?: string;
+    start?: string;
+    end?: string;
+    isAllDay?: boolean;
+    transparency?: string;
+    visibility?: string;
+    attendees?: { email: string; name?: string }[] | null;
+    timeZone?: string;
+  },
+  existingEvent: ServerEvent,
+  sendUpdates?: "all" | "none",
+): Promise<ApiCalendarEvent> {
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true, email: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider) as OutlookCalendarProvider;
+  const accessToken = await getAccessToken(accountId);
+
+  const providerPatch: ProviderEventPatch = {
+    summary: patch.summary,
+    description: patch.description,
+    location: patch.location,
+    start: patch.start,
+    end: patch.end,
+    isAllDay: patch.isAllDay,
+    transparency: patch.transparency,
+    visibility: patch.visibility,
+    attendees: patch.attendees,
+    timeZone: patch.timeZone,
+  };
+
+  const mutationOptions: MutationOptions = {
+    calendarColor: existingEvent.color || "#0078d4",
+    sendUpdates,
+    accountEmail: account.email,
+  };
+
+  const apiEvent = await provider.splitSeriesEdit(
+    accessToken, calendarId, masterId, splitDate, providerPatch, mutationOptions,
+  );
+
+  // Clean up future instances from DB (next sync will re-fetch)
+  await db!
+    .delete(serverEvents)
+    .where(
+      and(
+        eq(serverEvents.calendarId, calendarId),
+        eq(serverEvents.recurringEventId, masterId),
+        gte(serverEvents.start, new Date(splitDate)),
+      )
+    );
+
+  // Cache the new series master
+  await upsertServerEvent(db!, apiEvent, accountId, calendarId);
+
+  return apiEvent;
+}
+
+/**
+ * Outlook-specific: truncate a recurring series at the instance's date (for delete).
+ * PATCHes the original master to end the day before the split point.
+ */
+export async function truncateOutlookSeriesDelete(
+  accountId: string,
+  calendarId: string,
+  masterId: string,
+  splitDate: string,
+  eventStart: Date,
+): Promise<void> {
+  const account = await db!.query.accounts.findFirst({
+    where: eq(accounts.id, accountId),
+    columns: { provider: true },
+  });
+  if (!account) throw new Error("Account not found");
+
+  const provider = getProvider(account.provider as Provider) as OutlookCalendarProvider;
+  const accessToken = await getAccessToken(accountId);
+
+  await provider.truncateSeriesDelete(accessToken, masterId, splitDate);
+
+  // Clean up future instances from DB
+  await db!
+    .delete(serverEvents)
+    .where(
+      and(
+        eq(serverEvents.calendarId, calendarId),
+        eq(serverEvents.recurringEventId, masterId),
+        gte(serverEvents.start, eventStart),
+      )
+    );
 }
 
 /**

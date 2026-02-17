@@ -234,6 +234,7 @@ export function mapGraphEvent(
     timeZone,
     attendees: attendees && attendees.length > 0 ? attendees : undefined,
     icalUid: event.iCalUId || undefined,
+    recurringEventId: event.seriesMasterId || undefined,
   };
 }
 

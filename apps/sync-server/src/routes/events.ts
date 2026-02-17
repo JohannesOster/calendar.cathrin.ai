@@ -12,7 +12,7 @@ import {
   getCalendarsToCheck,
 } from "../services/calendar-sync.js";
 import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../services/account-lookup.js";
-import { createEvent, updateEvent, deleteEvent, moveEvent, rsvpEvent } from "../services/event-mutations.js";
+import { createEvent, updateEvent, deleteEvent, moveEvent, rsvpEvent, splitOutlookSeriesEdit, truncateOutlookSeriesDelete } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 import { notifyUser } from "../services/ws-manager.js";
 import type { Provider } from "@cathrin/shared-types";
@@ -209,8 +209,34 @@ export const eventsRoute = new Hono()
       }
 
       try {
+        // Outlook + "following" requires server-side series splitting
+        if (scope === "following" && event.recurringEventId) {
+          const account = await db!.query.accounts.findFirst({
+            where: and(eq(accounts.id, event.accountId), inArray(accounts.id, accountIds)),
+            columns: { provider: true },
+          });
+
+          if (account?.provider === "outlook") {
+            const splitDate = event.start.toISOString().slice(0, 10);
+            const apiEvent = await splitOutlookSeriesEdit(
+              event.accountId, event.calendarId,
+              event.recurringEventId as string, splitDate,
+              patch, event, sendUpdates,
+            );
+
+            const clientId = c.req.header("X-Client-ID");
+            notifyUser(userId, {
+              type: "weeks_changed",
+              weekIds: [getWeekId(event.start)],
+              source: "mutation",
+            }, clientId);
+
+            return c.json(apiEvent);
+          }
+        }
+
         // For "all" scope on an instance, redirect to the master event.
-        // For "following" scope, pass the instance ID directly — Google handles the split.
+        // For "following" scope on Google, pass the instance ID directly — Google handles the split.
         let targetEventId = providerEventId;
         if (scope === "all" && event.recurringEventId) {
           targetEventId = event.recurringEventId as string;
@@ -260,14 +286,39 @@ export const eventsRoute = new Hono()
       return c.json({ error: "Event not found" }, 404);
     }
 
-    // For "all" scope on an instance, delete the master event instead.
-    // For "following" scope, pass the instance ID directly — Google handles the split.
-    let targetEventId = providerEventId;
-    if (scope === "all" && event.recurringEventId) {
-      targetEventId = event.recurringEventId as string;
-    }
-
     try {
+      // Outlook + "following" requires server-side series truncation
+      if (scope === "following" && event.recurringEventId) {
+        const account = await db!.query.accounts.findFirst({
+          where: and(eq(accounts.id, event.accountId), inArray(accounts.id, accountIds)),
+          columns: { provider: true },
+        });
+
+        if (account?.provider === "outlook") {
+          const splitDate = event.start.toISOString().slice(0, 10);
+          await truncateOutlookSeriesDelete(
+            event.accountId, event.calendarId,
+            event.recurringEventId as string, splitDate, event.start,
+          );
+
+          const clientId = c.req.header("X-Client-ID");
+          notifyUser(userId, {
+            type: "weeks_changed",
+            weekIds: [getWeekId(event.start)],
+            source: "mutation",
+          }, clientId);
+
+          return c.json({ success: true });
+        }
+      }
+
+      // For "all" scope on an instance, delete the master event instead.
+      // For "following" scope on Google, pass the instance ID directly — Google handles the split.
+      let targetEventId = providerEventId;
+      if (scope === "all" && event.recurringEventId) {
+        targetEventId = event.recurringEventId as string;
+      }
+
       await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates, scope, event.start);
 
       // Notify connected clients — skip the originating client

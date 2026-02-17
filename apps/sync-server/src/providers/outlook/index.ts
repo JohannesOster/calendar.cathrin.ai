@@ -26,6 +26,7 @@ import type {
   GraphCategoryListResponse,
   GraphCategory,
   GraphErrorResponse,
+  GraphRecurrence,
 } from "./types.js";
 import {
   mapGraphCalendar,
@@ -236,6 +237,13 @@ async function fetchCategories(accessToken: string, accountEmail?: string): Prom
 // =============================================================================
 // Outlook Calendar Provider
 // =============================================================================
+
+/** Compute the date (yyyy-MM-dd) one day before the given date string. */
+function dayBeforeDate(dateStr: string): string {
+  const date = new Date(dateStr + "T00:00:00Z");
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
 
 /**
  * Outlook Calendar provider implementation.
@@ -716,6 +724,169 @@ export class OutlookCalendarProvider implements CalendarProvider {
     // 202 Accepted = success
     if (rsvpResponse.status === 202) return;
     if (!rsvpResponse.ok) await handleGraphError(rsvpResponse);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recurring Event Series Splitting ("This and following" for Outlook)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Split a recurring series at the given instance for editing.
+   * 1. Fetch the master event from Graph to get its recurrence pattern
+   * 2. PATCH master: truncate recurrence to end the day before splitDate
+   * 3. POST new series: copy master properties + apply edit patch, start from splitDate
+   * Returns the newly created series master event.
+   */
+  async splitSeriesEdit(
+    accessToken: string,
+    calendarId: string,
+    masterId: string,
+    splitDate: string,
+    patch: ProviderEventPatch,
+    options?: MutationOptions,
+  ): Promise<ApiCalendarEvent> {
+    // 1. Fetch the master event
+    const masterResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(masterId)}`,
+      accessToken,
+    );
+    if (!masterResponse.ok) await handleGraphError(masterResponse);
+    const master = (await masterResponse.json()) as GraphEvent;
+
+    if (!master.recurrence) {
+      throw new Error("Master event has no recurrence pattern");
+    }
+
+    // 2. Truncate the original series: set endDate to the day before the split
+    const dayBefore = dayBeforeDate(splitDate);
+    const truncatedRecurrence: GraphRecurrence = {
+      pattern: master.recurrence.pattern,
+      range: {
+        ...master.recurrence.range,
+        type: "endDate",
+        endDate: dayBefore,
+      },
+    };
+
+    const truncateResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(masterId)}`,
+      accessToken,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: GRAPH_PREFER_HEADER },
+        body: JSON.stringify({ recurrence: truncatedRecurrence }),
+      },
+    );
+    if (!truncateResponse.ok) await handleGraphError(truncateResponse);
+
+    // 3. Create the new series from the split point with the edit applied
+    const newRecurrence: GraphRecurrence = {
+      pattern: master.recurrence.pattern,
+      range: {
+        ...master.recurrence.range,
+        startDate: splitDate,
+      },
+    };
+
+    const patchBody = toOutlookPatchBody(patch);
+    const newSeriesBody: Record<string, unknown> = {
+      subject: master.subject,
+      body: master.body,
+      start: patchBody.start ?? master.start,
+      end: patchBody.end ?? master.end,
+      isAllDay: patchBody.isAllDay ?? master.isAllDay,
+      location: patchBody.location ?? master.location,
+      attendees: patchBody.attendees ?? master.attendees,
+      showAs: patchBody.showAs ?? master.showAs,
+      sensitivity: patchBody.sensitivity ?? master.sensitivity,
+      categories: master.categories,
+      recurrence: newRecurrence,
+      // Apply the edit patch overrides
+      ...(patchBody.subject !== undefined && { subject: patchBody.subject }),
+      ...(patchBody.body !== undefined && { body: patchBody.body }),
+    };
+
+    const createResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/calendars/${encodeURIComponent(calendarId)}/events`,
+      accessToken,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: GRAPH_PREFER_HEADER,
+        },
+        body: JSON.stringify(newSeriesBody),
+      },
+    );
+
+    if (!createResponse.ok) {
+      // Rollback: restore the original recurrence on the master
+      console.error("[outlook] Failed to create new series after split — rolling back master truncation");
+      await graphFetch(
+        `${MS_GRAPH_URL}/me/events/${encodeURIComponent(masterId)}`,
+        accessToken,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: GRAPH_PREFER_HEADER },
+          body: JSON.stringify({ recurrence: master.recurrence }),
+        },
+      ).catch(rollbackErr => {
+        console.error("[outlook] Rollback also failed:", rollbackErr);
+      });
+      await handleGraphError(createResponse);
+    }
+
+    const created = (await createResponse.json()) as GraphEvent;
+    const calendarColor = options?.calendarColor || "#0078d4";
+    const result = mapGraphEvent(created, calendarId, calendarColor, options?.calendarAccessRole, undefined, options?.accountEmail);
+    if (!result) {
+      throw new Error("Failed to map new Outlook series event — missing start or end");
+    }
+    return result;
+  }
+
+  /**
+   * Truncate a recurring series at the given instance for deletion.
+   * PATCHes the master to end the day before splitDate.
+   */
+  async truncateSeriesDelete(
+    accessToken: string,
+    masterId: string,
+    splitDate: string,
+  ): Promise<void> {
+    // 1. Fetch the master event
+    const masterResponse = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(masterId)}`,
+      accessToken,
+    );
+    if (!masterResponse.ok) await handleGraphError(masterResponse);
+    const master = (await masterResponse.json()) as GraphEvent;
+
+    if (!master.recurrence) {
+      throw new Error("Master event has no recurrence pattern");
+    }
+
+    // 2. Truncate the series
+    const dayBefore = dayBeforeDate(splitDate);
+    const truncatedRecurrence: GraphRecurrence = {
+      pattern: master.recurrence.pattern,
+      range: {
+        ...master.recurrence.range,
+        type: "endDate",
+        endDate: dayBefore,
+      },
+    };
+
+    const response = await graphFetch(
+      `${MS_GRAPH_URL}/me/events/${encodeURIComponent(masterId)}`,
+      accessToken,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Prefer: GRAPH_PREFER_HEADER },
+        body: JSON.stringify({ recurrence: truncatedRecurrence }),
+      },
+    );
+    if (!response.ok) await handleGraphError(response);
   }
 
   // ---------------------------------------------------------------------------
