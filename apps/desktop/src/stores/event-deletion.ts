@@ -169,6 +169,20 @@ function executeDelete(event: CalendarEvent, sendUpdates?: "all" | "none", scope
       removeLocalEvent(e.id);
       deleteCachedEventFromDisk(e.id);
     }
+  } else if (scope === "following") {
+    // Remove this instance and all future instances of the series
+    const masterId = event.recurringEventId || event.providerEventId;
+    const eventStart = new Date(event.start).getTime();
+    const allEvents = events();
+    const toRemove = allEvents.filter(
+      e => (e.recurringEventId === masterId || e.providerEventId === masterId)
+        && new Date(e.start).getTime() >= eventStart
+    );
+    deletion.removedEvents = toRemove;
+    for (const e of toRemove) {
+      removeLocalEvent(e.id);
+      deleteCachedEventFromDisk(e.id);
+    }
   } else {
     removeLocalEvent(event.id);
     deleteCachedEventFromDisk(event.id);

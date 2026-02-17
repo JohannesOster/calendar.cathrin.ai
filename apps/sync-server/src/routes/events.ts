@@ -195,7 +195,7 @@ export const eventsRoute = new Hono()
       const userId = c.get("userId");
       const providerEventId = c.req.param("eventId");
       const { sendUpdates, ...patch } = c.req.valid("json");
-      const scope = c.req.query("scope") as "single" | "all" | undefined;
+      const scope = c.req.query("scope") as "single" | "all" | "following" | undefined;
 
       const accountIds = await getUserAccountIds(userId);
       if (accountIds.length === 0) {
@@ -209,7 +209,8 @@ export const eventsRoute = new Hono()
       }
 
       try {
-        // For "all" scope on an instance, redirect to the master event
+        // For "all" scope on an instance, redirect to the master event.
+        // For "following" scope, pass the instance ID directly — Google handles the split.
         let targetEventId = providerEventId;
         if (scope === "all" && event.recurringEventId) {
           targetEventId = event.recurringEventId as string;
@@ -246,7 +247,7 @@ export const eventsRoute = new Hono()
     const userId = c.get("userId");
     const providerEventId = c.req.param("eventId");
     const sendUpdates = c.req.query("sendUpdates") as "all" | "none" | undefined;
-    const scope = c.req.query("scope") as "single" | "all" | undefined;
+    const scope = c.req.query("scope") as "single" | "all" | "following" | undefined;
 
     const accountIds = await getUserAccountIds(userId);
     if (accountIds.length === 0) {
@@ -259,14 +260,15 @@ export const eventsRoute = new Hono()
       return c.json({ error: "Event not found" }, 404);
     }
 
-    // For "all" scope on an instance, delete the master event instead
+    // For "all" scope on an instance, delete the master event instead.
+    // For "following" scope, pass the instance ID directly — Google handles the split.
     let targetEventId = providerEventId;
     if (scope === "all" && event.recurringEventId) {
       targetEventId = event.recurringEventId as string;
     }
 
     try {
-      await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates, scope);
+      await deleteEvent(event.accountId, event.calendarId, targetEventId, event.id, sendUpdates, scope, event.start);
 
       // Notify connected clients — skip the originating client
       const clientId = c.req.header("X-Client-ID");

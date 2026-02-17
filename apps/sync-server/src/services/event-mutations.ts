@@ -1,4 +1,4 @@
-import { eq, or } from "drizzle-orm";
+import { eq, or, and, gte } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { accounts, serverEvents } from "../db/schema.js";
 import { getAccessToken } from "./token-refresh.js";
@@ -202,7 +202,8 @@ export async function deleteEvent(
   providerEventId: string,
   eventDbId: string,
   sendUpdates?: "all" | "none",
-  scope?: "single" | "all"
+  scope?: "single" | "all" | "following",
+  eventStart?: Date
 ): Promise<void> {
   const account = await db!.query.accounts.findFirst({
     where: eq(accounts.id, accountId),
@@ -235,6 +236,21 @@ export async function deleteEvent(
         or(
           eq(serverEvents.id, eventDbId),
           eq(serverEvents.recurringEventId, providerEventId),
+        )
+      );
+  } else if (scope === "following" && eventStart) {
+    // Remove the deleted instance and all future instances from DB cache.
+    // The master event is kept (Google truncates its RRULE with UNTIL).
+    const masterId = providerEventId.includes("_")
+      ? providerEventId.split("_")[0]
+      : providerEventId;
+    await db!
+      .delete(serverEvents)
+      .where(
+        and(
+          eq(serverEvents.calendarId, calendarId),
+          eq(serverEvents.recurringEventId, masterId),
+          gte(serverEvents.start, eventStart),
         )
       );
   } else {
