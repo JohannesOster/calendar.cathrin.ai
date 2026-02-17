@@ -9,6 +9,7 @@ import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping
 import type { CathrinColorKey } from "../lib/color-mapping";
 import { SNAP_MINUTES } from "../constants/calendar";
 import { expandRRule } from "../utils/rrule-expand";
+import { formatDateOnly } from "../utils/date-format";
 import { centerDate } from "./calendar-navigation";
 import { addPendingNotification } from "./pending-notifications";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
@@ -196,16 +197,6 @@ export function cancelCreation(): void {
  * Commit the event creation — optimistic insert + background API call.
  * Returns true if the event was saved, false if nothing to save.
  */
-/**
- * Format a Date as YYYY-MM-DD for all-day event API calls.
- */
-function formatDateOnly(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 export function commitCreation(sendUpdates?: "all" | "none"): boolean {
   setShowCommitPrompt(false);
   const title = draftTitle().trim();

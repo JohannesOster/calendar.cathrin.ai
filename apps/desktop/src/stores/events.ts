@@ -4,7 +4,9 @@ import { showErrorToast } from "../lib/toast";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 import type { CalendarEvent, EventPatch } from "./event-types";
 import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
+import { RRULE_REVALIDATE_FIRST_MS, RRULE_REVALIDATE_SECOND_MS } from "../constants/calendar";
 import { expandRRule } from "../utils/rrule-expand";
+import { formatDateOnly } from "../utils/date-format";
 import { centerDate } from "./calendar-navigation";
 
 // =============================================================================
@@ -61,12 +63,6 @@ export function getSetVisibleWeeksForPolling(): ((weeks: Set<string>) => void) |
 // Helpers
 // =============================================================================
 
-function formatDateOnly(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 // =============================================================================
 // Optimistic Local Events
@@ -226,6 +222,7 @@ export async function updateEvent(
             end: inst.end,
             recurringEventId: masterId,
             recurrence: undefined,
+            rruleExpandedAt: Date.now(),
             ...(patch.title !== undefined && { title: patch.title }),
           });
         }
@@ -338,9 +335,13 @@ export async function updateEvent(
     // the RRULE mutation before we re-fetch. Without this delay, Google may
     // return stale expanded instances that overwrite our correct optimistic state.
     if (isRecurrenceChange) {
-      setTimeout(() => {
-        _revalidateWeeksForDates?.(snapshot.start, patch.start ?? snapshot.start);
-      }, 3000);
+      const dates = [snapshot.start, patch.start ?? snapshot.start];
+      // First revalidation: Google may still return stale instances, but
+      // rruleExpandedAt protection in replaceEventsInRange keeps optimistic
+      // instances alive for 15s. Second revalidation at 20s catches the
+      // propagated change after protection expires.
+      setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_FIRST_MS);
+      setTimeout(() => _revalidateWeeksForDates?.(...dates), RRULE_REVALIDATE_SECOND_MS);
     } else {
       const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
       for (const s of siblingSnapshots) {

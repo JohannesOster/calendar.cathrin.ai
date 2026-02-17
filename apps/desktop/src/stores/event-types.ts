@@ -29,6 +29,8 @@ export interface CalendarEvent {
   recurrence?: string[];
   recurringEventId?: string;
   createdAt?: Date;
+  /** Timestamp when this instance was expanded from an RRULE edit (ms since epoch) */
+  rruleExpandedAt?: number;
 }
 
 export type EventPatch = {

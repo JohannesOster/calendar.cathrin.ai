@@ -19,7 +19,7 @@ export type DayCode = typeof DAY_CODES[number];
 
 /** Day code for a JS Date (0=Sunday → SU, 1=Monday → MO, etc.) */
 export function dayCodeFromDate(date: Date): DayCode {
-  return DAY_CODES[date.getDay()];
+  return DAY_CODES[date.getUTCDay()];
 }
 
 export function ordinal(n: number): string {
@@ -70,16 +70,16 @@ export function buildRrule(config: RecurrenceConfig, eventStart: Date): string[]
   }
 
   if (config.freq === "MONTHLY") {
-    parts.push(`BYMONTHDAY=${eventStart.getDate()}`);
+    parts.push(`BYMONTHDAY=${eventStart.getUTCDate()}`);
   }
 
   if (config.end.type === "count") {
     parts.push(`COUNT=${config.end.count}`);
   } else if (config.end.type === "date") {
     const d = config.end.date;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
     parts.push(`UNTIL=${y}${m}${day}T235959Z`);
   }
 
@@ -129,13 +129,13 @@ export function formatRecurrence(recurrence: string[], eventStart: Date): string
       // Note: eventStart should be the specific instance's start date, not the master's,
       // so the ordinal reflects the correct day for the displayed occurrence.
       const prefix = interval === 1 ? "Monthly" : `Every ${interval} months`;
-      base = `${prefix} on the ${ordinal(eventStart.getDate())}`;
+      base = `${prefix} on the ${ordinal(eventStart.getUTCDate())}`;
       break;
     }
 
     case "YEARLY": {
       const prefix = interval === 1 ? "Annually" : `Every ${interval} years`;
-      base = `${prefix} on ${MONTH_NAMES[eventStart.getMonth()]} ${eventStart.getDate()}`;
+      base = `${prefix} on ${MONTH_NAMES[eventStart.getUTCMonth()]} ${eventStart.getUTCDate()}`;
       break;
     }
 

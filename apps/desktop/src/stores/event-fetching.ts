@@ -17,7 +17,7 @@ import {
   replaceEventsOnDisk,
 } from "../lib/event-cache";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
-import { TEMP_EVENT_TTL_MS } from "../constants/calendar";
+import { TEMP_EVENT_TTL_MS, RRULE_PROTECTION_MS } from "../constants/calendar";
 import type { CalendarEvent } from "./event-types";
 import { convertApiEvent } from "./event-types";
 import {
@@ -103,12 +103,26 @@ export function replaceEventsInRange(
   const pendingMap = getPendingDeletionMap();
   const dragId = dragActiveEventId();
 
+  // Identify series with recent RRULE-expanded optimistic instances.
+  // Server data for these series is likely stale (Google eventual consistency),
+  // so we exclude server instances for protected series entirely.
+  const protectedSeriesIds = new Set<string>();
+  for (const event of existingEvents) {
+    if (event.id.includes("-rrule-") && event.recurringEventId
+        && event.rruleExpandedAt && Date.now() - event.rruleExpandedAt < RRULE_PROTECTION_MS) {
+      protectedSeriesIds.add(event.recurringEventId);
+    }
+  }
+
   // Filter out events pending local deletion — server still has them
   // but the user already deleted them (undo window hasn't closed yet).
   // Also exclude the dragged event from server data so it can't overwrite
   // the local drag-modified version during processEvents merge.
+  // Also exclude server instances for series with protected RRULE instances
+  // to prevent stale Google data from creating duplicates.
   const filtered = newEvents.filter(
-    (e) => !pendingMap.has(e.id) && e.id !== dragId,
+    (e) => !pendingMap.has(e.id) && e.id !== dragId
+      && !(e.recurringEventId && protectedSeriesIds.has(e.recurringEventId)),
   );
   const newEventIds = new Set(filtered.map((e) => e.id));
 
@@ -137,6 +151,22 @@ export function replaceEventsInRange(
         return false;
       }
       return true;
+    }
+
+    // Preserve optimistic RRULE-expanded instances (from recurrence edits)
+    // until server returns matching instances for the same series.
+    // These have IDs like "{eventId}-rrule-{date}" and are created by
+    // updateEvent() when changing recurrence on a series.
+    if (event.id.includes("-rrule-") && event.recurringEventId) {
+      if (!serverRecurringIds.has(event.recurringEventId)) {
+        return true;
+      }
+      // Even when server returned instances for this series, protect recent
+      // optimistic instances — Google's eventual consistency means the server
+      // may still be returning stale expanded instances from a previous RRULE.
+      if (event.rruleExpandedAt && Date.now() - event.rruleExpandedAt < RRULE_PROTECTION_MS) {
+        return true;
+      }
     }
 
     const overlaps =

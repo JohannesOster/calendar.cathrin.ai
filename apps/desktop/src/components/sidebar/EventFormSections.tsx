@@ -2207,7 +2207,18 @@ function RecurrenceSelector(props: SectionProps) {
   });
 
   const currentValue = createMemo(() => {
-    const rec = s.recurrence();
+    let rec = s.recurrence();
+    // Instances don't carry the RRULE — resolve from master so Ark UI sees
+    // the real value and fires onValueChange when switching to "none".
+    if (!rec && isRecurringInstance()) {
+      const recurringId = selectedEvent()?.recurringEventId;
+      if (recurringId) {
+        const master = events().find(e => e.id === recurringId);
+        if (master?.recurrence) rec = master.recurrence;
+      }
+      // If master not found, fall back to generic "repeats" sentinel
+      if (!rec) return "repeats";
+    }
     if (!rec) return "none";
     const rrule = rec[0];
     const match = presets().find(p => p.rrule && p.rrule[0] === rrule);

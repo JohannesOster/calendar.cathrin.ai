@@ -138,6 +138,15 @@ export const INITIAL_SCROLL_OFFSET_HOURS = 2;
 /** Max lifetime for optimistic temp recurring instances before purging (ms) */
 export const TEMP_EVENT_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/** How long optimistic RRULE-expanded instances are protected from server overwrites (ms) */
+export const RRULE_PROTECTION_MS = 15_000;
+
+/** Delay before first revalidation after a recurrence change (ms) */
+export const RRULE_REVALIDATE_FIRST_MS = 10_000;
+
+/** Delay before second revalidation after RRULE protection expires (ms) */
+export const RRULE_REVALIDATE_SECOND_MS = 20_000;
+
 /** Minimum scroll movement (px) to register direction change */
 export const DIRECTION_THRESHOLD_PX = 10;
 
