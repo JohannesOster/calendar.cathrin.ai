@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, lte, gte, inArray } from "drizzle-orm";
+import { eq, and, lte, gte, inArray, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { accounts, serverEvents } from "../db/schema.js";
+import { accounts, serverEvents, fetchedWeeks } from "../db/schema.js";
 import { authMiddleware } from "../middlewares/auth.js";
 import { getWeeksInRange } from "../lib/week-utils.js";
 import { handleProviderError } from "../lib/provider-error.js";
@@ -240,6 +240,59 @@ export const eventsRoute = new Hono()
           }
         }
 
+        // Google + removing recurrence: Google ignores `recurrence: []` on a master event,
+        // so we delete the entire series and re-create the edited instance as a standalone event.
+        if (patch.recurrence === null && event.recurringEventId) {
+          const account = await db!.query.accounts.findFirst({
+            where: and(eq(accounts.id, event.accountId), inArray(accounts.id, accountIds)),
+            columns: { provider: true },
+          });
+
+          if (account?.provider === "google" && (scope === "all" || scope === "following")) {
+            if (scope === "all") {
+              // Delete the entire series via the master event
+              const masterId = event.recurringEventId as string;
+              await deleteEvent(event.accountId, event.calendarId, masterId, event.id, sendUpdates, "all", event.start);
+            } else {
+              // "following": delete with the instance ID — Google truncates the master's RRULE
+              // with an UNTIL date, preserving past instances
+              await deleteEvent(event.accountId, event.calendarId, providerEventId, event.id, sendUpdates, "following", event.start);
+            }
+
+            // Re-create the edited instance as a standalone event
+            const apiEvent = await createEvent({
+              accountId: event.accountId,
+              calendarId: event.calendarId,
+              title: patch.summary ?? event.title,
+              start: patch.start ?? event.start.toISOString(),
+              end: patch.end ?? event.end.toISOString(),
+              isAllDay: patch.isAllDay ?? event.isAllDay ?? undefined,
+              location: patch.location ?? event.location ?? undefined,
+              description: patch.description ?? event.description ?? undefined,
+              transparency: (patch.transparency ?? event.transparency ?? undefined) as string | undefined,
+              visibility: (patch.visibility ?? event.visibility ?? undefined) as string | undefined,
+              reminders: patch.reminders === null ? undefined : (patch.reminders ?? event.reminders as { method: string; minutes: number }[] | undefined),
+              colorId: patch.colorId === null ? undefined : (patch.colorId ?? event.colorId ?? undefined),
+              timeZone: patch.timeZone ?? undefined,
+              attendees: patch.attendees === null ? undefined : (patch.attendees ?? event.attendees as { email: string; name?: string }[] | undefined),
+              sendUpdates,
+              // No recurrence — this is now a standalone event
+            });
+
+            const clientId = c.req.header("X-Client-ID");
+            const weekIds = new Set<string>();
+            weekIds.add(getWeekId(event.start));
+            weekIds.add(getWeekId(new Date(apiEvent.start)));
+            notifyUser(userId, {
+              type: "weeks_changed",
+              weekIds: Array.from(weekIds),
+              source: "mutation",
+            }, clientId);
+
+            return c.json(apiEvent);
+          }
+        }
+
         // For "all" scope on an instance, redirect to the master event.
         // For "following" scope on Google, pass the instance ID directly — Google handles the split.
         let targetEventId = providerEventId;
@@ -261,11 +314,17 @@ export const eventsRoute = new Hono()
         if (patch.recurrence !== undefined && (scope === "all" || scope === "following")) {
           const masterId = event.recurringEventId ?? providerEventId;
           if (scope === "all") {
-            // Remove all cached instances of this series
+            // Remove all cached instances AND the master event itself.
+            // With singleEvents=true, the master shouldn't be in the DB — only
+            // expanded instances should be. The PATCH response upserted the master,
+            // so we need to remove it to avoid duplication with expanded instances.
             await db!.delete(serverEvents).where(
               and(
                 eq(serverEvents.calendarId, event.calendarId),
-                eq(serverEvents.recurringEventId, masterId),
+                or(
+                  eq(serverEvents.recurringEventId, masterId),
+                  eq(serverEvents.providerEventId, masterId),
+                ),
               )
             );
           } else if (scope === "following") {
@@ -275,6 +334,38 @@ export const eventsRoute = new Hono()
                 eq(serverEvents.calendarId, event.calendarId),
                 eq(serverEvents.recurringEventId, masterId),
                 gte(serverEvents.start, event.start),
+              )
+            );
+          }
+
+          // Invalidate fetchedWeeks so the next client revalidation triggers a
+          // fresh fetch from Google (which returns proper expanded instances).
+          const affectedWeekIds = new Set<string>();
+          affectedWeekIds.add(getWeekId(event.start));
+          affectedWeekIds.add(getWeekId(new Date(apiEvent.start)));
+          // Also invalidate a broad range around the event so daily recurrences
+          // get their instances fetched across multiple weeks.
+          const rangeStart = new Date(event.start);
+          rangeStart.setDate(rangeStart.getDate() - 7);
+          const rangeEnd = new Date(event.start);
+          rangeEnd.setDate(rangeEnd.getDate() + 60);
+          for (const wk of getWeeksInRange(rangeStart, rangeEnd)) {
+            affectedWeekIds.add(wk);
+          }
+
+          // Find all accountIds that own calendars with this calendarId
+          const calendarAccounts = await db!.query.accounts.findMany({
+            where: inArray(accounts.id, accountIds),
+            columns: { id: true },
+          });
+          const calAccIds = calendarAccounts.map(a => a.id);
+
+          if (affectedWeekIds.size > 0 && calAccIds.length > 0) {
+            await db!.delete(fetchedWeeks).where(
+              and(
+                inArray(fetchedWeeks.accountId, calAccIds),
+                eq(fetchedWeeks.calendarId, event.calendarId),
+                inArray(fetchedWeeks.weekId, Array.from(affectedWeekIds)),
               )
             );
           }

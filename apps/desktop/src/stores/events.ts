@@ -176,8 +176,10 @@ export async function updateEvent(
     }).map((e) => ({ ...e }));
   }
 
-  // RRULE re-expansion: when recurrence changes, remove old siblings and expand new instances
-  const isRecurrenceChange = patch.recurrence !== undefined && isSeries;
+  // RRULE re-expansion: when recurrence changes (or is added to a standalone event),
+  // remove old siblings and expand new instances
+  const isAddingRecurrence = patch.recurrence !== undefined && patch.recurrence.length > 0 && !event.recurrence && !event.recurringEventId;
+  const isRecurrenceChange = (patch.recurrence !== undefined && isSeries) || isAddingRecurrence;
   let addedTempIds: string[] = [];
 
   if (isRecurrenceChange) {
@@ -193,6 +195,9 @@ export async function updateEvent(
               ...e,
               ...(patch.title !== undefined && { title: patch.title }),
               ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
+              // When removing recurrence, clear the instance link so the event
+              // appears as a standalone event in the UI (no "Repeats" label).
+              ...(patch.recurrence === null && e.recurringEventId && { recurringEventId: undefined }),
             }
           : e
       );
@@ -329,13 +334,20 @@ export async function updateEvent(
       method: "PATCH",
       body: JSON.stringify(apiPatch),
     });
-    // Revalidate the primary event's week + all sibling weeks so the server
-    // response replaces any stale cached instances (especially after recurrence changes).
-    const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
-    for (const s of siblingSnapshots) {
-      datesToRevalidate.push(s.start);
+    // After recurrence changes, delay revalidation to let Google propagate
+    // the RRULE mutation before we re-fetch. Without this delay, Google may
+    // return stale expanded instances that overwrite our correct optimistic state.
+    if (isRecurrenceChange) {
+      setTimeout(() => {
+        _revalidateWeeksForDates?.(snapshot.start, patch.start ?? snapshot.start);
+      }, 3000);
+    } else {
+      const datesToRevalidate = [snapshot.start, patch.start ?? snapshot.start];
+      for (const s of siblingSnapshots) {
+        datesToRevalidate.push(s.start);
+      }
+      _revalidateWeeksForDates?.(...datesToRevalidate);
     }
-    _revalidateWeeksForDates?.(...datesToRevalidate);
   } catch (error) {
     console.error(`[events] Failed to update event ${eventId}:`, error);
     // Rollback: restore primary event + siblings, remove any temp RRULE instances
