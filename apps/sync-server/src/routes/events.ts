@@ -260,24 +260,52 @@ export const eventsRoute = new Hono()
             }
 
             // Re-create the edited instance as a standalone event
-            const apiEvent = await createEvent({
-              accountId: event.accountId,
-              calendarId: event.calendarId,
-              title: patch.summary ?? event.title,
-              start: patch.start ?? event.start.toISOString(),
-              end: patch.end ?? event.end.toISOString(),
-              isAllDay: patch.isAllDay ?? event.isAllDay ?? undefined,
-              location: patch.location ?? event.location ?? undefined,
-              description: patch.description ?? event.description ?? undefined,
-              transparency: (patch.transparency ?? event.transparency ?? undefined) as string | undefined,
-              visibility: (patch.visibility ?? event.visibility ?? undefined) as string | undefined,
-              reminders: patch.reminders === null ? undefined : (patch.reminders ?? event.reminders as { method: string; minutes: number }[] | undefined),
-              colorId: patch.colorId === null ? undefined : (patch.colorId ?? event.colorId ?? undefined),
-              timeZone: patch.timeZone ?? undefined,
-              attendees: patch.attendees === null ? undefined : (patch.attendees ?? event.attendees as { email: string; name?: string }[] | undefined),
-              sendUpdates,
-              // No recurrence — this is now a standalone event
-            });
+            let apiEvent;
+            try {
+              apiEvent = await createEvent({
+                accountId: event.accountId,
+                calendarId: event.calendarId,
+                title: patch.summary ?? event.title,
+                start: patch.start ?? event.start.toISOString(),
+                end: patch.end ?? event.end.toISOString(),
+                isAllDay: patch.isAllDay ?? event.isAllDay ?? undefined,
+                location: patch.location ?? event.location ?? undefined,
+                description: patch.description ?? event.description ?? undefined,
+                transparency: (patch.transparency ?? event.transparency ?? undefined) as string | undefined,
+                visibility: (patch.visibility ?? event.visibility ?? undefined) as string | undefined,
+                reminders: patch.reminders === null ? undefined : (patch.reminders ?? event.reminders as { method: string; minutes: number }[] | undefined),
+                colorId: patch.colorId === null ? undefined : (patch.colorId ?? event.colorId ?? undefined),
+                timeZone: patch.timeZone ?? undefined,
+                attendees: patch.attendees === null ? undefined : (patch.attendees ?? event.attendees as { email: string; name?: string }[] | undefined),
+                sendUpdates,
+                // No recurrence — this is now a standalone event
+              });
+            } catch (createError) {
+              // Create failed after delete — attempt to restore the original series
+              console.error("[events] Create failed after delete, attempting restore:", createError);
+              try {
+                await createEvent({
+                  accountId: event.accountId,
+                  calendarId: event.calendarId,
+                  title: event.title,
+                  start: event.start.toISOString(),
+                  end: event.end.toISOString(),
+                  isAllDay: event.isAllDay ?? undefined,
+                  location: event.location ?? undefined,
+                  description: event.description ?? undefined,
+                  transparency: (event.transparency ?? undefined) as string | undefined,
+                  visibility: (event.visibility ?? undefined) as string | undefined,
+                  reminders: event.reminders as { method: string; minutes: number }[] | undefined,
+                  colorId: event.colorId ?? undefined,
+                  recurrence: event.recurrence as string[] | undefined,
+                  sendUpdates,
+                });
+                console.log("[events] Successfully restored original series after failed create");
+              } catch (restoreError) {
+                console.error("[events] Restore also failed — series lost:", restoreError);
+              }
+              throw createError;
+            }
 
             const clientId = c.req.header("X-Client-ID");
             const weekIds = new Set<string>();
