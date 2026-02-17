@@ -2194,8 +2194,15 @@ function RecurrenceSelector(props: SectionProps) {
   const currentLabel = createMemo(() => {
     const rec = s.recurrence();
     if (rec) return s.start() ? formatRecurrence(rec, s.start()!) : "Repeats";
-    // Instances (singleEvents=true) don't carry the RRULE — show generic label
-    if (isRecurringInstance()) return "Repeats";
+    // Instances don't carry the RRULE — look up master event's recurrence
+    if (isRecurringInstance()) {
+      const recurringId = selectedEvent()?.recurringEventId;
+      if (recurringId) {
+        const master = events().find(e => e.id === recurringId);
+        if (master?.recurrence && s.start()) return formatRecurrence(master.recurrence, s.start()!);
+      }
+      return "Repeats";
+    }
     return "Does not repeat";
   });
 

@@ -75,7 +75,14 @@ export function EventDetailPanel(props: EventDetailPanelProps) {
           <div class="px-3 py-2 border-t border-border">
             <div class="flex items-center gap-2 text-sm text-fg">
               <Repeat size={14} class="text-fg-muted shrink-0" />
-              <span>{props.event.recurrence ? formatRecurrence(props.event.recurrence, props.event.start) : "Repeats"}</span>
+              <span>{(() => {
+                if (props.event.recurrence) return formatRecurrence(props.event.recurrence, props.event.start);
+                if (props.event.recurringEventId) {
+                  const master = events().find(e => e.id === props.event.recurringEventId);
+                  if (master?.recurrence) return formatRecurrence(master.recurrence, props.event.start);
+                }
+                return "Repeats";
+              })()}</span>
             </div>
           </div>
         </Show>
