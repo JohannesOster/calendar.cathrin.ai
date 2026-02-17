@@ -212,12 +212,7 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
         }}
       >
         <div class="flex h-full">
-          <div
-            class="w-1 shrink-0"
-            classList={{ "calendar-event__ribbon": hasTitle() && isFirstSegment() }}
-            style={hasTitle() && isFirstSegment() ? {} : { "background-color": getDraftColor() }}
-          />
-          <div class="flex-1 min-w-0 px-1 py-1">
+          <div class="flex-1 min-w-0 px-1.5 py-1">
             <Show when={isFirstSegment()}>
               <Show
                 when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}

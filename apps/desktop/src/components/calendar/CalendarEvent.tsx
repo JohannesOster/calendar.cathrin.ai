@@ -242,7 +242,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-md transition-colors duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-[colors,transform,box-shadow] duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
@@ -260,12 +260,9 @@ export function CalendarEvent(props: CalendarEventProps) {
           }
         }}
       >
-        {/* Inner layout - ribbon + content side by side */}
+        {/* Inner layout - content fills the chip */}
         <div class="flex h-full">
-          {/* Ribbon - solid color bar on the left */}
-          <div class="calendar-event__ribbon w-1 shrink-0" />
-          {/* Content - straight edges, gets clipped by outer container's border-radius */}
-          <div class="flex-1 min-w-0 px-1 py-1">
+          <div class="flex-1 min-w-0 px-1.5 py-1">
             <Show
               when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
               fallback={

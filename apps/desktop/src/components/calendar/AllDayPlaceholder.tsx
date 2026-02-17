@@ -81,15 +81,8 @@ export function AllDayPlaceholder(props: AllDayPlaceholderProps) {
             "z-index": "50",
           }}
         >
-          <div
-            class="absolute left-0 top-0 bottom-0 w-[3px]"
-            style={{
-              "background-color": getDraftColor(),
-              "border-radius": `${CHIP_BORDER_RADIUS} 0 0 ${CHIP_BORDER_RADIUS}`,
-            }}
-          />
           <Show when={hasTitle()}>
-            <span class="truncate ml-0.5">{draftTitle()}</span>
+            <span class="truncate">{draftTitle()}</span>
           </Show>
         </div>
       )}

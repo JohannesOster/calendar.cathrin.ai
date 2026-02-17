@@ -200,22 +200,83 @@ body.dragging * {
   animation: flash-highlight 2s ease-out forwards;
 }
 
-/* Calendar event states — flat (border, no shadow)
-   Background: srgb mix (not oklch — oklch rotates hues toward the warm surface).
-   Text: event color for readability against the light tinted background. */
+/* Calendar event states — "Kindling" design
+   Corner gradient border (top-left accent fading out) + warm tint bg + bottom glow.
+   Hover: border reveals fully around the perimeter + shadow lift.
+   Background: srgb mix (not oklch — oklch rotates hues toward the warm surface). */
 .calendar-event {
+  position: relative;
   background-color: color-mix(
     in srgb,
     var(--event-color) 14%,
     var(--color-surface)
   );
   color: var(--event-color);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid transparent;
+  /* Bottom glow — subtle warm accent along the base */
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--event-color) 30%, transparent);
 }
 
-/* Ribbon - solid color bar on the left edge */
-.calendar-event__ribbon {
-  background-color: var(--event-color);
+/* Corner gradient border — two layers, opacity-transitioned.
+   ::before = corner-only (default visible), ::after = full border (revealed on hover). */
+.calendar-event::before,
+.calendar-event::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  transition: opacity var(--duration-normal) ease;
+}
+
+/* Corner accent — always visible */
+.calendar-event::before {
+  background: linear-gradient(
+    135deg,
+    var(--event-color) 0%,
+    color-mix(in srgb, var(--event-color) 60%, transparent) 15%,
+    color-mix(in srgb, var(--event-color) 20%, transparent) 30%,
+    transparent 45%
+  );
+}
+
+/* Full border — hidden by default, fades in on hover */
+.calendar-event::after {
+  background: linear-gradient(
+    135deg,
+    var(--event-color) 0%,
+    color-mix(in srgb, var(--event-color) 80%, transparent) 25%,
+    color-mix(in srgb, var(--event-color) 50%, transparent) 50%,
+    color-mix(in srgb, var(--event-color) 30%, transparent) 75%,
+    var(--event-color) 100%
+  );
+  opacity: 0;
+}
+
+/* Hover — full border fades in + shadow lift + subtle upward shift */
+.calendar-event:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--event-color) 20%,
+    var(--color-surface)
+  );
+  transform: translateY(-0.5px);
+  box-shadow:
+    0 2px 8px color-mix(in srgb, var(--event-color) 18%, transparent),
+    0 1px 0 0 color-mix(in srgb, var(--event-color) 45%, transparent);
+}
+
+.calendar-event:hover::after {
+  opacity: 1;
 }
 
 /* Acceptance: not responded — dashed outline, lighter background */
@@ -231,6 +292,12 @@ body.dragging * {
     var(--event-color) 50%,
     var(--color-border-light)
   );
+  box-shadow: none;
+}
+
+.calendar-event--needs-action::before,
+.calendar-event--needs-action::after {
+  display: none;
 }
 
 .calendar-event--needs-action:hover {
@@ -241,63 +308,51 @@ body.dragging * {
   );
 }
 
-/* Acceptance: tentative — dashed ribbon */
-.calendar-event--tentative .calendar-event__ribbon {
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--event-color) 0px,
-    var(--event-color) 4px,
-    transparent 4px,
-    transparent 8px
-  );
+/* Acceptance: tentative — dotted corner gradient */
+.calendar-event--tentative::before {
+  opacity: 0.5;
 }
 
-/* Border for visual separation - only applied to overlapping events.
-   Use border-color only (not shorthand) to preserve border-style from acceptance modifiers. */
+/* Border for visual separation - only applied to overlapping events. */
 .calendar-event--overlapping {
-  border-color: var(--color-border);
+  border-color: color-mix(in srgb, var(--event-color) 15%, var(--color-border-light));
 }
 
-.calendar-event:hover {
-  background-color: color-mix(
-    in srgb,
-    var(--event-color) 22%,
-    var(--color-surface)
-  );
-}
-
-/* Suppress hover lightening on focused/selected events (they use solid bg) */
+/* Suppress hover effects on focused/selected events (they use solid bg) */
 .calendar-event:focus:hover,
 .calendar-event--focused:hover,
 .calendar-event--selected:hover {
   background-color: var(--event-color);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--event-color) 30%, transparent);
 }
 
-/* Focus/selected state - solid background color
-   :focus applies to the clicked segment, --focused applies to all segments via signal */
+/* Focus/selected state — solid background, full warm halo */
 .calendar-event:focus,
 .calendar-event--focused {
   outline: none;
   background-color: var(--event-color);
   color: white;
   border-color: transparent;
+  transform: translateY(-0.5px);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--event-color) 25%, transparent);
 }
 
-.calendar-event:focus .calendar-event__ribbon,
-.calendar-event--focused .calendar-event__ribbon,
-.calendar-event--selected .calendar-event__ribbon {
-  background-color: color-mix(
-    in srgb,
-    var(--event-color),
-    #000 20%
-  );
+.calendar-event:focus::before,
+.calendar-event:focus::after,
+.calendar-event--focused::before,
+.calendar-event--focused::after,
+.calendar-event--selected::before,
+.calendar-event--selected::after {
+  display: none;
 }
 
-/* Selected state - solid background, no ring */
+/* Selected state — solid background, warm halo */
 .calendar-event--selected {
   background-color: var(--event-color);
   color: white;
   border-color: transparent;
+  transform: translateY(-0.5px);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--event-color) 25%, transparent);
 }
 
 /* Dragging state - reduced opacity and elevated shadow (physical metaphor) */
@@ -309,6 +364,11 @@ body.dragging * {
   transition: none;
 }
 
+.calendar-event--dragging::before,
+.calendar-event--dragging::after {
+  display: none;
+}
+
 /* Resize handle - bottom edge of timed events */
 .calendar-event__resize-handle {
   position: absolute;
@@ -317,7 +377,7 @@ body.dragging * {
   right: 0;
   height: 8px;
   cursor: ns-resize;
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 6px 6px;
   opacity: 0;
   transition: opacity var(--duration-normal) ease;
 }
@@ -341,8 +401,9 @@ body.dragging * {
   opacity: 1;
 }
 
-/* All-day event chip states */
+/* All-day event chip states — Kindling design (corner gradient, no ribbon) */
 .all-day-chip {
+  position: relative;
   background-color: color-mix(
     in srgb,
     var(--event-color) 12%,
@@ -350,6 +411,32 @@ body.dragging * {
   );
   color: var(--event-color);
   border: 1px solid transparent;
+}
+
+/* Corner gradient border for all-day chips */
+.all-day-chip::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    var(--event-color) 0%,
+    color-mix(in srgb, var(--event-color) 60%, transparent) 15%,
+    color-mix(in srgb, var(--event-color) 20%, transparent) 30%,
+    transparent 45%
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  transition: background var(--duration-normal) ease;
 }
 
 /* Acceptance: not responded — dashed outline, lighter background */
@@ -367,6 +454,10 @@ body.dragging * {
   );
 }
 
+.all-day-chip--needs-action::before {
+  display: none;
+}
+
 .all-day-chip--needs-action:hover {
   background-color: color-mix(
     in srgb,
@@ -375,15 +466,9 @@ body.dragging * {
   );
 }
 
-/* Acceptance: tentative — dashed ribbon */
-.all-day-chip--tentative .all-day-chip__ribbon {
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--event-color) 0px,
-    var(--event-color) 3px,
-    transparent 3px,
-    transparent 6px
-  );
+/* Acceptance: tentative — faded corner gradient */
+.all-day-chip--tentative::before {
+  opacity: 0.5;
 }
 
 .all-day-chip:hover {
@@ -394,6 +479,17 @@ body.dragging * {
   );
 }
 
+.all-day-chip:hover::before {
+  background: linear-gradient(
+    135deg,
+    var(--event-color) 0%,
+    color-mix(in srgb, var(--event-color) 80%, transparent) 25%,
+    color-mix(in srgb, var(--event-color) 50%, transparent) 50%,
+    color-mix(in srgb, var(--event-color) 30%, transparent) 75%,
+    var(--event-color) 100%
+  );
+}
+
 .all-day-chip:focus,
 .all-day-chip--selected {
   outline: none;
@@ -401,48 +497,72 @@ body.dragging * {
   border-color: transparent;
 }
 
+.all-day-chip:focus::before,
+.all-day-chip--selected::before {
+  display: none;
+}
+
 .all-day-chip:focus span,
 .all-day-chip--selected span {
   color: white;
-}
-
-.all-day-chip:focus .all-day-chip__ribbon,
-.all-day-chip--selected .all-day-chip__ribbon {
-  background-color: color-mix(
-    in srgb,
-    var(--event-color),
-    #000 20%
-  );
 }
 
 .all-day-chip--selected:hover {
   background-color: var(--event-color);
 }
 
-/* Month view timed event chips */
+/* Month view timed event chips — Kindling design (corner gradient, no left border) */
 .month-event-chip {
+  position: relative;
   background-color: color-mix(
     in srgb,
     var(--event-color) 12%,
     var(--color-surface)
   );
   color: var(--event-color);
-  border-left: 3px solid var(--event-color);
 }
 
-/* Acceptance: not responded — lighter, dashed left border */
+.month-event-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    var(--event-color) 0%,
+    color-mix(in srgb, var(--event-color) 60%, transparent) 15%,
+    color-mix(in srgb, var(--event-color) 20%, transparent) 30%,
+    transparent 45%
+  );
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+}
+
+/* Acceptance: not responded — lighter, dashed border */
 .month-event-chip--needs-action {
   background-color: color-mix(
     in srgb,
     var(--event-color) 3%,
     var(--color-surface)
   );
-  border-left-style: dashed;
+  border: 1px dashed color-mix(in srgb, var(--event-color) 50%, var(--color-border-light));
 }
 
-/* Acceptance: tentative — dashed left border */
-.month-event-chip--tentative {
-  border-left-style: dashed;
+.month-event-chip--needs-action::before {
+  display: none;
+}
+
+/* Acceptance: tentative — faded corner gradient */
+.month-event-chip--tentative::before {
+  opacity: 0.5;
 }
 
 /* Today column tint — subtle accent wash */

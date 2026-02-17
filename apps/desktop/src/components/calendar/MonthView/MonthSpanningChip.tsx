@@ -35,14 +35,7 @@ export function MonthSpanningChip(props: MonthSpanningChipProps) {
       role="button"
       aria-label={props.event.title}
     >
-      <div
-        class="all-day-chip__ribbon absolute left-0 top-0 bottom-0 w-[3px]"
-        style={{
-          "background-color": props.event.color,
-          "border-radius": `${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS} 0 0 ${props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS}`,
-        }}
-      />
-      <span class="truncate ml-0.5">{props.event.title}</span>
+      <span class="truncate">{props.event.title}</span>
     </div>
   );
 }

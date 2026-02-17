@@ -8,7 +8,7 @@
 export const ALL_DAY_ROW_HEIGHT = 24;
 
 /** Standard border radius for event chips (px) */
-export const CHIP_BORDER_RADIUS = "4px";
+export const CHIP_BORDER_RADIUS = "6px";
 
 /** Left margin for all-day chips (px) */
 export const CHIP_MARGIN_LEFT = 1;
