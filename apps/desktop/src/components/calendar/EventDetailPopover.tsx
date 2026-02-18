@@ -8,9 +8,9 @@ import {
   isPopoverOpen,
   popoverAnchorEl,
   closeEventPopover,
+  openEditSheet,
 } from "../../stores/event-popover";
 import { setSelectedEventId } from "../../stores/event-selection";
-import { setRightSidebarOpen } from "../layout/AppShell";
 import { deleteEvent } from "../../stores/event-deletion";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
@@ -104,10 +104,8 @@ function PopoverBody(props: { event: NonNullable<ReturnType<typeof popoverEvent>
   };
 
   const handleEdit = () => {
-    // Wire to edit sheet in next issue (#252) — for now open sidebar for editing
     setSelectedEventId(props.event.id);
-    setRightSidebarOpen(true);
-    closeEventPopover();
+    openEditSheet(props.event.id);
   };
 
   return (

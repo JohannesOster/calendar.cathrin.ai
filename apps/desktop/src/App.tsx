@@ -10,6 +10,7 @@ import { isDragActive } from "./stores/event-drag";
 import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
+import { EventEditSheet } from "./components/calendar/EventEditSheet";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
@@ -192,6 +193,7 @@ function App() {
       />
       <DeleteConfirmDialog />
       <EventDetailPopover />
+      <EventEditSheet />
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
