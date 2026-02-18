@@ -1,9 +1,9 @@
 import { Show, onMount, createEffect, on } from "solid-js";
-import { Dialog } from "@ark-ui/solid/dialog";
-import { Portal } from "solid-js/web";
+import { Popover } from "@ark-ui/solid/popover";
 import {
   isEditSheetOpen,
   editSheetEventId,
+  editSheetAnchorEl,
   creationSheetOpen,
   closeEditSheet,
 } from "../../stores/event-popover";
@@ -27,10 +27,9 @@ import {
 } from "../sidebar/EventFormSections";
 import { RecurrenceScopeDialog } from "../ui/RecurrenceScopeDialog";
 
-export function EventEditSheet() {
-  const handleDismiss = () => {
+function useEditDismiss() {
+  return () => {
     if (creationSheetOpen()) {
-      // Creation mode: commit or cancel based on title
       if (draftHasAttendees()) {
         setShowCommitPrompt(true);
         return;
@@ -41,11 +40,14 @@ export function EventEditSheet() {
         cancelCreation();
       }
     } else {
-      // Edit mode: deselect triggers auto-save via useEventFormState
       deselectEvent();
     }
     closeEditSheet();
   };
+}
+
+export function EventEditSheet() {
+  const handleDismiss = useEditDismiss();
 
   // Close creation sheet when creation ends externally (e.g., grid Escape handler)
   createEffect(on(isCreating, (creating) => {
@@ -58,31 +60,45 @@ export function EventEditSheet() {
   const hasContent = () => (editSheetEventId() && selectedEvent()) || creationSheetOpen();
 
   return (
-    <Dialog.Root
+    <Popover.Root
       open={isOpen()}
       onOpenChange={(details) => {
-        if (!details.open) {
-          handleDismiss();
+        if (!details.open) handleDismiss();
+      }}
+      positioning={{
+        placement: "right-start",
+        flip: true,
+        slide: true,
+        overlap: true,
+        offset: { mainAxis: 8 },
+        overflowPadding: 12,
+        getAnchorElement: () => editSheetAnchorEl(),
+      }}
+      portalled
+      autoFocus={false}
+      modal={false}
+      closeOnInteractOutside
+      onInteractOutside={(e) => {
+        // Let clicks on event chips pass through — selectEvent handles the transition
+        const target = e.detail.originalEvent.target as HTMLElement;
+        if (target.closest("[data-event-id]")) {
+          e.preventDefault();
         }
       }}
-      closeOnInteractOutside
       closeOnEscape
-      trapFocus
     >
-      <Portal>
-        <Dialog.Backdrop class="fixed inset-0 bg-black/20 z-40 animate-fade-in" />
-        <Dialog.Positioner class="fixed inset-0 flex items-center justify-center z-40">
-          <Dialog.Content
-            class="bg-surface-elevated rounded-xl shadow-xl border border-border w-[480px] max-h-[80vh] animate-scale-in outline-none overflow-hidden flex flex-col"
-            aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
-          >
-            <Show when={hasContent()}>
-              <SheetFormContent />
-            </Show>
-          </Dialog.Content>
-        </Dialog.Positioner>
-      </Portal>
-    </Dialog.Root>
+      <Popover.Positioner style={{ "z-index": "99" }}>
+        <Popover.Content
+          class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
+          style={{ "max-height": "calc(100vh - 24px)" }}
+          aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
+        >
+          <Show when={hasContent()}>
+            <SheetFormContent />
+          </Show>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }
 

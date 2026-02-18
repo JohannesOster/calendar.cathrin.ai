@@ -681,13 +681,13 @@ function AttendeeList(props: {
     if (isExpanded()) return { top: all, pinned: null as Attendee | null, hiddenCount: 0 };
 
     const self = selfAttendee();
-    const first3 = all.slice(0, 3);
-    const selfInFirst3 = self ? first3.some(a => a.email === self.email) : true;
-    const pinned = (!selfInFirst3 && self) ? self : null;
-    const visibleCount = first3.length + (pinned ? 1 : 0);
+    const firstN = all.slice(0, 2);
+    const selfInFirstN = self ? firstN.some(a => a.email === self.email) : true;
+    const pinned = (!selfInFirstN && self) ? self : null;
+    const visibleCount = firstN.length + (pinned ? 1 : 0);
     const hidden = all.length - visibleCount;
-    if (hidden < 2) return { top: all, pinned: null as Attendee | null, hiddenCount: 0 };
-    return { top: first3, pinned, hiddenCount: hidden };
+    if (hidden < 1) return { top: all, pinned: null as Attendee | null, hiddenCount: 0 };
+    return { top: firstN, pinned, hiddenCount: hidden };
   });
 
   const isPendingRemoval = (email: string) => pendingRemovals().has(email.toLowerCase());

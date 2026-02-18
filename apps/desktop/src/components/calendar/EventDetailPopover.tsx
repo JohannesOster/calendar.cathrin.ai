@@ -1,17 +1,13 @@
 import { Show, For, createMemo, onCleanup } from "solid-js";
-import { Portal } from "solid-js/web";
 import { Popover } from "@ark-ui/solid/popover";
-import { Clock, MapPin, AlignLeft, Users, Repeat, Pencil, Trash2, Lock } from "lucide-solid";
+import { Clock, MapPin, AlignLeft, Users, Repeat, Lock } from "lucide-solid";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   popoverEvent,
   isPopoverOpen,
   popoverAnchorEl,
   closeEventPopover,
-  openEditSheet,
 } from "../../stores/event-popover";
-import { setSelectedEventId } from "../../stores/event-selection";
-import { deleteEvent } from "../../stores/event-deletion";
 import { connectedAccounts } from "../../stores/accounts";
 import { formatTime, formatDate } from "../../lib/format-utils";
 import { formatRecurrence } from "../../utils/recurrence-format";
@@ -34,28 +30,34 @@ export function EventDetailPopover() {
         placement: "right-start",
         flip: true,
         slide: true,
+        overlap: true,
         offset: { mainAxis: 8 },
+        overflowPadding: 12,
         getAnchorElement: () => popoverAnchorEl(),
       }}
       portalled
       autoFocus={false}
       modal={false}
       closeOnInteractOutside
+      onInteractOutside={(e) => {
+        const target = e.detail.originalEvent.target as HTMLElement;
+        if (target.closest("[data-event-id]")) {
+          e.preventDefault();
+        }
+      }}
       closeOnEscape
     >
-      <Portal>
-        <Popover.Positioner class="z-40">
-          <Popover.Content
-            class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none"
-            role="region"
-            aria-label="Event details"
-          >
-            <Show when={popoverEvent()}>
-              {(event) => <PopoverBody event={event()} />}
-            </Show>
-          </Popover.Content>
-        </Popover.Positioner>
-      </Portal>
+      <Popover.Positioner style={{ "z-index": "99" }}>
+        <Popover.Content
+          class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none"
+          role="region"
+          aria-label="Event details"
+        >
+          <Show when={popoverEvent()}>
+            {(event) => <PopoverBody event={event()} />}
+          </Show>
+        </Popover.Content>
+      </Popover.Positioner>
     </Popover.Root>
   );
 }
@@ -97,49 +99,14 @@ function PopoverBody(props: { event: NonNullable<ReturnType<typeof popoverEvent>
     return `${formatDate(start)}, ${formatTime(start)} – ${formatDate(end)}, ${formatTime(end)}`;
   });
 
-  const handleDelete = () => {
-    const eventId = props.event.id;
-    closeEventPopover();
-    deleteEvent(eventId);
-  };
-
-  const handleEdit = () => {
-    setSelectedEventId(props.event.id);
-    openEditSheet(props.event.id);
-  };
-
   return (
-    <div class="max-h-96 flex flex-col overflow-hidden">
+    <div class="flex flex-col overflow-hidden" style={{ "max-height": "calc(100vh - 24px)" }}>
       <div class="flex-1 overflow-y-auto scrollbar-hidden">
-        {/* Title + action buttons */}
+        {/* Title */}
         <div class="px-3 pt-3 pb-1 flex items-start gap-2">
           <h2 class="flex-1 text-sm font-medium text-fg break-words">{props.event.title}</h2>
-          <div class="flex items-center gap-0.5 shrink-0">
-            <Show when={props.event.isReadOnly}>
-              <div class="p-1 text-fg-muted" aria-label="Read-only event" title="Read-only">
-                <Lock size={14} />
-              </div>
-            </Show>
-            <Show when={!props.event.isReadOnly}>
-              <button
-                class="p-1 rounded text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors"
-                aria-label="Edit event"
-                title="Edit"
-                onClick={handleEdit}
-              >
-                <Pencil size={14} />
-              </button>
-            </Show>
-            <Show when={!props.event.isReadOnly}>
-              <button
-                class="p-1 rounded text-fg-muted hover:text-red-500 hover:bg-surface-hover transition-colors"
-                aria-label="Delete event"
-                title="Delete"
-                onClick={handleDelete}
-              >
-                <Trash2 size={14} />
-              </button>
-            </Show>
+          <div class="p-1 text-fg-muted" aria-label="Read-only event" title="Read-only">
+            <Lock size={14} />
           </div>
         </div>
 

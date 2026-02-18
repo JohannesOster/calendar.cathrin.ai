@@ -10,6 +10,7 @@ import type { CalendarEvent } from "./event-types";
 export const [popoverEventId, setPopoverEventId] = createSignal<string | null>(null);
 export const [popoverAnchorEl, setPopoverAnchorEl] = createSignal<HTMLElement | null>(null);
 export const [editSheetEventId, setEditSheetEventId] = createSignal<string | null>(null);
+export const [editSheetAnchorEl, setEditSheetAnchorEl] = createSignal<HTMLElement | null>(null);
 export const [creationSheetOpen, setCreationSheetOpen] = createSignal(false);
 
 // =============================================================================
@@ -57,18 +58,20 @@ export function closeEventPopover(): void {
 }
 
 /**
- * Transition from detail popover to edit sheet.
- * Closes the popover and opens the sheet for the same event.
+ * Open the edit popover anchored to the event chip.
+ * Closes the detail popover if open.
  */
-export function openEditSheet(eventId: string): void {
+export function openEditSheet(eventId: string, anchorEl?: HTMLElement): void {
   closeEventPopover();
   setEditSheetEventId(eventId);
+  if (anchorEl) setEditSheetAnchorEl(anchorEl);
 }
 
 /**
  * Open the edit sheet in creation mode.
  */
-export function openCreationSheet(): void {
+export function openCreationSheet(anchorEl?: HTMLElement): void {
+  if (anchorEl) setEditSheetAnchorEl(anchorEl);
   setCreationSheetOpen(true);
 }
 
@@ -77,5 +80,6 @@ export function openCreationSheet(): void {
  */
 export function closeEditSheet(): void {
   setEditSheetEventId(null);
+  setEditSheetAnchorEl(null);
   setCreationSheetOpen(false);
 }

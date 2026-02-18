@@ -84,10 +84,14 @@ function App() {
   });
 
   // Open edit sheet when event creation starts, but wait until drag finishes
-  // so the sheet doesn't appear mid-drag
+  // so the sheet doesn't appear mid-drag. RAF delay lets the grid settle
+  // before the popover anchors to the placeholder.
   createEffect(() => {
     if (isCreating() && !isDragging()) {
-      openCreationSheet();
+      requestAnimationFrame(() => {
+        const placeholder = document.querySelector("[data-event-placeholder]") as HTMLElement | null;
+        openCreationSheet(placeholder ?? undefined);
+      });
     }
   });
 
@@ -182,6 +186,7 @@ function App() {
   return (
     <>
       <UndoToastProvider />
+      {/* Deletion scope — edit scope lives inside EventEditSheet */}
       <RecurrenceScopeDialog
         open={!!pendingRecurrenceScopeEvent()}
         mode="delete"
@@ -195,7 +200,6 @@ function App() {
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
-        rightSidebar={undefined}
       >
         <CalendarGrid />
       </AppShell>
