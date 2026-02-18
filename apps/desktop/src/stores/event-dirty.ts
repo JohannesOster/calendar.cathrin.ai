@@ -53,9 +53,10 @@ export function clearDirtyIfMatching(
   const entry = dirtySeries.get(seriesId);
   if (!entry || !entry.confirmedByServer) return;
 
+  const normalize = (r: string[]) => r.map(s => s.trim()).sort();
   const matches =
     entry.expectedRecurrence.length === serverRecurrence.length &&
-    entry.expectedRecurrence.every((r, i) => r === serverRecurrence[i]);
+    JSON.stringify(normalize(entry.expectedRecurrence)) === JSON.stringify(normalize(serverRecurrence));
 
   if (matches) {
     dirtySeries.delete(seriesId);

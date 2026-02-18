@@ -15,6 +15,7 @@ import { getUserAccountIds, resolveCalendarOwner, findUserEvent } from "../servi
 import { createEvent, updateEvent, deleteEvent, moveEvent, rsvpEvent, splitOutlookSeriesEdit, truncateOutlookSeriesDelete } from "../services/event-mutations.js";
 import { mapServerEventToApi } from "../services/event-mapper.js";
 import { notifyUser } from "../services/ws-manager.js";
+import { recordMutation } from "../services/webhook-debouncer.js";
 import type { Provider, ApiCalendarEvent } from "@cathrin/shared-types";
 import { getWeekId } from "../lib/week-utils.js";
 
@@ -154,6 +155,7 @@ export const eventsRoute = new Hono()
           source: "mutation",
         }, clientId);
 
+        recordMutation(calendarId);
         return c.json(apiEvent, 201);
       } catch (error) {
         const errorResponse = handleProviderError(error, c);
@@ -208,6 +210,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "Event not found" }, 404);
       }
 
+      recordMutation(event.calendarId);
+
       try {
         // Outlook + "following" requires server-side series splitting
         if (scope === "following" && event.recurringEventId) {
@@ -224,10 +228,18 @@ export const eventsRoute = new Hono()
               patch, event, sendUpdates,
             );
 
+            const splitWeekIds = new Set<string>();
+            splitWeekIds.add(getWeekId(event.start));
+            const splitRangeEnd = new Date(event.start);
+            splitRangeEnd.setDate(splitRangeEnd.getDate() + 60);
+            for (const wk of getWeeksInRange(event.start, splitRangeEnd)) {
+              splitWeekIds.add(wk);
+            }
+
             const clientId = c.req.header("X-Client-ID");
             notifyUser(userId, {
               type: "weeks_changed",
-              weekIds: [getWeekId(event.start)],
+              weekIds: Array.from(splitWeekIds),
               source: "mutation",
             }, clientId);
 
@@ -469,6 +481,8 @@ export const eventsRoute = new Hono()
       return c.json({ error: "Event not found" }, 404);
     }
 
+    recordMutation(event.calendarId);
+
     try {
       // Outlook + "following" requires server-side series truncation
       if (scope === "following" && event.recurringEventId) {
@@ -484,10 +498,18 @@ export const eventsRoute = new Hono()
             event.recurringEventId as string, splitDate, event.start,
           );
 
+          const affectedWeekIds = new Set<string>();
+          affectedWeekIds.add(getWeekId(event.start));
+          const rangeEnd = new Date(event.start);
+          rangeEnd.setDate(rangeEnd.getDate() + 60);
+          for (const wk of getWeeksInRange(event.start, rangeEnd)) {
+            affectedWeekIds.add(wk);
+          }
+
           const clientId = c.req.header("X-Client-ID");
           notifyUser(userId, {
             type: "weeks_changed",
-            weekIds: [getWeekId(event.start)],
+            weekIds: Array.from(affectedWeekIds),
             source: "mutation",
           }, clientId);
 
@@ -549,6 +571,8 @@ export const eventsRoute = new Hono()
         return c.json({ error: "Event not found" }, 404);
       }
 
+      recordMutation(event.calendarId);
+
       try {
         const apiEvent = await rsvpEvent(
           event.accountId, event.calendarId, providerEventId, responseStatus, event, sendUpdates
@@ -605,6 +629,9 @@ export const eventsRoute = new Hono()
       if (!targetOwner) {
         return c.json({ error: "Target calendar not found" }, 404);
       }
+
+      recordMutation(event.calendarId);
+      recordMutation(targetCalendarId);
 
       try {
         const apiEvent = await moveEvent(

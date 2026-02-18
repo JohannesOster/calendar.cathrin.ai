@@ -22,7 +22,8 @@ function fromFakeUTC(d: Date): Date {
 /** Parse iCal date string (20260217, 20260217T120000, 20260217T120000Z) into epoch ms. */
 function parseICalDate(s: string): number {
   if (/^\d{8}$/.test(s)) {
-    return new Date(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`).getTime();
+    const y = +s.slice(0, 4), m = +s.slice(4, 6) - 1, d = +s.slice(6, 8);
+    return Date.UTC(y, m, d);
   }
   if (/^\d{8}T\d{6}$/.test(s)) {
     const d = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;

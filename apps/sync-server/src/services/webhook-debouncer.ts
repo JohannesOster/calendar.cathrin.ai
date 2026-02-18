@@ -9,11 +9,22 @@ import { accounts, calendarSyncState, serverEvents } from "../db/schema.js";
 // =============================================================================
 // Google sends multiple notifications in rapid succession for a single change
 // (or when a user makes rapid edits). This debouncer groups them into a single
-// sync operation per (accountId, calendarId) pair with a 3-second window.
+// sync operation per (accountId, calendarId) pair with a 1-second window.
 // =============================================================================
 
 const DEBOUNCE_MS = 1_000; // 1 second
+const MUTATION_COOLDOWN_MS = 5_000; // Skip webhook sync for 5s after a local mutation
 const pendingSyncs = new Map<string, ReturnType<typeof setTimeout>>();
+const recentMutations = new Map<string, number>(); // calendarId → timestamp
+
+/**
+ * Record that a mutation was performed on a calendar.
+ * Webhook-triggered syncs will be skipped for a short window to avoid
+ * re-fetching stale data that Google hasn't propagated yet.
+ */
+export function recordMutation(calendarId: string): void {
+  recentMutations.set(calendarId, Date.now());
+}
 
 /**
  * Schedule a debounced sync for a calendar.
@@ -56,6 +67,14 @@ async function performWebhookSync(
   calendarId: string
 ): Promise<void> {
   if (!db) return;
+
+  // Skip if a local mutation happened recently — the provider may not have
+  // propagated the change yet, so an incremental sync would return stale data.
+  const lastMutation = recentMutations.get(calendarId) ?? 0;
+  if (Date.now() - lastMutation < MUTATION_COOLDOWN_MS) {
+    console.log(`[webhook] Skipping sync for ${calendarId} — recent mutation (${Date.now() - lastMutation}ms ago)`);
+    return;
+  }
 
   // Verify the calendar has a syncToken (otherwise we can't do incremental sync)
   const state = await db.query.calendarSyncState.findFirst({
