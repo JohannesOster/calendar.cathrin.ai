@@ -73,7 +73,8 @@ export function CurrentTimeLine(props: CurrentTimeIndicatorProps) {
         width: `${(props.totalDays / props.visibleDaysCount) * 100}%`,
       }}
     >
-      {/* Thin line spanning all columns */}
+      {/* Leading dot + thin line spanning all columns */}
+      <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-today -ml-[3px]" />
       <div class="absolute left-0 right-0 h-px bg-today" />
     </div>
   );

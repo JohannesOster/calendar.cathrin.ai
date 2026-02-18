@@ -7,7 +7,7 @@ import { apiFetch, ApiError } from "../lib/api";
 import { showErrorToast } from "../lib/toast";
 import { CATHRIN_PALETTE, cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import type { CathrinColorKey } from "../lib/color-mapping";
-import { SNAP_MINUTES } from "../constants/calendar";
+import { SNAP_MINUTES, CREATION_SNAP_MINUTES } from "../constants/calendar";
 import { expandRRule } from "../utils/rrule-expand";
 import { formatDateOnly } from "../utils/date-format";
 import { centerDate } from "./calendar-navigation";
@@ -151,9 +151,9 @@ export function updateDrag(
     end = originDateTime;
   }
 
-  // Ensure minimum duration of one snap increment
-  if (end.getTime() - start.getTime() < SNAP_MINUTES * 60 * 1000) {
-    end = new Date(start.getTime() + SNAP_MINUTES * 60 * 1000);
+  // Ensure minimum duration of one standard snap (15min) during drag
+  if (end.getTime() - start.getTime() < SNAP_MINUTES * 60_000) {
+    end = new Date(start.getTime() + SNAP_MINUTES * 60_000);
   }
 
   setDraftStart(start);

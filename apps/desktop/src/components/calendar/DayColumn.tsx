@@ -7,7 +7,7 @@ import { DragGhost } from "./DragGhost";
 import { events } from "../../stores/events";
 import { connectedAccounts } from "../../stores/accounts";
 import { calculateEventLayouts } from "../../utils/eventLayout";
-import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES } from "../../constants/calendar";
+import { TOTAL_GRID_HEIGHT_PX, HOUR_HEIGHT_PX, SNAP_MINUTES, CREATION_SNAP_MINUTES } from "../../constants/calendar";
 import { startCreation, isCreating, draftTitle, commitCreation, cancelCreation, finishDrag, snapMinutes, draftHasAttendees, setShowCommitPrompt } from "../../stores/event-creation";
 import { deselectEvent, selectedEventId } from "../../stores/event-selection";
 import { spansMultipleDays } from "../../utils/allDayLayout";
@@ -168,7 +168,7 @@ export function DayColumn(props: DayColumnProps) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const mouseY = e.clientY - rect.top;
     const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
-    const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+    const snapped = Math.round(Math.max(0, Math.min(totalMinutes, 24 * 60 - CREATION_SNAP_MINUTES)) / CREATION_SNAP_MINUTES) * CREATION_SNAP_MINUTES;
     let started = false;
 
     const onMove = (me: MouseEvent) => {
@@ -209,7 +209,7 @@ export function DayColumn(props: DayColumnProps) {
     const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
     const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
 
-    // Store drag origin for CalendarGrid's document-level handlers
+    // Store drag origin for CalendarGrid's document-level handlers (double-click uses standard 15-min snap)
     dragColumnDate = new Date(props.date);
     dragOriginMinutes = snapped;
 

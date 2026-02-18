@@ -211,8 +211,8 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
               }),
         }}
       >
-        <div class="flex h-full">
-          <div class="flex-1 min-w-0 px-1.5 py-1">
+        <div class="h-full">
+          <div class="min-w-0 px-1.5 py-1">
             <Show when={isFirstSegment()}>
               <Show
                 when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}

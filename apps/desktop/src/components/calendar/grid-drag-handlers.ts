@@ -3,6 +3,7 @@ import { addDays } from "../../lib/date-utils";
 import {
   HOUR_HEIGHT_PX,
   SNAP_MINUTES,
+  CREATION_SNAP_MINUTES,
   CENTER_OFFSET,
   MONTH_LABEL_HEIGHT,
   HEADER_HEIGHT,
@@ -66,6 +67,9 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     return snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
   };
 
+  const snapCreationMinutes = (totalMinutes: number): number =>
+    Math.round(totalMinutes / CREATION_SNAP_MINUTES) * CREATION_SNAP_MINUTES;
+
   const recalcDragPosition = () => {
     if (!isDragging() || dragColumnDate === null || dragOriginMinutes === null) return;
     const gridArea = deps.getScrollContainerRef();
@@ -76,7 +80,7 @@ export function createDragHandlers(deps: DragHandlersDeps) {
 
     const mouseY = lastDragClientY - gridRect.top - stickyHeaderHeight + gridArea.scrollTop;
     const totalMinutes = (mouseY / HOUR_HEIGHT_PX) * 60;
-    const snapped = snapMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - SNAP_MINUTES)));
+    const snapped = snapCreationMinutes(Math.max(0, Math.min(totalMinutes, 24 * 60 - CREATION_SNAP_MINUTES)));
 
     const currentDate = getDateFromClientX(lastDragClientX) ?? dragColumnDate;
     updateDrag(dragOriginMinutes, snapped, dragColumnDate, currentDate);

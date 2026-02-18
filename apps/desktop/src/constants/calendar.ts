@@ -17,8 +17,11 @@ export const TOTAL_GRID_HEIGHT_PX = 24 * HOUR_HEIGHT_PX;
 export const MS_PER_MINUTE = 60 * 1000;
 export const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 
-/** Snap increment for drag-to-create (minutes) */
+/** Snap increment for move/resize operations (minutes) */
 export const SNAP_MINUTES = 15;
+
+/** Finer snap for drag-to-create — gives immediate visual feedback (~4px per step) */
+export const CREATION_SNAP_MINUTES = 5;
 
 /** Height in pixels for one snap increment */
 export const SNAP_HEIGHT_PX = HOUR_HEIGHT_PX / (60 / SNAP_MINUTES);

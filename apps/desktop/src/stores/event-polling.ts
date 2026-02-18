@@ -4,6 +4,7 @@ import { getWeekId, getWeekBounds } from "../lib/date-utils";
 import {
   recordWeekAccess,
   recordWeekFetch,
+  replaceEventsOnDisk,
   STALE_THRESHOLD_MS,
 } from "../lib/event-cache";
 import {
@@ -56,6 +57,7 @@ async function revalidateWeekBackground(weekId: string): Promise<void> {
     recordWeekFetch(weekId);
     recordWeekAccess(weekId);
     setEvents((prev) => replaceEventsInRange(start, end, newEvents, prev));
+    await replaceEventsOnDisk(start.toISOString(), end.toISOString(), apiEvents);
     console.log(`[events] Revalidated ${weekId} - ${newEvents.length} events`);
   } catch (error) {
     console.warn(`[events] Failed to revalidate ${weekId}:`, error);

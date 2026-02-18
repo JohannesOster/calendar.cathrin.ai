@@ -264,7 +264,12 @@ export async function refreshEvents(
     }
 
     setLastRefreshed(now);
-    await replaceEventsOnDisk(timeMin, timeMax, apiEvents);
+    // Skip writing events from dirty series to disk — their server data
+    // may be stale (eventual consistency) and would overwrite good local state.
+    const cleanApiEvents = apiEvents.filter(
+      (e) => !e.recurringEventId || !isSeriesDirty(e.recurringEventId),
+    );
+    await replaceEventsOnDisk(timeMin, timeMax, cleanApiEvents);
   } catch (error) {
     if (!hasCachedData) {
       if (error instanceof AuthError) {

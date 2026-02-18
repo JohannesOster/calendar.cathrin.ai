@@ -13,7 +13,7 @@ export function MonthEventChip(props: MonthEventChipProps) {
 
   return (
     <div
-      class="month-event-chip flex items-center gap-1 px-1 py-0.5 rounded-md text-xs truncate cursor-pointer hover:brightness-95 transition-[filter]"
+      class="month-event-chip flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs truncate cursor-pointer hover:brightness-95 transition-[filter]"
       classList={{
         "month-event-chip--needs-action": selfResponse() === "needsAction",
         "month-event-chip--tentative": selfResponse() === "tentative",

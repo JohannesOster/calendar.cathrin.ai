@@ -3,6 +3,8 @@ import { apiFetch, ApiError } from "../lib/api";
 import { showErrorToast } from "../lib/toast";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
 import type { CalendarEvent, EventPatch } from "./event-types";
+import { convertApiEvent } from "./event-types";
+import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import { cathrinKeyToGoogleColorId } from "../lib/color-mapping";
 import { RRULE_REVALIDATE_FIRST_MS, RRULE_REVALIDATE_SECOND_MS } from "../constants/calendar";
 import { expandRRule } from "../utils/rrule-expand";
@@ -392,10 +394,27 @@ export async function updateEvent(
     if (sendUpdates) (apiPatch as Record<string, unknown>).sendUpdates = sendUpdates;
 
     try {
-      await apiFetch(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {
+      const response = await apiFetch<ApiCalendarEvent>(`/api/events/${encodeURIComponent(event.providerEventId)}?${params.toString()}`, {
         method: "PATCH",
         body: JSON.stringify(apiPatch),
       });
+
+      // §9: When the server does delete-then-create (e.g. removing recurrence),
+      // the event ID changes. Update the selected event and in-memory state
+      // so the detail panel doesn't go blank.
+      const newCompositeId = `${response.calendarId}/${response.id}`;
+      if (newCompositeId !== eventId) {
+        const converted = convertApiEvent(response);
+        setEvents((prev) =>
+          prev.map((e) => (e.id === eventId ? converted : e))
+        );
+        // Lazy import to avoid circular dependency (events ↔ event-selection)
+        const { selectedEventId, setSelectedEventId } = await import("./event-selection");
+        if (selectedEventId() === eventId) {
+          setSelectedEventId(newCompositeId);
+        }
+      }
+
       // After recurrence changes, mark server confirmed and delay revalidation
       // to let the provider propagate the RRULE mutation before we re-fetch.
       if (isRecurrenceChange) {
