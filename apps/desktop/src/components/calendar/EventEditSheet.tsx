@@ -1,12 +1,22 @@
-import { Show, onMount } from "solid-js";
+import { Show, onMount, createEffect, on } from "solid-js";
 import { Dialog } from "@ark-ui/solid/dialog";
 import { Portal } from "solid-js/web";
 import {
   isEditSheetOpen,
   editSheetEventId,
+  creationSheetOpen,
   closeEditSheet,
 } from "../../stores/event-popover";
-import { selectedEvent, selectedEventId, deselectEvent } from "../../stores/event-selection";
+import { selectedEvent, deselectEvent } from "../../stores/event-selection";
+import {
+  isCreating,
+  draftTitle,
+  commitCreation,
+  cancelCreation,
+  draftHasAttendees,
+  showCommitPrompt,
+  setShowCommitPrompt,
+} from "../../stores/event-creation";
 import { useEventFormState } from "../sidebar/useEventFormState";
 import {
   TimeSection,
@@ -16,16 +26,43 @@ import {
   RemindersSection,
 } from "../sidebar/EventFormSections";
 import { RecurrenceScopeDialog } from "../ui/RecurrenceScopeDialog";
-import { showCommitPrompt, setShowCommitPrompt } from "../../stores/event-creation";
 
 export function EventEditSheet() {
+  const handleDismiss = () => {
+    if (creationSheetOpen()) {
+      // Creation mode: commit or cancel based on title
+      if (draftHasAttendees()) {
+        setShowCommitPrompt(true);
+        return;
+      }
+      if (draftTitle().trim()) {
+        commitCreation();
+      } else {
+        cancelCreation();
+      }
+    } else {
+      // Edit mode: deselect triggers auto-save via useEventFormState
+      deselectEvent();
+    }
+    closeEditSheet();
+  };
+
+  // Close creation sheet when creation ends externally (e.g., grid Escape handler)
+  createEffect(on(isCreating, (creating) => {
+    if (!creating && creationSheetOpen()) {
+      closeEditSheet();
+    }
+  }, { defer: true }));
+
+  const isOpen = () => isEditSheetOpen();
+  const hasContent = () => (editSheetEventId() && selectedEvent()) || creationSheetOpen();
+
   return (
     <Dialog.Root
-      open={isEditSheetOpen()}
+      open={isOpen()}
       onOpenChange={(details) => {
         if (!details.open) {
-          deselectEvent();
-          closeEditSheet();
+          handleDismiss();
         }
       }}
       closeOnInteractOutside
@@ -37,9 +74,9 @@ export function EventEditSheet() {
         <Dialog.Positioner class="fixed inset-0 flex items-center justify-center z-40">
           <Dialog.Content
             class="bg-surface-elevated rounded-xl shadow-xl border border-border w-[480px] max-h-[80vh] animate-scale-in outline-none overflow-hidden flex flex-col"
-            aria-label="Edit event"
+            aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
           >
-            <Show when={editSheetEventId() && selectedEvent()}>
+            <Show when={hasContent()}>
               <SheetFormContent />
             </Show>
           </Dialog.Content>
@@ -62,8 +99,18 @@ function SheetFormContent() {
   const handleTitleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      // Blur to trigger save
-      (e.target as HTMLInputElement).blur();
+      if (state.mode() === "create") {
+        if (draftTitle().trim()) {
+          if (draftHasAttendees()) {
+            setShowCommitPrompt(true);
+          } else {
+            commitCreation();
+            closeEditSheet();
+          }
+        }
+      } else {
+        (e.target as HTMLInputElement).blur();
+      }
     }
   };
 
@@ -154,6 +201,8 @@ function EditNotifyPrompt(props: {
 }
 
 function CommitPrompt() {
+  const hasTitle = () => !!draftTitle().trim();
+
   return (
     <div class="mx-4 mt-4 mb-1 border border-border rounded-lg bg-surface overflow-hidden">
       <p class="text-xs text-fg-muted px-3 py-2 border-b border-border">
@@ -165,6 +214,34 @@ function CommitPrompt() {
         onClick={() => setShowCommitPrompt(false)}
       >
         Continue editing
+      </button>
+      <button
+        class="w-full text-left text-sm text-red-500 hover:bg-surface-hover px-3 py-2 transition-colors cursor-pointer border-none outline-none bg-transparent"
+        onClick={() => { cancelCreation(); closeEditSheet(); }}
+      >
+        Discard event
+      </button>
+      <button
+        class="w-full text-left text-sm px-3 py-2 transition-colors border-none outline-none bg-transparent"
+        disabled={!hasTitle()}
+        classList={{
+          "text-accent hover:bg-surface-hover cursor-pointer font-medium": hasTitle(),
+          "text-fg-disabled cursor-default": !hasTitle(),
+        }}
+        onClick={() => { if (hasTitle()) { commitCreation("all"); closeEditSheet(); } }}
+      >
+        Send invite
+      </button>
+      <button
+        class="w-full text-left text-sm px-3 py-2 transition-colors border-none outline-none bg-transparent"
+        disabled={!hasTitle()}
+        classList={{
+          "text-fg hover:bg-surface-hover cursor-pointer": hasTitle(),
+          "text-fg-disabled cursor-default": !hasTitle(),
+        }}
+        onClick={() => { if (hasTitle()) { commitCreation("none"); closeEditSheet(); } }}
+      >
+        Add without emailing
       </button>
     </div>
   );

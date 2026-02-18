@@ -10,6 +10,7 @@ import type { CalendarEvent } from "./event-types";
 export const [popoverEventId, setPopoverEventId] = createSignal<string | null>(null);
 export const [popoverAnchorEl, setPopoverAnchorEl] = createSignal<HTMLElement | null>(null);
 export const [editSheetEventId, setEditSheetEventId] = createSignal<string | null>(null);
+export const [creationSheetOpen, setCreationSheetOpen] = createSignal(false);
 
 // =============================================================================
 // Derived
@@ -23,7 +24,7 @@ export const popoverEvent = createMemo((): CalendarEvent | null => {
 
 export const isPopoverOpen = createMemo(() => popoverEventId() !== null);
 
-export const isEditSheetOpen = createMemo(() => editSheetEventId() !== null);
+export const isEditSheetOpen = createMemo(() => editSheetEventId() !== null || creationSheetOpen());
 
 // =============================================================================
 // Actions
@@ -65,8 +66,16 @@ export function openEditSheet(eventId: string): void {
 }
 
 /**
- * Close the edit sheet.
+ * Open the edit sheet in creation mode.
+ */
+export function openCreationSheet(): void {
+  setCreationSheetOpen(true);
+}
+
+/**
+ * Close the edit sheet (both edit and creation modes).
  */
 export function closeEditSheet(): void {
   setEditSheetEventId(null);
+  setCreationSheetOpen(false);
 }

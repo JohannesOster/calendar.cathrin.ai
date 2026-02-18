@@ -1,6 +1,6 @@
 import { onMount, onCleanup, createEffect, on, Show } from "solid-js";
 import "./App.css";
-import { AppShell, setRightSidebarOpen } from "./components/layout/AppShell";
+import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { EventForm } from "./components/sidebar/EventForm";
@@ -11,6 +11,7 @@ import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
 import { EventEditSheet } from "./components/calendar/EventEditSheet";
+import { openCreationSheet, isEditSheetOpen } from "./stores/event-popover";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
@@ -85,11 +86,11 @@ function App() {
     document.removeEventListener("keydown", handleKeyDown);
   });
 
-  // Open right sidebar when event creation starts, but wait until drag finishes
-  // so the sidebar doesn't resize columns mid-drag causing unintended multi-day selection
+  // Open edit sheet when event creation starts, but wait until drag finishes
+  // so the sheet doesn't appear mid-drag
   createEffect(() => {
     if (isCreating() && !isDragging()) {
-      setRightSidebarOpen(true);
+      openCreationSheet();
     }
   });
 
@@ -198,7 +199,7 @@ function App() {
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
         rightSidebar={
-          <Show when={isCreating() || selectedEventId()}>
+          <Show when={!isEditSheetOpen() && (isCreating() || selectedEventId())}>
             <Show
               when={selectedEvent()?.isReadOnly && selectedEvent()?.readOnlyReason !== "not_organizer"}
               fallback={<EventForm />}
