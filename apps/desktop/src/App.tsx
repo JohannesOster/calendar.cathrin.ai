@@ -1,17 +1,14 @@
-import { onMount, onCleanup, createEffect, on, Show } from "solid-js";
+import { onMount, onCleanup, createEffect, on } from "solid-js";
 import "./App.css";
 import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
-import { EventForm } from "./components/sidebar/EventForm";
-import { EventDetailPanel } from "./components/sidebar/EventDetailPanel";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { isDragActive } from "./stores/event-drag";
-import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
 import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
 import { EventEditSheet } from "./components/calendar/EventEditSheet";
-import { openCreationSheet, isEditSheetOpen } from "./stores/event-popover";
+import { openCreationSheet } from "./stores/event-popover";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
@@ -198,16 +195,7 @@ function App() {
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
-        rightSidebar={
-          <Show when={!isEditSheetOpen() && (isCreating() || selectedEventId())}>
-            <Show
-              when={selectedEvent()?.isReadOnly && selectedEvent()?.readOnlyReason !== "not_organizer"}
-              fallback={<EventForm />}
-            >
-              <EventDetailPanel event={selectedEvent()!} />
-            </Show>
-          </Show>
-        }
+        rightSidebar={undefined}
       >
         <CalendarGrid />
       </AppShell>
