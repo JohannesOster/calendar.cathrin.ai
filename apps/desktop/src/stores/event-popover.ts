@@ -1,34 +1,37 @@
 import { createSignal, createMemo } from "solid-js";
 import { events } from "./events";
 import { isCreating, cancelCreation, draftTitle, commitCreation } from "./event-creation";
-import { openEventPopover, closeEventPopover } from "./event-popover";
+import type { CalendarEvent } from "./event-types";
 
 // =============================================================================
 // Signals
 // =============================================================================
-export const [selectedEventId, setSelectedEventId] = createSignal<string | null>(null);
+
+export const [popoverEventId, setPopoverEventId] = createSignal<string | null>(null);
+export const [popoverAnchorEl, setPopoverAnchorEl] = createSignal<HTMLElement | null>(null);
 
 // =============================================================================
 // Derived
 // =============================================================================
 
-/** The full event object for the currently selected event, or null */
-export const selectedEvent = createMemo(() => {
-  const id = selectedEventId();
+export const popoverEvent = createMemo((): CalendarEvent | null => {
+  const id = popoverEventId();
   if (!id) return null;
   return events().find((e) => e.id === id) ?? null;
 });
+
+export const isPopoverOpen = createMemo(() => popoverEventId() !== null);
 
 // =============================================================================
 // Actions
 // =============================================================================
 
 /**
- * Select an event — opens the detail popover anchored to the event chip.
- * If an event creation is active, commits/cancels it first.
+ * Open the event detail popover anchored to the given element.
+ * If a creation draft is active, commits/cancels it first.
  */
-export function selectEvent(eventId: string, anchorEl?: HTMLElement): void {
-  // If creating, handle the active draft
+export function openEventPopover(eventId: string, anchorEl: HTMLElement): void {
+  // Handle active creation draft
   if (isCreating()) {
     if (draftTitle().trim()) {
       commitCreation();
@@ -37,17 +40,14 @@ export function selectEvent(eventId: string, anchorEl?: HTMLElement): void {
     }
   }
 
-  setSelectedEventId(eventId);
-
-  if (anchorEl) {
-    openEventPopover(eventId, anchorEl);
-  }
+  setPopoverEventId(eventId);
+  setPopoverAnchorEl(anchorEl);
 }
 
 /**
- * Deselect the current event and close the popover.
+ * Close the event detail popover.
  */
-export function deselectEvent(): void {
-  setSelectedEventId(null);
-  closeEventPopover();
+export function closeEventPopover(): void {
+  setPopoverEventId(null);
+  setPopoverAnchorEl(null);
 }

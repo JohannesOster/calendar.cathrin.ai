@@ -76,7 +76,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
     if (props.event.isReadOnly) {
       e.preventDefault();
       chipRef?.focus();
-      selectEvent(props.event.id);
+      selectEvent(props.event.id, chipRef);
       return;
     }
 
@@ -97,7 +97,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         cleanup();
         if (!started) {
           chipRef?.focus();
-          selectEvent(props.event.id);
+          selectEvent(props.event.id, chipRef);
         }
       };
 
@@ -137,7 +137,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         cleanup();
         if (!started) {
           chipRef?.focus();
-          selectEvent(props.event.id);
+          selectEvent(props.event.id, chipRef);
         }
       };
 
@@ -185,7 +185,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         "all-day-chip--needs-action": selfResponse() === "needsAction",
         "all-day-chip--tentative": selfResponse() === "tentative",
       }}
-      onClick={() => { chipRef?.focus(); selectEvent(props.event.id); }}
+      onClick={() => { chipRef?.focus(); selectEvent(props.event.id, chipRef); }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}

@@ -9,6 +9,7 @@ import { isCreating, isDragging } from "./stores/event-creation";
 import { isDragActive } from "./stores/event-drag";
 import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
+import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
@@ -190,6 +191,7 @@ function App() {
         onCancel={() => cancelRecurrenceScope()}
       />
       <DeleteConfirmDialog />
+      <EventDetailPopover />
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
