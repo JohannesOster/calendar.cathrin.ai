@@ -1,2 +1,2 @@
 export { MiniCalendar } from "./MiniCalendar";
-export { WeekRow, type DayInfo } from "./WeekRow";
+export { WeekRow } from "./WeekRow";

@@ -1,4 +1,4 @@
-import { Show, createMemo } from "solid-js";
+import { Show, createMemo, createEffect, on } from "solid-js";
 import {
   isCreating,
   draftStart,
@@ -9,6 +9,7 @@ import {
   shadowStart,
   shadowEnd,
 } from "../../stores/event-creation";
+import { setEditSheetAnchorEl } from "../../stores/event-popover";
 import {
   HOUR_HEIGHT_PX,
   EVENT_MARGIN_LEFT_PX,
@@ -189,6 +190,9 @@ export function EventPlaceholder(props: EventPlaceholderProps) {
     </Show>
     <Show when={isVisible()}>
       <div
+        ref={(el) => {
+          if (isFirstSegment()) setEditSheetAnchorEl(el);
+        }}
         data-event-placeholder
         class="absolute rounded-md overflow-hidden"
         classList={{ "calendar-event": hasTitle() && isFirstSegment() }}

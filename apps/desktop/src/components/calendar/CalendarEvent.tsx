@@ -90,7 +90,7 @@ export function CalendarEvent(props: CalendarEventProps) {
     if (props.event.isReadOnly) {
       e.preventDefault();
       contentRef?.focus();
-      selectEvent(props.event.id);
+      selectEvent(props.event.id, contentRef);
       return;
     }
 
@@ -125,7 +125,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         // Was a click, not a drag — select + focus the event
         // (preventDefault on pointerdown suppresses native focus)
         contentRef?.focus();
-        selectEvent(props.event.id);
+        selectEvent(props.event.id, contentRef);
       }
     };
 
@@ -256,7 +256,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            selectEvent(props.event.id);
+            selectEvent(props.event.id, contentRef);
           }
         }}
       >

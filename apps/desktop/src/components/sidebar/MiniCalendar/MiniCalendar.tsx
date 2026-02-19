@@ -1,10 +1,11 @@
-import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { createSignal, createEffect, on, createMemo, untrack, For, Show } from "solid-js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
 import { setCenterDate, setFlashDate, visibleStartDate } from "../../../stores/calendar-navigation";
-import { getSundayOfWeek, formatMonthYearLocale } from "../../../lib/date-utils";
+import { getSundayOfWeek, formatMonthYearLocale, computeWeeksInMonth } from "../../../lib/date-utils";
 import { visibleDaysCount } from "../../../stores/view";
 import { SIDEBAR, WEEKDAY_LABELS } from "../../../constants/sidebar";
-import { WeekRow, type DayInfo } from "./WeekRow";
+import type { MonthDayInfo } from "../../../lib/date-utils";
+import { WeekRow } from "./WeekRow";
 
 export function MiniCalendar() {
   const [currentMonth, setCurrentMonth] = createSignal(
@@ -67,7 +68,7 @@ export function MiniCalendar() {
   // Flag to skip auto-sync after user clicks a date
   let skipNextSync = false;
 
-  const handleDayClick = (dayInfo: DayInfo) => {
+  const handleDayClick = (dayInfo: MonthDayInfo) => {
     // Skip the next auto-sync so the mini-calendar stays on the clicked date's month
     skipNextSync = true;
 
@@ -83,8 +84,7 @@ export function MiniCalendar() {
 
   // Sync mini calendar month when scroll position changes to a different month
   // (but not after user clicks a date - we want to preserve their intended month)
-  createEffect(() => {
-    const visible = visibleStartDate();
+  createEffect(on(visibleStartDate, (visible) => {
     if (visible.getTime() !== prevVisibleDate.getTime()) {
       prevVisibleDate = visible;
 
@@ -94,14 +94,15 @@ export function MiniCalendar() {
         return;
       }
 
+      const month = untrack(currentMonth);
       if (
-        visible.getMonth() !== currentMonth().getMonth() ||
-        visible.getFullYear() !== currentMonth().getFullYear()
+        visible.getMonth() !== month.getMonth() ||
+        visible.getFullYear() !== month.getFullYear()
       ) {
         setCurrentMonth(new Date(visible.getFullYear(), visible.getMonth(), 1));
       }
     }
-  });
+  }));
 
   return (
     <div class="p-2 border-b border-border select-none">
@@ -160,74 +161,3 @@ export function MiniCalendar() {
   );
 }
 
-/**
- * Compute weeks for the month view, including days from adjacent months
- */
-function computeWeeksInMonth(date: Date): DayInfo[][] {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const daysInMonth = lastDay.getDate();
-  const startingDay = firstDay.getDay(); // 0 = Sunday
-
-  const weeks: DayInfo[][] = [];
-  let currentWeek: DayInfo[] = [];
-
-  // Add days from previous month to fill the first week
-  if (startingDay > 0) {
-    const prevMonthLastDay = new Date(year, month, 0).getDate();
-    for (let i = startingDay - 1; i >= 0; i--) {
-      const day = prevMonthLastDay - i;
-      currentWeek.push({
-        day,
-        date: new Date(year, month - 1, day),
-        isCurrentMonth: false,
-      });
-    }
-  }
-
-  // Add days of the current month
-  for (let i = 1; i <= daysInMonth; i++) {
-    currentWeek.push({
-      day: i,
-      date: new Date(year, month, i),
-      isCurrentMonth: true,
-    });
-
-    if (currentWeek.length === 7) {
-      weeks.push(currentWeek);
-      currentWeek = [];
-    }
-  }
-
-  // Add days from next month to fill the last week
-  let nextMonthDay = 1;
-  if (currentWeek.length > 0) {
-    while (currentWeek.length < 7) {
-      currentWeek.push({
-        day: nextMonthDay,
-        date: new Date(year, month + 1, nextMonthDay),
-        isCurrentMonth: false,
-      });
-      nextMonthDay++;
-    }
-    weeks.push(currentWeek);
-  }
-
-  // Always show 6 rows for consistent height
-  while (weeks.length < 6) {
-    const extraWeek: DayInfo[] = [];
-    for (let i = 0; i < 7; i++) {
-      extraWeek.push({
-        day: nextMonthDay,
-        date: new Date(year, month + 1, nextMonthDay),
-        isCurrentMonth: false,
-      });
-      nextMonthDay++;
-    }
-    weeks.push(extraWeek);
-  }
-
-  return weeks;
-}

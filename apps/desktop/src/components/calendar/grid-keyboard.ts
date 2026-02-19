@@ -16,6 +16,23 @@ import {
 import { selectedEventId, deselectEvent } from "../../stores/event-selection";
 import { setFocusedEventId } from "./CalendarEvent";
 import { stopAutoScroll } from "../../lib/auto-scroll";
+import {
+  visibleStartDate,
+  setCenterDate,
+  setFlashDate,
+} from "../../stores/calendar-navigation";
+import { currentView, visibleDaysCount } from "../../stores/view";
+import { addDays, getSundayOfWeek } from "../../lib/date-utils";
+
+/** Check if focus is in an editable element (input, textarea, contenteditable) */
+function isEditing(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if ((el as HTMLElement).isContentEditable) return true;
+  return false;
+}
 
 export function setupKeyboardHandlers() {
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -127,6 +144,51 @@ export function setupKeyboardHandlers() {
           wrapper.triggerBurn();
         } else {
           deleteEvent(eventId);
+        }
+      }
+    } else if (!isEditing() && !isCreating() && !isDragging() && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Navigation keyboard shortcuts — only when not typing in an input
+      switch (e.key) {
+        case "t":
+        case "T": {
+          // Go to today
+          const today = new Date();
+          const targetDate = visibleDaysCount() >= 7 ? getSundayOfWeek(today) : today;
+          setCenterDate(targetDate);
+          setFlashDate(today);
+          setTimeout(() => setFlashDate(null), 50);
+          e.preventDefault();
+          break;
+        }
+        case "j":
+        case "ArrowRight": {
+          // Navigate forward
+          if (e.shiftKey) break; // Don't interfere with text selection
+          const date = visibleStartDate();
+          if (currentView() === "Month") {
+            const nextMonth = new Date(date);
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            setCenterDate(nextMonth);
+          } else {
+            setCenterDate(addDays(date, visibleDaysCount()));
+          }
+          e.preventDefault();
+          break;
+        }
+        case "k":
+        case "ArrowLeft": {
+          // Navigate backward
+          if (e.shiftKey) break;
+          const date = visibleStartDate();
+          if (currentView() === "Month") {
+            const prevMonth = new Date(date);
+            prevMonth.setMonth(prevMonth.getMonth() - 1);
+            setCenterDate(prevMonth);
+          } else {
+            setCenterDate(addDays(date, -visibleDaysCount()));
+          }
+          e.preventDefault();
+          break;
         }
       }
     }

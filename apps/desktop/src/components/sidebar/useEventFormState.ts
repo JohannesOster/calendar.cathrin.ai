@@ -1011,6 +1011,17 @@ export function useEventFormState() {
     pendingNotifyPatch,
     confirmNotify,
     cancelNotify,
+    /** Set all-day end date from an inclusive date value (converts to exclusive internally). */
+    setAllDayEnd(inclusiveDate: { year: number; month: number; day: number }) {
+      const exclusive = new Date(Date.UTC(inclusiveDate.year, inclusiveDate.month - 1, inclusiveDate.day + 1));
+      if (mode() === "create") {
+        setDraftEnd(exclusive);
+      } else {
+        setEditEnd(exclusive);
+        scheduleSave({ end: exclusive });
+        flushSave();
+      }
+    },
   };
 }
 

@@ -1,14 +1,14 @@
-import { onMount, onCleanup, createEffect, on, Show } from "solid-js";
+import { onMount, onCleanup, createEffect, on } from "solid-js";
 import "./App.css";
-import { AppShell, setRightSidebarOpen } from "./components/layout/AppShell";
+import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
 import { LeftSidebar } from "./components/layout/LeftSidebar";
-import { EventForm } from "./components/sidebar/EventForm";
-import { EventDetailPanel } from "./components/sidebar/EventDetailPanel";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { isDragActive } from "./stores/event-drag";
-import { selectedEventId, selectedEvent } from "./stores/event-selection";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
+import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
+import { EventEditSheet } from "./components/calendar/EventEditSheet";
+import { openCreationSheet } from "./stores/event-popover";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
 import { DeleteConfirmDialog } from "./components/ui/DeleteConfirmDialog";
@@ -83,13 +83,17 @@ function App() {
     document.removeEventListener("keydown", handleKeyDown);
   });
 
-  // Open right sidebar when event creation starts, but wait until drag finishes
-  // so the sidebar doesn't resize columns mid-drag causing unintended multi-day selection
-  createEffect(() => {
-    if (isCreating() && !isDragging()) {
-      setRightSidebarOpen(true);
+  // Open edit sheet when event creation starts, but wait until drag finishes
+  // so the sheet doesn't appear mid-drag. RAF delay lets the grid settle
+  // before the popover anchors to the placeholder.
+  createEffect(on([isCreating, isDragging], ([creating, dragging]) => {
+    if (creating && !dragging) {
+      requestAnimationFrame(() => {
+        const placeholder = document.querySelector("[data-event-placeholder]") as HTMLElement | null;
+        openCreationSheet(placeholder ?? undefined);
+      });
     }
-  });
+  }));
 
   // Weeks deferred during drag — deduplicated Set so repeated deferrals don't
   // cause duplicate fetches when the drag ends.
@@ -182,6 +186,7 @@ function App() {
   return (
     <>
       <UndoToastProvider />
+      {/* Deletion scope — edit scope lives inside EventEditSheet */}
       <RecurrenceScopeDialog
         open={!!pendingRecurrenceScopeEvent()}
         mode="delete"
@@ -190,19 +195,11 @@ function App() {
         onCancel={() => cancelRecurrenceScope()}
       />
       <DeleteConfirmDialog />
+      <EventDetailPopover />
+      <EventEditSheet />
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
-        rightSidebar={
-          <Show when={isCreating() || selectedEventId()}>
-            <Show
-              when={selectedEvent()?.isReadOnly && selectedEvent()?.readOnlyReason !== "not_organizer"}
-              fallback={<EventForm />}
-            >
-              <EventDetailPanel event={selectedEvent()!} />
-            </Show>
-          </Show>
-        }
       >
         <CalendarGrid />
       </AppShell>
