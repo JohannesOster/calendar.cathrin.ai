@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect, onCleanup, on, untrack } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onCleanup, on, untrack, batch } from "solid-js";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
@@ -78,18 +78,18 @@ export function TimeSection(props: SectionProps) {
 
     if (which === "start") {
       const diff = updated.getTime() - s.start()!.getTime();
-      s.setStart(updated);
-      // Shift end by same amount to preserve duration
-      if (s.end()) {
-        s.setEnd(new Date(s.end()!.getTime() + diff));
-      }
+      const newEnd = s.end() ? new Date(s.end()!.getTime() + diff) : undefined;
+      batch(() => {
+        s.setStart(updated);
+        if (newEnd) s.setEnd(newEnd);
+      });
     } else {
       const diff = updated.getTime() - s.end()!.getTime();
-      s.setEnd(updated);
-      // Shift start by same amount to preserve duration
-      if (updated < s.start()!) {
-        s.setStart(new Date(s.start()!.getTime() + diff));
-      }
+      const newStart = updated < s.start()! ? new Date(s.start()!.getTime() + diff) : undefined;
+      batch(() => {
+        s.setEnd(updated);
+        if (newStart) s.setStart(newStart);
+      });
     }
     // Scroll grid to show the changed date if it's off-screen
     const visStart = visibleStartDate();
