@@ -183,29 +183,26 @@ export function EventEditSheet() {
     >
       <RepositionBridge onApi={(fn) => { reposition = fn; }} />
       <Popover.Positioner
-        style={{ "z-index": "99", visibility: positioned() ? "visible" : "hidden" }}
+        style={{
+          "z-index": "99",
+          visibility: positioned() ? "visible" : "hidden",
+          translate: (drag.offset()[0] || drag.offset()[1]) ? `${drag.offset()[0]}px ${drag.offset()[1]}px` : undefined,
+        }}
       >
-        <div
+        <Popover.Content
+          class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
           style={{
-            transform: `translate(${drag.offset()[0]}px, ${drag.offset()[1]}px)`,
-            "will-change": drag.isDragging() ? "transform" : undefined,
+            "max-height": "calc(100vh - 24px)",
+            animation: positioned() ? "popover-grow 80ms ease-out" : "none",
+            "box-shadow": drag.isDragging() ? "0 20px 60px rgba(0,0,0,0.2), 0 8px 20px rgba(0,0,0,0.12)" : undefined,
           }}
+          aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
         >
-          <Popover.Content
-            class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
-            style={{
-              "max-height": "calc(100vh - 24px)",
-              animation: positioned() ? "popover-grow 80ms ease-out" : "none",
-              "box-shadow": drag.isDragging() ? "0 20px 60px rgba(0,0,0,0.2), 0 8px 20px rgba(0,0,0,0.12)" : undefined,
-            }}
-            aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
-          >
-            <Show when={hasContent()}>
-              <DragHandle onPointerDown={drag.onPointerDown} isDragging={drag.isDragging()} />
-              <SheetFormContent />
-            </Show>
-          </Popover.Content>
-        </div>
+          <Show when={hasContent()}>
+            <DragHandle onPointerDown={drag.onPointerDown} isDragging={drag.isDragging()} />
+            <SheetFormContent />
+          </Show>
+        </Popover.Content>
       </Popover.Positioner>
     </Popover.Root>
   );
