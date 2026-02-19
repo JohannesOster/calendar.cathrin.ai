@@ -49,6 +49,9 @@ impl LocalCache {
         let db_path = app_dir.join("events_cache.db");
         let conn = Connection::open(db_path)?;
 
+        // Enable WAL mode for concurrent reads/writes without locking
+        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+
         // Initialize schema
         conn.execute_batch(
             r#"

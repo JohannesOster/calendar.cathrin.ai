@@ -31,36 +31,55 @@ function eventsOverlap(a: CalendarEvent, b: CalendarEvent): boolean {
 }
 
 /**
- * Build clusters of overlapping events (connected components)
- * Input should already be sorted by compareEvents
+ * Build clusters of overlapping events (connected components).
+ * Input must be sorted by compareEvents (start time, then duration desc).
+ *
+ * Uses a sweep-line approach: since events are sorted by start time,
+ * we only need to check backwards until we find an event that ends
+ * before the current event starts. This reduces O(n²) to ~O(n) for
+ * typical calendar data where most events don't overlap.
  */
 function buildClusters(sortedEvents: CalendarEvent[]): CalendarEvent[][] {
   if (sortedEvents.length === 0) return [];
 
-  const visited = new Set<string>();
-  const clusters: CalendarEvent[][] = [];
+  // Pre-build adjacency list with sweep-line
+  const adjacency = new Map<number, number[]>();
+  for (let i = 0; i < sortedEvents.length; i++) {
+    adjacency.set(i, []);
+  }
 
-  function dfs(event: CalendarEvent, cluster: CalendarEvent[]) {
-    if (visited.has(event.id)) return;
-    visited.add(event.id);
-    cluster.push(event);
-
-    for (const other of sortedEvents) {
-      if (!visited.has(other.id) && eventsOverlap(event, other)) {
-        dfs(other, cluster);
+  for (let i = 0; i < sortedEvents.length; i++) {
+    for (let j = i + 1; j < sortedEvents.length; j++) {
+      // Since sorted by start time, if event j starts after event i ends,
+      // no further events can overlap with i either
+      if (sortedEvents[j].start >= sortedEvents[i].end) break;
+      if (eventsOverlap(sortedEvents[i], sortedEvents[j])) {
+        adjacency.get(i)!.push(j);
+        adjacency.get(j)!.push(i);
       }
     }
   }
 
-  for (const event of sortedEvents) {
-    if (!visited.has(event.id)) {
-      const cluster: CalendarEvent[] = [];
-      dfs(event, cluster);
-      // Cluster inherits sorted order from input, but DFS may add out of order
-      // Re-sort to ensure correct order within cluster
-      cluster.sort(compareEvents);
-      clusters.push(cluster);
+  const visited = new Set<number>();
+  const clusters: CalendarEvent[][] = [];
+
+  for (let i = 0; i < sortedEvents.length; i++) {
+    if (visited.has(i)) continue;
+
+    const cluster: CalendarEvent[] = [];
+    const stack = [i];
+    while (stack.length > 0) {
+      const idx = stack.pop()!;
+      if (visited.has(idx)) continue;
+      visited.add(idx);
+      cluster.push(sortedEvents[idx]);
+      for (const neighbor of adjacency.get(idx)!) {
+        if (!visited.has(neighbor)) stack.push(neighbor);
+      }
     }
+
+    cluster.sort(compareEvents);
+    clusters.push(cluster);
   }
 
   return clusters;

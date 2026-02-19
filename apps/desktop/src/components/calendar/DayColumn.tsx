@@ -73,15 +73,15 @@ export function DayColumn(props: DayColumnProps) {
     return day === 0 || day === 6;
   };
 
-  // Get visible calendar IDs
-  const visibleCalendarIds = () => {
+  // Get visible calendar IDs — memoized to prevent recomputation on every event change
+  const visibleCalendarIds = createMemo(() => {
     return new Set(
       connectedAccounts()
         .flatMap((a) => a.calendars)
         .filter((c) => c.visible)
         .map((c) => c.id)
     );
-  };
+  });
 
   // Filter events for this day: must overlap this day, from a visible calendar, and not all-day
   // Multi-day timed events appear on every day they span

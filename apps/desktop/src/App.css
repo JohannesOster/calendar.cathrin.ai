@@ -318,6 +318,7 @@ body.dragging * {
   cursor: grabbing !important;
   pointer-events: none;
   transition: none;
+  will-change: transform, opacity;
 }
 
 .calendar-event--dragging::before {

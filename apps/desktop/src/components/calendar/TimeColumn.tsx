@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { Index } from "solid-js";
 
 const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -12,7 +12,7 @@ function formatHour(hour: number): string {
 export function TimeColumn() {
   return (
     <div class="flex flex-col">
-      <For each={hours}>
+      <Index each={hours}>
         {(hour) => (
           <div
             class="h-[var(--grid-hour-height)] flex items-start justify-end pr-2"
@@ -20,11 +20,11 @@ export function TimeColumn() {
           >
             {/* Time label - use negative margin to center on grid line */}
             <span class="text-2xs text-fg-muted leading-none -mt-[0.35rem]">
-              {formatHour(hour)}
+              {formatHour(hour())}
             </span>
           </div>
         )}
-      </For>
+      </Index>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, batch } from "solid-js";
 import { apiFetch, ApiError } from "../lib/api";
 import { showErrorToast } from "../lib/toast";
 import { getWeekId, getWeekBounds, getWeeksInRange } from "../lib/date-utils";
@@ -128,57 +128,60 @@ function applyRecurrenceReExpansion(
   const addedTempIds: string[] = [];
   const siblingIds = new Set(siblingSnapshots.map((e) => e.id));
 
-  // Update the primary event + remove affected siblings
-  setEvents((prev) => {
-    const filtered = prev.filter((e) => !siblingIds.has(e.id));
-    return filtered.map((e) =>
-      e.id === eventId
-        ? {
-            ...e,
+  // Batch both setEvents calls (remove siblings + add new instances) into a single render
+  batch(() => {
+    // Update the primary event + remove affected siblings
+    setEvents((prev) => {
+      const filtered = prev.filter((e) => !siblingIds.has(e.id));
+      return filtered.map((e) =>
+        e.id === eventId
+          ? {
+              ...e,
+              ...(patch.title !== undefined && { title: patch.title }),
+              ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
+              // When removing recurrence, clear the instance link so the event
+              // appears as a standalone event in the UI (no "Repeats" label).
+              ...(patch.recurrence === null && e.recurringEventId && { recurringEventId: undefined }),
+            }
+          : e
+      );
+    });
+
+    // Re-expand new RRULE if recurrence is being set (not removed)
+    if (patch.recurrence && patch.recurrence.length > 0) {
+      try {
+        const dtstart = patch.start ?? snapshot.start;
+        const durationMs = (patch.end ?? snapshot.end).getTime() - dtstart.getTime();
+        const instances = expandRRule(patch.recurrence, dtstart, durationMs, centerDate());
+
+        const newEvents: CalendarEvent[] = [];
+        for (const inst of instances) {
+          if (scope === "following" && inst.start.getTime() < snapshot.start.getTime()) continue;
+
+          const dateISO = inst.start.toISOString().slice(0, 10);
+          const tempInstanceId = `${eventId}-rrule-${dateISO}`;
+          addedTempIds.push(tempInstanceId);
+          newEvents.push({
+            ...event,
+            id: tempInstanceId,
+            providerEventId: "",
+            start: inst.start,
+            end: inst.end,
+            recurringEventId: masterId,
+            recurrence: undefined,
+            rruleExpandedAt: Date.now(),
             ...(patch.title !== undefined && { title: patch.title }),
-            ...(patch.recurrence !== undefined && { recurrence: patch.recurrence ?? undefined }),
-            // When removing recurrence, clear the instance link so the event
-            // appears as a standalone event in the UI (no "Repeats" label).
-            ...(patch.recurrence === null && e.recurringEventId && { recurringEventId: undefined }),
-          }
-        : e
-    );
-  });
+          });
+        }
 
-  // Re-expand new RRULE if recurrence is being set (not removed)
-  if (patch.recurrence && patch.recurrence.length > 0) {
-    try {
-      const dtstart = patch.start ?? snapshot.start;
-      const durationMs = (patch.end ?? snapshot.end).getTime() - dtstart.getTime();
-      const instances = expandRRule(patch.recurrence, dtstart, durationMs, centerDate());
-
-      const newEvents: CalendarEvent[] = [];
-      for (const inst of instances) {
-        if (scope === "following" && inst.start.getTime() < snapshot.start.getTime()) continue;
-
-        const dateISO = inst.start.toISOString().slice(0, 10);
-        const tempInstanceId = `${eventId}-rrule-${dateISO}`;
-        addedTempIds.push(tempInstanceId);
-        newEvents.push({
-          ...event,
-          id: tempInstanceId,
-          providerEventId: "",
-          start: inst.start,
-          end: inst.end,
-          recurringEventId: masterId,
-          recurrence: undefined,
-          rruleExpandedAt: Date.now(),
-          ...(patch.title !== undefined && { title: patch.title }),
-        });
+        if (newEvents.length > 0) {
+          setEvents((prev) => [...prev, ...newEvents]);
+        }
+      } catch (err) {
+        console.warn("[events] Failed to re-expand RRULE:", err);
       }
-
-      if (newEvents.length > 0) {
-        setEvents((prev) => [...prev, ...newEvents]);
-      }
-    } catch (err) {
-      console.warn("[events] Failed to re-expand RRULE:", err);
     }
-  }
+  });
 
   return addedTempIds;
 }

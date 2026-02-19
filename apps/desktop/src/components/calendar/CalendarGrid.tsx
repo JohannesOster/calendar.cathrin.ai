@@ -4,6 +4,8 @@ import {
   onCleanup,
   createMemo,
   Show,
+  lazy,
+  Suspense,
 } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { ChevronsUpDown, ChevronsDownUp } from "lucide-solid";
@@ -12,7 +14,7 @@ import { DateHeader } from "./DateHeader";
 import { DayColumn } from "./DayColumn";
 import { DaysStepperButton } from "./DaysStepperButton";
 import { CurrentTimeBadge, CurrentTimeLine } from "./CurrentTimeIndicator";
-import { MonthView } from "./MonthView";
+const MonthView = lazy(() => import("./MonthView").then(m => ({ default: m.MonthView })));
 import { AllDayEventChip } from "./AllDayEventChip";
 import { AllDayPlaceholder } from "./AllDayPlaceholder";
 import { addDays, isToday } from "../../lib/date-utils";
@@ -301,8 +303,7 @@ export function CalendarGrid() {
                   "z-index": "11",
                   height: `${MONTH_LABEL_HEIGHT}px`,
                   width: `${containerWidth() || window.innerWidth}px`,
-                  transform: "translateZ(0)",
-                  contain: "layout",
+                  contain: "layout paint",
                 }}
               >
                 <div
@@ -336,8 +337,7 @@ export function CalendarGrid() {
                   "z-index": "10",
                   height: `${HEADER_HEIGHT}px`,
                   width: "100%",
-                  transform: "translateZ(0)",
-                  contain: "layout",
+                  contain: "layout paint",
                 }}
               >
                 {/* Sticky Time Column Header */}
@@ -389,8 +389,7 @@ export function CalendarGrid() {
                   "margin-bottom": `${-(allDay.visualAllDayHeight() - ALL_DAY_BASE_HEIGHT)}px`,
                   "border-bottom": allDay.allDayExpanded() ? "1px solid var(--color-border)" : "none",
                   width: "100%",
-                  transform: "translateZ(0)",
-                  contain: "layout",
+                  contain: "layout paint",
                 }}
               >
                 {/* Sticky Time column corner */}
@@ -660,7 +659,9 @@ export function CalendarGrid() {
           </div>
         }
       >
-        <MonthView />
+        <Suspense>
+          <MonthView />
+        </Suspense>
       </Show>
     </div>
   );
