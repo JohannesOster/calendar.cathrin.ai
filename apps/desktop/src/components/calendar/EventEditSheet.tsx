@@ -7,6 +7,7 @@ import {
   creationSheetOpen,
   closeEditSheet,
 } from "../../stores/event-popover";
+import { HEADER_HEIGHT } from "../../constants/calendar";
 import { selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isCreating,
@@ -59,6 +60,51 @@ export function EventEditSheet() {
   const isOpen = () => isEditSheetOpen();
   const hasContent = () => (editSheetEventId() && selectedEvent()) || creationSheetOpen();
 
+  // Snapshot the anchor rect when the sheet opens so the popover stays
+  // vertically stable even when the event placeholder moves (date change).
+  let frozenRect: DOMRect | null = null;
+
+  createEffect(on(isEditSheetOpen, (open) => {
+    if (open) {
+      const el = editSheetAnchorEl();
+      if (el) frozenRect = el.getBoundingClientRect();
+    } else {
+      frozenRect = null;
+    }
+  }));
+
+  // Virtual anchor: frozen Y position, live X from current anchor element.
+  // Clamped so the popover never overlaps the day header row.
+  const getVirtualAnchor = () => {
+    const liveEl = editSheetAnchorEl();
+    if (!frozenRect) return liveEl;
+
+    // Use live X so popover follows horizontal column changes,
+    // but keep the frozen Y for vertical stability.
+    const liveRect = liveEl?.getBoundingClientRect();
+    const x = liveRect ? liveRect.x : frozenRect.x;
+    const width = liveRect ? liveRect.width : frozenRect.width;
+
+    // Safe area: popover top must not go above the day header bottom.
+    // Header row top is roughly at the grid container top; use a fixed
+    // minimum based on the header height + some padding for the app title bar.
+    const minTop = HEADER_HEIGHT + 80; // header row + app chrome
+    const y = Math.max(frozenRect.y, minTop);
+
+    return {
+      getBoundingClientRect: () => ({
+        x,
+        y,
+        width,
+        height: frozenRect!.height,
+        top: y,
+        left: x,
+        right: x + width,
+        bottom: y + frozenRect!.height,
+      }),
+    };
+  };
+
   return (
     <Popover.Root
       open={isOpen()}
@@ -72,7 +118,7 @@ export function EventEditSheet() {
         overlap: true,
         offset: { mainAxis: 8 },
         overflowPadding: 12,
-        getAnchorElement: () => editSheetAnchorEl(),
+        getAnchorElement: getVirtualAnchor,
       }}
       portalled
       autoFocus={false}
