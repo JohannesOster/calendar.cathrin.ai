@@ -1,5 +1,5 @@
 import { Show, onMount, createEffect, on, createSignal } from "solid-js";
-import { Popover } from "@ark-ui/solid/popover";
+import { Popover, usePopoverContext } from "@ark-ui/solid/popover";
 import {
   isEditSheetOpen,
   editSheetEventId,
@@ -48,6 +48,13 @@ function useEditDismiss() {
   };
 }
 
+/** Bridge component to extract reposition() from Ark's popover context */
+function RepositionBridge(props: { onApi: (fn: () => void) => void }) {
+  const ctx = usePopoverContext();
+  props.onApi(() => ctx().reposition());
+  return null;
+}
+
 export function EventEditSheet() {
   const handleDismiss = useEditDismiss();
 
@@ -85,14 +92,26 @@ export function EventEditSheet() {
     }
   }));
 
-  // After a date change triggers a grid scroll (centerDate changes),
-  // update the frozen rect to the anchor's new position once scroll settles.
+  // After a grid scroll (centerDate changes), update the frozen rect
+  // to the anchor's new position once the DOM settles.
   createEffect(on(centerDate, () => {
     if (!isEditSheetOpen()) return;
     setTimeout(() => {
       const el = editSheetAnchorEl();
       if (el) setFrozenRect(el.getBoundingClientRect());
     }, 150);
+  }, { defer: true }));
+
+  // When the anchor element changes (event moves to a new day column),
+  // update the frozen rect to follow it.
+  let reposition: (() => void) | undefined;
+
+  createEffect(on(editSheetAnchorEl, (el) => {
+    if (!isEditSheetOpen() || !el) return;
+    requestAnimationFrame(() => {
+      setFrozenRect(el.getBoundingClientRect());
+      reposition?.();
+    });
   }, { defer: true }));
 
   // Virtual anchor: frozen Y position, live X from current anchor element.
@@ -156,6 +175,7 @@ export function EventEditSheet() {
       }}
       closeOnEscape
     >
+      <RepositionBridge onApi={(fn) => { reposition = fn; }} />
       <Popover.Positioner style={{ "z-index": "99", visibility: positioned() ? "visible" : "hidden" }}>
         <Popover.Content
           class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
