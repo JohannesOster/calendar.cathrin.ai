@@ -37,7 +37,7 @@ import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd, commitCreation, draftTitle, setDraftAttendees } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
-import { isToday, formatMonthYearLocale, computeWeeksInMonth } from "../../lib/date-utils";
+import { isToday, isSameDay, addDays, formatMonthYearLocale, computeWeeksInMonth } from "../../lib/date-utils";
 import { WEEKDAY_LABELS } from "../../constants/sidebar";
 import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
@@ -59,11 +59,20 @@ export function TimeSection(props: SectionProps) {
   const s = props.state;
   const isEditable = () => s.mode() === "create" || s.isOrganizer();
 
-  /** Change only the date portion of a datetime, preserving hours/minutes */
+  /** Change only the date portion of a datetime, preserving hours/minutes.
+   *  All-day events use UTC midnight dates, so we use Date.UTC to avoid
+   *  local-time DST shifts landing on the wrong day. */
   function changeDatePortion(which: "start" | "end", dateValue: { year: number; month: number; day: number }) {
     const current = which === "start" ? s.start()! : s.end()!;
-    const updated = new Date(current);
-    updated.setFullYear(dateValue.year, dateValue.month - 1, dateValue.day);
+
+    let updated: Date;
+    if (s.isAllDay()) {
+      // All-day dates are stored as UTC midnight — construct with Date.UTC
+      updated = new Date(Date.UTC(dateValue.year, dateValue.month - 1, dateValue.day));
+    } else {
+      updated = new Date(current);
+      updated.setFullYear(dateValue.year, dateValue.month - 1, dateValue.day);
+    }
 
     if (which === "start") {
       const diff = updated.getTime() - s.start()!.getTime();
@@ -169,65 +178,25 @@ export function TimeSection(props: SectionProps) {
           <Switch.HiddenInput />
         </Switch.Root>
       </Show>
-      {/* Date/time rows */}
+      {/* Date/time rows — always two rows (Start / End) regardless of mode */}
       <Show when={s.start() && s.end()}>
-        <Show
-          when={!s.isAllDay()}
-          fallback={
-            /* All-day: single combined row */
-            <div class="flex items-center gap-2 px-2 py-1 text-sm">
-              <span class="ml-[22px]" />
-              <Show
-                when={isEditable()}
-                fallback={<span class="text-fg">{formatDate(s.start()!, s.timeZone())}</span>}
-              >
-                <DatePickerTrigger
-                  date={() => s.start()!}
-                  rangeStart={() => s.start()!}
-                  rangeEnd={() => getAllDayInclusiveEnd(s.end()!)}
-                  timeZone={() => s.timeZone()}
-                  onChange={(dv) => changeDatePortion("start", dv)}
-                />
-              </Show>
-              <ArrowRight size={12} class="text-fg-muted shrink-0" />
-              <Show
-                when={isEditable()}
-                fallback={
-                  <span class="text-fg">
-                    {formatDate(getAllDayInclusiveEnd(s.end()!), s.timeZone())}
-                  </span>
-                }
-              >
-                <DatePickerTrigger
-                  date={() => getAllDayInclusiveEnd(s.end()!)}
-                  rangeStart={() => s.start()!}
-                  rangeEnd={() => getAllDayInclusiveEnd(s.end()!)}
-                  timeZone={() => s.timeZone()}
-                  onChange={(dv) => {
-                    const exclusive = new Date(Date.UTC(dv.year, dv.month - 1, dv.day + 1));
-                    s.setEnd(exclusive);
-                    if (s.mode() === "edit") s.flushSave();
-                  }}
-                />
-              </Show>
-            </div>
-          }
-        >
-          {/* Timed: separate Start / End rows */}
-          <div class="flex items-center gap-2 px-2 py-1 text-sm">
-            <span class="ml-[22px] w-8 text-xs text-fg-muted shrink-0">Start</span>
-            <Show
-              when={isEditable()}
-              fallback={<span class="flex-1 text-fg">{formatDate(s.start()!, s.timeZone())}</span>}
-            >
-              <DatePickerTrigger
-                date={() => s.start()!}
-                rangeStart={() => s.start()!}
-                rangeEnd={() => s.end()!}
-                timeZone={() => s.timeZone()}
-                onChange={(dv) => changeDatePortion("start", dv)}
-              />
-            </Show>
+        {/* Start row */}
+        <div class="flex items-center gap-2 px-2 py-1 text-sm">
+          <span class="w-3.5 shrink-0" />
+          <span class="w-8 text-xs text-fg-muted shrink-0">Start</span>
+          <Show
+            when={isEditable()}
+            fallback={<span class="flex-1 text-fg">{formatDate(s.start()!, s.timeZone())}</span>}
+          >
+            <DatePickerTrigger
+              date={() => s.start()!}
+              rangeStart={() => s.start()!}
+              rangeEnd={() => s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!}
+              timeZone={() => s.timeZone()}
+              onChange={(dv) => changeDatePortion("start", dv)}
+            />
+          </Show>
+          <Show when={!s.isAllDay()}>
             <Show
               when={isEditable()}
               fallback={<span class="text-fg">{formatTime(s.start()!, s.timeZone())}</span>}
@@ -247,26 +216,35 @@ export function TimeSection(props: SectionProps) {
                 ({formatDuration(s.start()!, s.end()!)})
               </span>
             </Show>
-          </div>
-          {/* End row */}
-          <div class="flex items-center gap-2 px-2 py-1 text-sm">
-            <span class="ml-[22px] w-8 text-xs text-fg-muted shrink-0">End</span>
-            <Show
-              when={isEditable()}
-              fallback={
-                <span class="flex-1 text-fg">
-                  {formatDate(s.end()!, s.timeZone())}
-                </span>
-              }
-            >
-              <DatePickerTrigger
-                date={() => s.end()!}
-                rangeStart={() => s.start()!}
-                rangeEnd={() => s.end()!}
-                timeZone={() => s.timeZone()}
-                onChange={(dv) => changeDatePortion("end", dv)}
-              />
-            </Show>
+          </Show>
+        </div>
+        {/* End row */}
+        <div class="flex items-center gap-2 px-2 py-1 text-sm">
+          <span class="w-3.5 shrink-0" />
+          <span class="w-8 text-xs text-fg-muted shrink-0">End</span>
+          <Show
+            when={isEditable()}
+            fallback={
+              <span class="flex-1 text-fg">
+                {formatDate(s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!, s.timeZone())}
+              </span>
+            }
+          >
+            <DatePickerTrigger
+              date={() => s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!}
+              rangeStart={() => s.start()!}
+              rangeEnd={() => s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!}
+              timeZone={() => s.timeZone()}
+              onChange={(dv) => {
+                if (s.isAllDay()) {
+                  s.setAllDayEnd(dv);
+                } else {
+                  changeDatePortion("end", dv);
+                }
+              }}
+            />
+          </Show>
+          <Show when={!s.isAllDay()}>
             <Show
               when={isEditable()}
               fallback={<span class="text-fg">{formatTime(s.end()!, s.timeZone())}</span>}
@@ -281,8 +259,8 @@ export function TimeSection(props: SectionProps) {
                 excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
               />
             </Show>
-          </div>
-        </Show>
+          </Show>
+        </div>
       </Show>
       {/* "Your time" row — shown when event timezone differs from system */}
       <Show when={s.start() && s.end() && !s.isAllDay() && s.timeZone() && s.timeZone() !== SYSTEM_TIMEZONE}>
@@ -302,9 +280,7 @@ export function TimeSection(props: SectionProps) {
       </Show>
       {/* Timezone + Repeat — organizer only */}
       <Show when={isEditable()}>
-        <Show when={!s.isAllDay()}>
-          <TimezoneSelector state={s} />
-        </Show>
+        <TimezoneSelector state={s} />
         <RecurrenceSelector state={s} />
       </Show>
     </div>
@@ -325,6 +301,19 @@ function DatePickerTrigger(props: {
   );
 
   const weeks = createMemo(() => computeWeeksInMonth(currentMonth()));
+
+  const isCurrentMonthView = () => {
+    const today = new Date();
+    return (
+      currentMonth().getMonth() === today.getMonth() &&
+      currentMonth().getFullYear() === today.getFullYear()
+    );
+  };
+
+  const resetMonth = () => {
+    const today = new Date();
+    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+  };
 
   const prevMonth = () => {
     const d = new Date(currentMonth());
@@ -387,12 +376,44 @@ function DatePickerTrigger(props: {
       </Popover.Trigger>
       <Popover.Positioner>
         <Popover.Content class="bg-surface border border-border rounded-lg shadow-lg p-2 w-64 z-50 select-none">
+          {/* Quick picks */}
+          <div class="flex gap-1 mb-1.5 px-1">
+            <button
+              class={`text-xs px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                isToday(props.date()) ? "bg-surface-hover text-fg font-medium" : "hover:bg-surface-hover text-fg-muted"
+              }`}
+              onClick={() => {
+                const t = new Date();
+                props.onChange({ year: t.getFullYear(), month: t.getMonth() + 1, day: t.getDate() });
+                setOpen(false);
+              }}
+            >
+              Today
+            </button>
+            <button
+              class={`text-xs px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                isSameDay(props.date(), addDays(new Date(), 1)) ? "bg-surface-hover text-fg font-medium" : "hover:bg-surface-hover text-fg-muted"
+              }`}
+              onClick={() => {
+                const t = addDays(new Date(), 1);
+                props.onChange({ year: t.getFullYear(), month: t.getMonth() + 1, day: t.getDate() });
+                setOpen(false);
+              }}
+            >
+              Tomorrow
+            </button>
+          </div>
           {/* Month navigation */}
           <div class="flex items-center justify-between mb-2 px-1.5">
             <span class="text-sm font-medium text-fg">
               {formatMonthYearLocale(currentMonth())}
             </span>
             <div class="flex items-center gap-1">
+              <Show when={!isCurrentMonthView()}>
+                <button onClick={resetMonth} class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg cursor-pointer" title="Back to current month">
+                  <RotateCcw size={14} />
+                </button>
+              </Show>
               <button onClick={prevMonth} class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg cursor-pointer">
                 <ChevronLeft size={14} />
               </button>
