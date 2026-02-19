@@ -50,6 +50,8 @@ import { NotificationConfirmPopover } from "../ui/NotificationConfirmPopover";
 import type { ApiCalendarEvent } from "@cathrin/shared-types";
 import type { EventFormState } from "./useEventFormState";
 import { formatRecurrence } from "../../utils/recurrence-format";
+import { setCenterDate, visibleStartDate } from "../../stores/calendar-navigation";
+import { visibleDaysCount } from "../../stores/view";
 
 interface SectionProps {
   state: EventFormState;
@@ -80,6 +82,12 @@ export function TimeSection(props: SectionProps) {
       // Shift end by same amount to preserve duration
       if (s.end()) {
         s.setEnd(new Date(s.end()!.getTime() + diff));
+      }
+      // Scroll grid to show the new start date if it's off-screen
+      const visStart = visibleStartDate();
+      const visEnd = addDays(visStart, visibleDaysCount() - 1);
+      if (updated < visStart || updated > visEnd) {
+        setCenterDate(updated);
       }
     } else {
       const diff = updated.getTime() - s.end()!.getTime();

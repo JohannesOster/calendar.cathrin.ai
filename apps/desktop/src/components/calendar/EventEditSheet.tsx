@@ -1,4 +1,4 @@
-import { Show, onMount, createEffect, on } from "solid-js";
+import { Show, onMount, createEffect, on, createSignal } from "solid-js";
 import { Popover } from "@ark-ui/solid/popover";
 import {
   isEditSheetOpen,
@@ -8,6 +8,7 @@ import {
   closeEditSheet,
 } from "../../stores/event-popover";
 import { HEADER_HEIGHT } from "../../constants/calendar";
+import { centerDate } from "../../stores/calendar-navigation";
 import { selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
   isCreating,
@@ -60,47 +61,69 @@ export function EventEditSheet() {
   const isOpen = () => isEditSheetOpen();
   const hasContent = () => (editSheetEventId() && selectedEvent()) || creationSheetOpen();
 
+  // Hide positioner for 1 frame on open so Floating UI can compute position
+  // before anything is visible (prevents stale --x/--y flicker).
+  const [positioned, setPositioned] = createSignal(false);
+
+  createEffect(on(isEditSheetOpen, (open) => {
+    if (open) {
+      setPositioned(false);
+      requestAnimationFrame(() => setPositioned(true));
+    }
+  }));
+
   // Snapshot the anchor rect when the sheet opens so the popover stays
   // vertically stable even when the event placeholder moves (date change).
-  let frozenRect: DOMRect | null = null;
+  const [frozenRect, setFrozenRect] = createSignal<DOMRect | null>(null);
 
   createEffect(on(isEditSheetOpen, (open) => {
     if (open) {
       const el = editSheetAnchorEl();
-      if (el) frozenRect = el.getBoundingClientRect();
+      if (el) setFrozenRect(el.getBoundingClientRect());
     } else {
-      frozenRect = null;
+      setFrozenRect(null);
     }
   }));
+
+  // After a date change triggers a grid scroll (centerDate changes),
+  // update the frozen rect to the anchor's new position once scroll settles.
+  createEffect(on(centerDate, () => {
+    if (!isEditSheetOpen()) return;
+    setTimeout(() => {
+      const el = editSheetAnchorEl();
+      if (el) setFrozenRect(el.getBoundingClientRect());
+    }, 150);
+  }, { defer: true }));
 
   // Virtual anchor: frozen Y position, live X from current anchor element.
   // Clamped so the popover never overlaps the day header row.
   const getVirtualAnchor = () => {
     const liveEl = editSheetAnchorEl();
-    if (!frozenRect) return liveEl;
+    const rect = frozenRect();
+    if (!rect) return liveEl;
 
     // Use live X so popover follows horizontal column changes,
     // but keep the frozen Y for vertical stability.
     const liveRect = liveEl?.getBoundingClientRect();
-    const x = liveRect ? liveRect.x : frozenRect.x;
-    const width = liveRect ? liveRect.width : frozenRect.width;
+    const x = liveRect ? liveRect.x : rect.x;
+    const width = liveRect ? liveRect.width : rect.width;
 
     // Safe area: popover top must not go above the day header bottom.
     // Header row top is roughly at the grid container top; use a fixed
     // minimum based on the header height + some padding for the app title bar.
     const minTop = HEADER_HEIGHT + 80; // header row + app chrome
-    const y = Math.max(frozenRect.y, minTop);
+    const y = Math.max(rect.y, minTop);
 
     return {
       getBoundingClientRect: () => ({
         x,
         y,
         width,
-        height: frozenRect!.height,
+        height: rect.height,
         top: y,
         left: x,
         right: x + width,
-        bottom: y + frozenRect!.height,
+        bottom: y + rect.height,
       }),
     };
   };
@@ -133,10 +156,10 @@ export function EventEditSheet() {
       }}
       closeOnEscape
     >
-      <Popover.Positioner style={{ "z-index": "99" }}>
+      <Popover.Positioner style={{ "z-index": "99", visibility: positioned() ? "visible" : "hidden" }}>
         <Popover.Content
           class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
-          style={{ "max-height": "calc(100vh - 24px)" }}
+          style={{ "max-height": "calc(100vh - 24px)", animation: positioned() ? "popover-grow 80ms ease-out" : "none" }}
           aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
         >
           <Show when={hasContent()}>
