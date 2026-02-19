@@ -1,5 +1,6 @@
 import { Show, onMount, createEffect, on, createSignal } from "solid-js";
 import { Popover, usePopoverContext } from "@ark-ui/solid/popover";
+import { createDraggable } from "../../primitives/createDraggable";
 import {
   isEditSheetOpen,
   editSheetEventId,
@@ -58,6 +59,7 @@ function RepositionBridge(props: { onApi: (fn: () => void) => void }) {
 
 export function EventEditSheet() {
   const handleDismiss = useEditDismiss();
+  const drag = createDraggable();
 
   // Close creation sheet when creation ends externally (e.g., grid Escape handler)
   createEffect(on(isCreating, (creating) => {
@@ -76,6 +78,7 @@ export function EventEditSheet() {
   createEffect(on(isEditSheetOpen, (open) => {
     if (open) {
       setPositioned(false);
+      drag.resetOffset();
       requestAnimationFrame(() => setPositioned(true));
     }
   }));
@@ -97,6 +100,7 @@ export function EventEditSheet() {
   // to the anchor's new position once the DOM settles.
   createEffect(on(centerDate, () => {
     if (!isEditSheetOpen()) return;
+    drag.resetOffset();
     setTimeout(() => {
       const el = editSheetAnchorEl();
       if (el) setFrozenRect(el.getBoundingClientRect());
@@ -109,6 +113,7 @@ export function EventEditSheet() {
 
   createEffect(on(editSheetAnchorEl, (el) => {
     if (!isEditSheetOpen() || !el) return;
+    drag.resetOffset();
     requestAnimationFrame(() => {
       setFrozenRect(el.getBoundingClientRect());
       reposition?.();
@@ -177,18 +182,46 @@ export function EventEditSheet() {
       closeOnEscape
     >
       <RepositionBridge onApi={(fn) => { reposition = fn; }} />
-      <Popover.Positioner style={{ "z-index": "99", visibility: positioned() ? "visible" : "hidden" }}>
-        <Popover.Content
-          class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
-          style={{ "max-height": "calc(100vh - 24px)", animation: positioned() ? "popover-grow 80ms ease-out" : "none" }}
-          aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
+      <Popover.Positioner
+        style={{ "z-index": "99", visibility: positioned() ? "visible" : "hidden" }}
+      >
+        <div
+          style={{
+            transform: `translate(${drag.offset()[0]}px, ${drag.offset()[1]}px)`,
+            "will-change": drag.isDragging() ? "transform" : undefined,
+          }}
         >
-          <Show when={hasContent()}>
-            <SheetFormContent />
-          </Show>
-        </Popover.Content>
+          <Popover.Content
+            class="w-80 bg-surface-elevated border border-border rounded-xl shadow-lg overflow-hidden outline-none flex flex-col"
+            style={{
+              "max-height": "calc(100vh - 24px)",
+              animation: positioned() ? "popover-grow 80ms ease-out" : "none",
+              "box-shadow": drag.isDragging() ? "0 20px 60px rgba(0,0,0,0.2), 0 8px 20px rgba(0,0,0,0.12)" : undefined,
+            }}
+            aria-label={creationSheetOpen() ? "Create event" : "Edit event"}
+          >
+            <Show when={hasContent()}>
+              <DragHandle onPointerDown={drag.onPointerDown} isDragging={drag.isDragging()} />
+              <SheetFormContent />
+            </Show>
+          </Popover.Content>
+        </div>
       </Popover.Positioner>
     </Popover.Root>
+  );
+}
+
+function DragHandle(props: { onPointerDown: (e: PointerEvent) => void; isDragging: boolean }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      class="flex items-center justify-center py-3 touch-none select-none"
+      style={{ cursor: props.isDragging ? "grabbing" : "grab" }}
+      onPointerDown={props.onPointerDown}
+    >
+      <div class="w-8 h-1 rounded-full bg-fg-disabled/40" />
+    </div>
   );
 }
 
