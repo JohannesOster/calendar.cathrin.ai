@@ -8,6 +8,8 @@ import {
   MapPin,
   Bell,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   EllipsisVertical,
   Globe,
   Lock,
@@ -28,14 +30,15 @@ import { Select, createListCollection } from "@ark-ui/solid/select";
 import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
 import { Tooltip } from "@ark-ui/solid/tooltip";
-import { DatePicker, parseDate } from "@ark-ui/solid/date-picker";
-import { X } from "lucide-solid";
+import { RotateCcw, X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
 import { apiFetch } from "../../lib/api";
 import { CATHRIN_PALETTE } from "../../lib/color-mapping";
 import type { CathrinColorKey } from "../../lib/color-mapping";
 import { setDraftStart, setDraftEnd, commitCreation, draftTitle, setDraftAttendees } from "../../stores/event-creation";
 import { formatTime, formatDuration, formatDate, parseTimeInput } from "../../lib/format-utils";
+import { isToday, formatMonthYearLocale, computeWeeksInMonth } from "../../lib/date-utils";
+import { WEEKDAY_LABELS } from "../../constants/sidebar";
 import { getAllDayInclusiveEnd } from "../../utils/allDayLayout";
 import { isPendingNotification, removePendingNotification } from "../../stores/pending-notifications";
 import { isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
@@ -70,12 +73,11 @@ export function TimeSection(props: SectionProps) {
         s.setEnd(new Date(s.end()!.getTime() + diff));
       }
     } else {
-      // Ensure end is after start
-      if (updated <= s.start()!) {
-        const adjusted = new Date(s.start()!.getTime() + 3600000);
-        s.setEnd(adjusted);
-      } else {
-        s.setEnd(updated);
+      const diff = updated.getTime() - s.end()!.getTime();
+      s.setEnd(updated);
+      // Shift start by same amount to preserve duration
+      if (updated < s.start()!) {
+        s.setStart(new Date(s.start()!.getTime() + diff));
       }
     }
     if (s.mode() === "edit") s.flushSave();
@@ -181,6 +183,8 @@ export function TimeSection(props: SectionProps) {
               >
                 <DatePickerTrigger
                   date={() => s.start()!}
+                  rangeStart={() => s.start()!}
+                  rangeEnd={() => getAllDayInclusiveEnd(s.end()!)}
                   timeZone={() => s.timeZone()}
                   onChange={(dv) => changeDatePortion("start", dv)}
                 />
@@ -196,6 +200,8 @@ export function TimeSection(props: SectionProps) {
               >
                 <DatePickerTrigger
                   date={() => getAllDayInclusiveEnd(s.end()!)}
+                  rangeStart={() => s.start()!}
+                  rangeEnd={() => getAllDayInclusiveEnd(s.end()!)}
                   timeZone={() => s.timeZone()}
                   onChange={(dv) => {
                     const exclusive = new Date(Date.UTC(dv.year, dv.month - 1, dv.day + 1));
@@ -216,6 +222,8 @@ export function TimeSection(props: SectionProps) {
             >
               <DatePickerTrigger
                 date={() => s.start()!}
+                rangeStart={() => s.start()!}
+                rangeEnd={() => s.end()!}
                 timeZone={() => s.timeZone()}
                 onChange={(dv) => changeDatePortion("start", dv)}
               />
@@ -253,6 +261,8 @@ export function TimeSection(props: SectionProps) {
             >
               <DatePickerTrigger
                 date={() => s.end()!}
+                rangeStart={() => s.start()!}
+                rangeEnd={() => s.end()!}
                 timeZone={() => s.timeZone()}
                 onChange={(dv) => changeDatePortion("end", dv)}
               />
@@ -304,166 +314,147 @@ export function TimeSection(props: SectionProps) {
 /** Compact date picker trigger — shows formatted date, opens calendar popover on click */
 function DatePickerTrigger(props: {
   date: () => Date;
+  rangeStart?: () => Date;
+  rangeEnd?: () => Date;
   timeZone: () => string | undefined;
   onChange: (value: { year: number; month: number; day: number }) => void;
 }) {
-  function toDateString(d: Date, tz: string | undefined): string {
-    if (tz) {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: tz,
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-      }).formatToParts(d);
-      const y = parts.find(p => p.type === "year")!.value;
-      const m = parts.find(p => p.type === "month")!.value.padStart(2, "0");
-      const dd = parts.find(p => p.type === "day")!.value.padStart(2, "0");
-      return `${y}-${m}-${dd}`;
-    }
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }
+  const [open, setOpen] = createSignal(false);
+  const [currentMonth, setCurrentMonth] = createSignal(
+    new Date(props.date().getFullYear(), props.date().getMonth(), 1)
+  );
 
-  const dateValue = createMemo(() => parseDate(toDateString(props.date(), props.timeZone())));
+  const weeks = createMemo(() => computeWeeksInMonth(currentMonth()));
+
+  const prevMonth = () => {
+    const d = new Date(currentMonth());
+    d.setMonth(d.getMonth() - 1);
+    setCurrentMonth(d);
+  };
+
+  const nextMonth = () => {
+    const d = new Date(currentMonth());
+    d.setMonth(d.getMonth() + 1);
+    setCurrentMonth(d);
+  };
+
+  const isSameDate = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+  /** Check if a date falls within the event range (inclusive, date-only comparison). Hidden for single-day events. */
+  const isInRange = (d: Date) => {
+    const rs = props.rangeStart?.();
+    const re = props.rangeEnd?.();
+    if (!rs || !re) return false;
+    // Don't show range for single-day events
+    if (isSameDate(rs, re)) return false;
+    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const s = new Date(rs.getFullYear(), rs.getMonth(), rs.getDate()).getTime();
+    const e = new Date(re.getFullYear(), re.getMonth(), re.getDate()).getTime();
+    return t >= s && t <= e;
+  };
+
+  /** Compute range highlight indices for a week row */
+  const getRangeStyle = (week: { date: Date }[]) => {
+    const indices: number[] = [];
+    week.forEach((dayInfo, idx) => {
+      if (isInRange(dayInfo.date)) indices.push(idx);
+    });
+    if (indices.length === 0) return null;
+    const first = Math.min(...indices);
+    const last = Math.max(...indices);
+    return {
+      left: `${(first / 7) * 100}%`,
+      width: `${((last - first + 1) / 7) * 100}%`,
+    };
+  };
 
   return (
-    <DatePicker.Root
-      value={[dateValue()]}
-      onValueChange={(details) => {
-        const v = details.value[0];
-        if (v) {
-          props.onChange({ year: v.year, month: v.month, day: v.day });
+    <Popover.Root
+      open={open()}
+      onOpenChange={(details) => {
+        setOpen(details.open);
+        if (details.open) {
+          setCurrentMonth(new Date(props.date().getFullYear(), props.date().getMonth(), 1));
         }
       }}
-      closeOnSelect
       positioning={{ placement: "bottom-start" }}
     >
-      <DatePicker.Control>
-        <DatePicker.Trigger
-          class="flex-1 text-sm text-fg hover:text-fg cursor-pointer bg-transparent border-none outline-none px-1 py-0.5 rounded hover:bg-surface-hover transition-colors whitespace-nowrap text-left"
-        >
-          {formatDate(props.date(), props.timeZone())}
-        </DatePicker.Trigger>
-      </DatePicker.Control>
-      <DatePicker.Positioner>
-        <DatePicker.Content class="bg-surface border border-border rounded-lg shadow-lg p-3 z-50">
-          <DatePicker.Context>
-            {(api) => (
-              <>
-                <DatePicker.View view="day">
-                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
-                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="rotate-90" />
-                    </DatePicker.PrevTrigger>
-                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
-                      <DatePicker.RangeText />
-                    </DatePicker.ViewTrigger>
-                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="-rotate-90" />
-                    </DatePicker.NextTrigger>
-                  </DatePicker.ViewControl>
-                  <DatePicker.Table class="w-full">
-                    <DatePicker.TableHead>
-                      <DatePicker.TableRow>
-                        <For each={api().weekDays}>
-                          {(day) => (
-                            <DatePicker.TableHeader class="text-xs text-fg-muted font-normal p-1 text-center w-8">
-                              {day.narrow}
-                            </DatePicker.TableHeader>
-                          )}
-                        </For>
-                      </DatePicker.TableRow>
-                    </DatePicker.TableHead>
-                    <DatePicker.TableBody>
-                      <For each={api().weeks}>
-                        {(week) => (
-                          <DatePicker.TableRow>
-                            <For each={week}>
-                              {(day) => (
-                                <DatePicker.TableCell value={day}>
-                                  <DatePicker.TableCellTrigger
-                                    class="w-8 h-8 text-xs rounded-full flex items-center justify-center cursor-pointer
-                                      hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white
-                                      data-[outside-range]:text-fg-disabled data-[today]:font-semibold"
-                                  />
-                                </DatePicker.TableCell>
-                              )}
-                            </For>
-                          </DatePicker.TableRow>
-                        )}
+      <Popover.Trigger
+        class="text-sm text-fg hover:text-fg cursor-pointer bg-transparent border-none outline-none px-1 py-0.5 rounded hover:bg-surface-hover transition-colors whitespace-nowrap text-left"
+      >
+        {formatDate(props.date(), props.timeZone())}
+      </Popover.Trigger>
+      <Popover.Positioner>
+        <Popover.Content class="bg-surface border border-border rounded-lg shadow-lg p-2 w-64 z-50 select-none">
+          {/* Month navigation */}
+          <div class="flex items-center justify-between mb-2 px-1.5">
+            <span class="text-sm font-medium text-fg">
+              {formatMonthYearLocale(currentMonth())}
+            </span>
+            <div class="flex items-center gap-1">
+              <button onClick={prevMonth} class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg cursor-pointer">
+                <ChevronLeft size={14} />
+              </button>
+              <button onClick={nextMonth} class="p-1 rounded hover:bg-surface-hover text-fg-muted hover:text-fg cursor-pointer">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+          {/* Weekday headers */}
+          <div class="grid grid-cols-7 mb-1">
+            <For each={WEEKDAY_LABELS}>
+              {(label) => (
+                <div class="text-center text-xs text-fg-muted">{label}</div>
+              )}
+            </For>
+          </div>
+          {/* Day grid */}
+          <div class="flex flex-col gap-1">
+            <For each={weeks()}>
+              {(week) => {
+                const rangeStyle = () => getRangeStyle(week);
+                return (
+                  <div class="relative py-1">
+                    <Show when={rangeStyle()}>
+                      {(style) => (
+                        <div
+                          class="absolute top-0 bottom-0 bg-surface-hover rounded-md"
+                          style={style()}
+                        />
+                      )}
+                    </Show>
+                    <div class="relative grid grid-cols-7">
+                      <For each={week}>
+                        {(dayInfo) => {
+                          const isSelected = () => isSameDate(dayInfo.date, props.date());
+                          return (
+                            <button
+                              class="h-6 flex items-center justify-center text-xs transition-colors rounded-md"
+                              classList={{
+                                "bg-fg text-white hover:bg-fg": isSelected(),
+                                "text-fg hover:bg-surface-hover": dayInfo.isCurrentMonth && !isSelected(),
+                                "text-fg-disabled hover:bg-surface-hover": !dayInfo.isCurrentMonth && !isSelected(),
+                              }}
+                              onClick={() => {
+                                props.onChange({ year: dayInfo.date.getFullYear(), month: dayInfo.date.getMonth() + 1, day: dayInfo.date.getDate() });
+                                setOpen(false);
+                              }}
+                            >
+                              {dayInfo.day}
+                            </button>
+                          );
+                        }}
                       </For>
-                    </DatePicker.TableBody>
-                  </DatePicker.Table>
-                </DatePicker.View>
-                <DatePicker.View view="month">
-                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
-                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="rotate-90" />
-                    </DatePicker.PrevTrigger>
-                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
-                      <DatePicker.RangeText />
-                    </DatePicker.ViewTrigger>
-                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="-rotate-90" />
-                    </DatePicker.NextTrigger>
-                  </DatePicker.ViewControl>
-                  <DatePicker.Table class="w-full">
-                    <DatePicker.TableBody>
-                      <For each={api().getMonthsGrid({ columns: 4, format: "short" })}>
-                        {(months) => (
-                          <DatePicker.TableRow>
-                            <For each={months}>
-                              {(month) => (
-                                <DatePicker.TableCell value={month.value}>
-                                  <DatePicker.TableCellTrigger class="px-3 py-2 text-xs rounded cursor-pointer hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white">
-                                    {month.label}
-                                  </DatePicker.TableCellTrigger>
-                                </DatePicker.TableCell>
-                              )}
-                            </For>
-                          </DatePicker.TableRow>
-                        )}
-                      </For>
-                    </DatePicker.TableBody>
-                  </DatePicker.Table>
-                </DatePicker.View>
-                <DatePicker.View view="year">
-                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
-                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="rotate-90" />
-                    </DatePicker.PrevTrigger>
-                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
-                      <DatePicker.RangeText />
-                    </DatePicker.ViewTrigger>
-                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
-                      <ChevronDown size={14} class="-rotate-90" />
-                    </DatePicker.NextTrigger>
-                  </DatePicker.ViewControl>
-                  <DatePicker.Table class="w-full">
-                    <DatePicker.TableBody>
-                      <For each={api().getYearsGrid({ columns: 4 })}>
-                        {(years) => (
-                          <DatePicker.TableRow>
-                            <For each={years}>
-                              {(year) => (
-                                <DatePicker.TableCell value={year.value}>
-                                  <DatePicker.TableCellTrigger class="px-3 py-2 text-xs rounded cursor-pointer hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white">
-                                    {year.label}
-                                  </DatePicker.TableCellTrigger>
-                                </DatePicker.TableCell>
-                              )}
-                            </For>
-                          </DatePicker.TableRow>
-                        )}
-                      </For>
-                    </DatePicker.TableBody>
-                  </DatePicker.Table>
-                </DatePicker.View>
-              </>
-            )}
-          </DatePicker.Context>
-        </DatePicker.Content>
-      </DatePicker.Positioner>
-    </DatePicker.Root>
+                    </div>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+        </Popover.Content>
+      </Popover.Positioner>
+    </Popover.Root>
   );
 }
 

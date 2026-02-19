@@ -1,16 +1,10 @@
 import { createMemo, For, Show } from "solid-js";
-import { isToday } from "../../../lib/date-utils";
-
-export interface DayInfo {
-  day: number;
-  date: Date;
-  isCurrentMonth: boolean;
-}
+import { isToday, type MonthDayInfo } from "../../../lib/date-utils";
 
 interface WeekRowProps {
-  week: DayInfo[];
+  week: MonthDayInfo[];
   visibleRange: () => { start: number; end: number };
-  onDayClick: (dayInfo: DayInfo) => void;
+  onDayClick: (dayInfo: MonthDayInfo) => void;
 }
 
 export function WeekRow(props: WeekRowProps) {

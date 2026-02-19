@@ -184,3 +184,59 @@ export function getHotZoneWeeks(hotZoneDays: number = 30): Set<string> {
   const end = addDays(today, hotZoneDays);
   return new Set(getWeeksInRange(start, end));
 }
+
+export interface MonthDayInfo {
+  day: number;
+  date: Date;
+  isCurrentMonth: boolean;
+}
+
+/**
+ * Compute 6 weeks of days for a month grid (Sun–Sat), including overflow from adjacent months.
+ */
+export function computeWeeksInMonth(date: Date): MonthDayInfo[][] {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startingDay = firstDay.getDay();
+
+  const weeks: MonthDayInfo[][] = [];
+  let currentWeek: MonthDayInfo[] = [];
+
+  if (startingDay > 0) {
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = startingDay - 1; i >= 0; i--) {
+      const day = prevMonthLastDay - i;
+      currentWeek.push({ day, date: new Date(year, month - 1, day), isCurrentMonth: false });
+    }
+  }
+
+  for (let i = 1; i <= daysInMonth; i++) {
+    currentWeek.push({ day: i, date: new Date(year, month, i), isCurrentMonth: true });
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  }
+
+  let nextMonthDay = 1;
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push({ day: nextMonthDay, date: new Date(year, month + 1, nextMonthDay), isCurrentMonth: false });
+      nextMonthDay++;
+    }
+    weeks.push(currentWeek);
+  }
+
+  while (weeks.length < 6) {
+    const extraWeek: MonthDayInfo[] = [];
+    for (let i = 0; i < 7; i++) {
+      extraWeek.push({ day: nextMonthDay, date: new Date(year, month + 1, nextMonthDay), isCurrentMonth: false });
+      nextMonthDay++;
+    }
+    weeks.push(extraWeek);
+  }
+
+  return weeks;
+}
