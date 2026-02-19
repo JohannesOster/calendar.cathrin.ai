@@ -393,27 +393,27 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     });
   };
 
+  function commitDragResult(drag: { event: { id: string }; originalStart: Date; originalEnd: Date }) {
+    const event = events().find((e) => e.id === drag.event.id);
+    const changed = event &&
+      (event.start.getTime() !== drag.originalStart.getTime() ||
+       event.end.getTime() !== drag.originalEnd.getTime());
+    if (event && changed) {
+      updateEvent(
+        drag.event.id,
+        { start: event.start, end: event.end },
+        { start: drag.originalStart, end: drag.originalEnd },
+      ).catch((err) => console.error("Failed to update event after drag:", err));
+    }
+  }
+
   const handleDragPointerUp = () => {
     // --- Move drag ---
     if (isMoveDragging()) {
       stopAutoScroll();
       document.body.classList.remove("dragging");
-
       const drag = finishMoveDrag();
-      if (drag) {
-        const event = events().find((e) => e.id === drag.event.id);
-        const changed = event &&
-          (event.start.getTime() !== drag.originalStart.getTime() ||
-           event.end.getTime() !== drag.originalEnd.getTime());
-        if (event && changed) {
-          updateEvent(
-            drag.event.id,
-            { start: event.start, end: event.end },
-            { start: drag.originalStart, end: drag.originalEnd },
-          );
-        }
-      }
-
+      if (drag) commitDragResult(drag);
       settleSnapAfterDrag();
       return;
     }
@@ -421,21 +421,8 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     // --- Resize drag ---
     if (isResizeDragging()) {
       document.body.classList.remove("dragging");
-
       const drag = finishResizeDrag();
-      if (drag) {
-        const event = events().find((e) => e.id === drag.event.id);
-        const changed = event &&
-          (event.start.getTime() !== drag.originalStart.getTime() ||
-           event.end.getTime() !== drag.originalEnd.getTime());
-        if (event && changed) {
-          updateEvent(
-            drag.event.id,
-            { start: event.start, end: event.end },
-            { start: drag.originalStart, end: drag.originalEnd },
-          );
-        }
-      }
+      if (drag) commitDragResult(drag);
       return;
     }
 
@@ -443,22 +430,8 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     if (isUnfolding()) {
       stopAutoScroll();
       document.body.classList.remove("dragging");
-
       const drag = finishUnfoldDrag();
-      if (drag) {
-        const event = events().find((e) => e.id === drag.event.id);
-        const changed = event &&
-          (event.start.getTime() !== drag.originalStart.getTime() ||
-           event.end.getTime() !== drag.originalEnd.getTime());
-        if (event && changed) {
-          updateEvent(
-            drag.event.id,
-            { start: event.start, end: event.end },
-            { start: drag.originalStart, end: drag.originalEnd },
-          );
-        }
-      }
-
+      if (drag) commitDragResult(drag);
       settleSnapAfterDrag();
       return;
     }
@@ -467,22 +440,8 @@ export function createDragHandlers(deps: DragHandlersDeps) {
     if (isAllDayMoveDragging()) {
       stopAutoScroll();
       document.body.classList.remove("dragging");
-
       const drag = finishAllDayMoveDrag();
-      if (drag) {
-        const event = events().find((e) => e.id === drag.event.id);
-        const changed = event &&
-          (event.start.getTime() !== drag.originalStart.getTime() ||
-           event.end.getTime() !== drag.originalEnd.getTime());
-        if (event && changed) {
-          updateEvent(
-            drag.event.id,
-            { start: event.start, end: event.end },
-            { start: drag.originalStart, end: drag.originalEnd },
-          );
-        }
-      }
-
+      if (drag) commitDragResult(drag);
       settleSnapAfterDrag();
       return;
     }

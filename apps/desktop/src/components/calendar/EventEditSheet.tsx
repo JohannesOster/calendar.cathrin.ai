@@ -8,6 +8,7 @@ import {
   closeEditSheet,
 } from "../../stores/event-popover";
 import { HEADER_HEIGHT } from "../../constants/calendar";
+import { DURATION_NORMAL_MS } from "../../constants/timings";
 import { centerDate } from "../../stores/calendar-navigation";
 import { selectedEvent, deselectEvent } from "../../stores/event-selection";
 import {
@@ -99,7 +100,7 @@ export function EventEditSheet() {
     setTimeout(() => {
       const el = editSheetAnchorEl();
       if (el) setFrozenRect(el.getBoundingClientRect());
-    }, 150);
+    }, DURATION_NORMAL_MS);
   }, { defer: true }));
 
   // When the anchor element changes (event moves to a new day column),

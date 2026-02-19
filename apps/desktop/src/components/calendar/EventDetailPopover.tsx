@@ -167,7 +167,7 @@ function PopoverBody(props: { event: NonNullable<ReturnType<typeof popoverEvent>
         {/* Attendees — compact */}
         <Show when={props.event.attendees?.length}>
           {(_) => {
-            const selfAttendee = () => props.event.attendees!.find(a => a.isSelf);
+            const selfAttendee = () => props.event.attendees?.find(a => a.isSelf);
             const canRsvp = () => {
               const self = selfAttendee();
               return self && !self.isOrganizer;
@@ -176,7 +176,7 @@ function PopoverBody(props: { event: NonNullable<ReturnType<typeof popoverEvent>
               <div class="px-3 py-2 border-t border-border">
                 <div class="flex items-center gap-2 text-sm text-fg-muted mb-1.5">
                   <Users size={14} class="shrink-0" />
-                  <span>Participants ({props.event.attendees!.length})</span>
+                  <span>Participants ({props.event.attendees?.length})</span>
                 </div>
                 <div class="max-h-32 overflow-y-auto">
                   <For each={sortAttendees(props.event.attendees!)}>
