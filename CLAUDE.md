@@ -175,6 +175,15 @@ createEffect(on(centerDate, (date) => fetchEvents(date)));
 
 // DO use createMemo for derived state
 const dayEvents = createMemo(() => events().filter(e => isSameDay(e.start, props.date)));
+
+// DON'T call setters inside helpers used mid-function — memos recompute immediately
+// with inconsistent state (new signal A, stale signal B). Return pending changes and
+// apply them atomically via batch().
+const result = computeThing(); // returns { value, pendingSignalUpdate }
+batch(() => {
+  if (result.pendingSignalUpdate) setSignalA(result.pendingSignalUpdate);
+  setSignalB(result.value);
+});
 ```
 
 ### Sidebar Animation

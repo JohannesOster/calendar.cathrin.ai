@@ -8,6 +8,7 @@ import {
 } from "../../constants/calendar";
 import {
   anchorDate,
+  setAnchorDate,
   centerDate,
   visibleStartDate,
   setVisibleStartDate,
@@ -35,7 +36,7 @@ interface GridScrollDeps {
   scrollLeft: Accessor<number>;
   setScrollLeft: (v: number) => void;
   colWidth: Accessor<number>;
-  getScrollLeftForDate: (date: Date, width: number) => number;
+  getScrollLeftForDate: (date: Date, width: number) => { scrollLeft: number; pendingAnchor: Date | null };
   getDayLeftPosition: (dayIndex: number, width: number) => number;
   commitLayoutTransition: (newColWidth: number, newScrollLeft: number) => void;
   calculateColumnWidth: () => number;
@@ -139,9 +140,11 @@ export function createGridScroll(deps: GridScrollDeps) {
     if (!ref) return;
 
     const currentColWidth = deps.colWidth();
-    const targetScrollLeft = deps.getScrollLeftForDate(date, currentColWidth);
+    const { scrollLeft: targetScrollLeft, pendingAnchor } = deps.getScrollLeftForDate(date, currentColWidth);
 
     if (Math.abs(ref.scrollLeft - targetScrollLeft) < 1) {
+      // Apply anchor even when already at position (e.g., after view switch)
+      if (pendingAnchor) setAnchorDate(pendingAnchor);
       deps.setIsRestoringScrollPosition(false);
       if (!deps.snapEnabled()) {
         if (deps.snapReEnableTimer.current) {
@@ -167,7 +170,13 @@ export function createGridScroll(deps: GridScrollDeps) {
 
     ref.scrollLeft = targetScrollLeft;
 
-    deps.setIsRestoringScrollPosition(false);
+    // Apply anchor change and scrollLeft atomically so the layout memo
+    // never sees (new anchor, stale scrollLeft).
+    batch(() => {
+      if (pendingAnchor) setAnchorDate(pendingAnchor);
+      deps.setScrollLeft(targetScrollLeft);
+      deps.setIsRestoringScrollPosition(false);
+    });
 
     handleScroll();
 
@@ -218,10 +227,11 @@ export function createGridScroll(deps: GridScrollDeps) {
           if (hasExplicitTarget) {
             const targetDate = navTarget ?? pendingTarget!;
             const newColWidth = deps.calculateColumnWidth();
-            const targetScrollLeft = deps.getScrollLeftForDate(
+            const { scrollLeft: targetScrollLeft, pendingAnchor } = deps.getScrollLeftForDate(
               targetDate,
               newColWidth,
             );
+            if (pendingAnchor) setAnchorDate(pendingAnchor);
             deps.commitLayoutTransition(newColWidth, targetScrollLeft);
             if (pendingTarget !== null) {
               skipNextCenterDateScroll = true;
@@ -229,10 +239,11 @@ export function createGridScroll(deps: GridScrollDeps) {
           } else {
             const targetDate = visibleStartDate();
             const newColWidth = deps.calculateColumnWidth();
-            const targetScrollLeft = deps.getScrollLeftForDate(
+            const { scrollLeft: targetScrollLeft, pendingAnchor } = deps.getScrollLeftForDate(
               targetDate,
               newColWidth,
             );
+            if (pendingAnchor) setAnchorDate(pendingAnchor);
             deps.commitLayoutTransition(newColWidth, targetScrollLeft);
           }
         }

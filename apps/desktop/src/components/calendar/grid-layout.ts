@@ -137,12 +137,13 @@ export function createGridLayout(deps: GridLayoutDeps) {
     const diffTime = normalizedDate.getTime() - currentAnchor.getTime();
     let diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
+    let pendingAnchor: Date | null = null;
     const reanchorThreshold = SNAP_TRACK_RANGE - 30;
     if (Math.abs(diffDays) > reanchorThreshold) {
       const newAnchor = new Date(normalizedDate);
       newAnchor.setDate(normalizedDate.getDate() - normalizedDate.getDay());
       newAnchor.setHours(0, 0, 0, 0);
-      setAnchorDate(newAnchor);
+      pendingAnchor = newAnchor;
       diffDays = Math.round(
         (normalizedDate.getTime() - newAnchor.getTime()) /
           (1000 * 60 * 60 * 24),
@@ -150,7 +151,8 @@ export function createGridLayout(deps: GridLayoutDeps) {
     }
 
     const timeColWidth = getTimeColWidth();
-    return CENTER_OFFSET + diffDays * width - timeColWidth;
+    const scrollLeft = CENTER_OFFSET + diffDays * width - timeColWidth;
+    return { scrollLeft, pendingAnchor };
   };
 
   const commitLayoutTransition = (newColWidth: number, newScrollLeft: number) => {
@@ -221,7 +223,8 @@ export function createGridLayout(deps: GridLayoutDeps) {
         getColumnWidth();
 
         const newColWidth = deps.colWidth();
-        const newScrollLeft = getScrollLeftForDate(visibleStartDate(), newColWidth);
+        const { scrollLeft: newScrollLeft, pendingAnchor } = getScrollLeftForDate(visibleStartDate(), newColWidth);
+        if (pendingAnchor) setAnchorDate(pendingAnchor);
         const ref2 = deps.getScrollContainerRef();
         if (ref2) {
           ref2.scrollLeft = newScrollLeft;
