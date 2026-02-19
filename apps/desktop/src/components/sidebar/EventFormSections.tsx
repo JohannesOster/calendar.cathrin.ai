@@ -28,6 +28,7 @@ import { Select, createListCollection } from "@ark-ui/solid/select";
 import { Combobox } from "@ark-ui/solid/combobox";
 import { Popover } from "@ark-ui/solid/popover";
 import { Tooltip } from "@ark-ui/solid/tooltip";
+import { DatePicker, parseDate } from "@ark-ui/solid/date-picker";
 import { X } from "lucide-solid";
 import { invoke } from "@tauri-apps/api/core";
 import { apiFetch } from "../../lib/api";
@@ -53,61 +54,232 @@ interface SectionProps {
 
 export function TimeSection(props: SectionProps) {
   const s = props.state;
+  const isEditable = () => s.mode() === "create" || s.isOrganizer();
+
+  /** Change only the date portion of a datetime, preserving hours/minutes */
+  function changeDatePortion(which: "start" | "end", dateValue: { year: number; month: number; day: number }) {
+    const current = which === "start" ? s.start()! : s.end()!;
+    const updated = new Date(current);
+    updated.setFullYear(dateValue.year, dateValue.month - 1, dateValue.day);
+
+    if (which === "start") {
+      const diff = updated.getTime() - s.start()!.getTime();
+      s.setStart(updated);
+      // Shift end by same amount to preserve duration
+      if (s.end()) {
+        s.setEnd(new Date(s.end()!.getTime() + diff));
+      }
+    } else {
+      // Ensure end is after start
+      if (updated <= s.start()!) {
+        const adjusted = new Date(s.start()!.getTime() + 3600000);
+        s.setEnd(adjusted);
+      } else {
+        s.setEnd(updated);
+      }
+    }
+    if (s.mode() === "edit") s.flushSave();
+  }
 
   return (
     <div class="px-3 py-3 border-t border-border space-y-1.5">
-      {/* Start time + End time on one row (hidden for all-day) */}
-      <Show when={s.start() && s.end() && !s.isAllDay()}>
+      {/* All-day toggle — organizer only */}
+      <Show when={isEditable()}>
+        <Switch.Root
+          checked={s.isAllDay()}
+          onCheckedChange={() => {
+            const wasAllDay = s.isAllDay();
+            const st = s.start()!;
+            const editing = s.mode() === "edit";
+
+            if (!wasAllDay) {
+              s.savedTimedStart = new Date(st);
+              s.savedTimedEnd = s.end() ? new Date(s.end()!) : null;
+              const allDayStart = new Date(
+                Date.UTC(st.getFullYear(), st.getMonth(), st.getDate()),
+              );
+              const e = s.end() ?? st;
+              const allDayEnd = new Date(
+                Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1),
+              );
+              s.setIsAllDay(true);
+              if (editing) {
+                s.setEditStart(allDayStart);
+                s.setEditEnd(allDayEnd);
+                s.scheduleSave({ isAllDay: true, start: allDayStart, end: allDayEnd });
+                s.flushSave();
+              }
+            } else {
+              const rawEnd = s.end() ?? st;
+              const lastDay = new Date(rawEnd);
+              lastDay.setDate(lastDay.getDate() - 1);
+              if (lastDay < st) lastDay.setTime(st.getTime());
+              const isMultiDay = lastDay.toDateString() !== st.toDateString();
+
+              let newStart: Date;
+              let newEnd: Date;
+              if (s.savedTimedStart && s.savedTimedEnd) {
+                newStart = new Date(st);
+                newStart.setHours(s.savedTimedStart.getHours(), s.savedTimedStart.getMinutes(), 0, 0);
+                newEnd = new Date(isMultiDay ? lastDay : st);
+                newEnd.setHours(s.savedTimedEnd.getHours(), s.savedTimedEnd.getMinutes(), 0, 0);
+              } else if (isMultiDay) {
+                newStart = new Date(st);
+                newStart.setHours(9, 0, 0, 0);
+                newEnd = new Date(lastDay);
+                newEnd.setHours(17, 0, 0, 0);
+              } else {
+                newStart = new Date(st);
+                newStart.setHours(12, 0, 0, 0);
+                newEnd = new Date(st);
+                newEnd.setHours(13, 0, 0, 0);
+              }
+
+              s.setIsAllDay(false);
+              if (editing) {
+                s.setEditStart(newStart);
+                s.setEditEnd(newEnd);
+                s.scheduleSave({ isAllDay: false, start: newStart, end: newEnd });
+                s.flushSave();
+              } else {
+                setDraftStart(newStart);
+                setDraftEnd(newEnd);
+              }
+            }
+          }}
+          class="flex items-center gap-2 cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors"
+        >
+          <Clock size={14} class="text-fg-muted shrink-0" />
+          <Switch.Label class="flex-1 text-sm text-fg-muted cursor-pointer">
+            All-day
+          </Switch.Label>
+          <Switch.Control
+            class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
+              s.isAllDay() ? "bg-fg" : "bg-border-light"
+            }`}
+          >
+            <Switch.Thumb
+              class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
+                s.isAllDay() ? "translate-x-3" : "translate-x-0"
+              }`}
+            />
+          </Switch.Control>
+          <Switch.HiddenInput />
+        </Switch.Root>
+      </Show>
+      {/* Date/time rows */}
+      <Show when={s.start() && s.end()}>
         <Show
-          when={s.mode() === "create" || s.isOrganizer()}
+          when={!s.isAllDay()}
           fallback={
-            <div class="flex items-center gap-2 text-sm text-fg px-2 py-1.5">
-              <Clock size={14} class="text-fg-muted shrink-0" />
-              <span>{formatTime(s.start()!, s.timeZone())}</span>
-              <ArrowRight size={14} class="text-fg-muted shrink-0" />
-              <span>{formatTime(s.end()!, s.timeZone())}</span>
-              <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
-                <span class="text-xs text-fg-muted whitespace-nowrap">
-                  {formatDuration(s.start()!, s.end()!)}
-                </span>
+            /* All-day: single combined row */
+            <div class="flex items-center gap-2 px-2 py-1 text-sm">
+              <span class="ml-[22px]" />
+              <Show
+                when={isEditable()}
+                fallback={<span class="text-fg">{formatDate(s.start()!, s.timeZone())}</span>}
+              >
+                <DatePickerTrigger
+                  date={() => s.start()!}
+                  timeZone={() => s.timeZone()}
+                  onChange={(dv) => changeDatePortion("start", dv)}
+                />
+              </Show>
+              <ArrowRight size={12} class="text-fg-muted shrink-0" />
+              <Show
+                when={isEditable()}
+                fallback={
+                  <span class="text-fg">
+                    {formatDate(getAllDayInclusiveEnd(s.end()!), s.timeZone())}
+                  </span>
+                }
+              >
+                <DatePickerTrigger
+                  date={() => getAllDayInclusiveEnd(s.end()!)}
+                  timeZone={() => s.timeZone()}
+                  onChange={(dv) => {
+                    const exclusive = new Date(Date.UTC(dv.year, dv.month - 1, dv.day + 1));
+                    s.setEnd(exclusive);
+                    if (s.mode() === "edit") s.flushSave();
+                  }}
+                />
               </Show>
             </div>
           }
         >
-          <div class="flex items-center gap-2 text-sm text-fg">
-            <Clock size={14} class="text-fg-muted shrink-0" />
-            <TimeCombobox
-              date={() => s.start()!}
-              timeZone={() => s.timeZone()}
-              which="start"
-              ariaLabel="Start time"
-              state={s}
-              referenceHour={() => new Date().getHours()}
-            />
-            <ArrowRight size={14} class="text-fg-muted shrink-0" />
-            <TimeCombobox
-              date={() => s.end()!}
-              timeZone={() => s.timeZone()}
-              which="end"
-              ariaLabel="End time"
-              state={s}
-              referenceHour={() => s.start()!.getHours()}
-              excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
-            />
+          {/* Timed: separate Start / End rows */}
+          <div class="flex items-center gap-2 px-2 py-1 text-sm">
+            <span class="ml-[22px] w-8 text-xs text-fg-muted shrink-0">Start</span>
+            <Show
+              when={isEditable()}
+              fallback={<span class="flex-1 text-fg">{formatDate(s.start()!, s.timeZone())}</span>}
+            >
+              <DatePickerTrigger
+                date={() => s.start()!}
+                timeZone={() => s.timeZone()}
+                onChange={(dv) => changeDatePortion("start", dv)}
+              />
+            </Show>
+            <Show
+              when={isEditable()}
+              fallback={<span class="text-fg">{formatTime(s.start()!, s.timeZone())}</span>}
+            >
+              <TimeCombobox
+                date={() => s.start()!}
+                timeZone={() => s.timeZone()}
+                which="start"
+                ariaLabel="Start time"
+                state={s}
+                referenceHour={() => new Date().getHours()}
+              />
+            </Show>
+            {/* Duration hint — same-day timed events only */}
             <Show when={formatDate(s.start()!, s.timeZone()) === formatDate(s.end()!, s.timeZone())}>
               <span class="text-xs text-fg-muted whitespace-nowrap">
-                {formatDuration(s.start()!, s.end()!)}
+                ({formatDuration(s.start()!, s.end()!)})
               </span>
+            </Show>
+          </div>
+          {/* End row */}
+          <div class="flex items-center gap-2 px-2 py-1 text-sm">
+            <span class="ml-[22px] w-8 text-xs text-fg-muted shrink-0">End</span>
+            <Show
+              when={isEditable()}
+              fallback={
+                <span class="flex-1 text-fg">
+                  {formatDate(s.end()!, s.timeZone())}
+                </span>
+              }
+            >
+              <DatePickerTrigger
+                date={() => s.end()!}
+                timeZone={() => s.timeZone()}
+                onChange={(dv) => changeDatePortion("end", dv)}
+              />
+            </Show>
+            <Show
+              when={isEditable()}
+              fallback={<span class="text-fg">{formatTime(s.end()!, s.timeZone())}</span>}
+            >
+              <TimeCombobox
+                date={() => s.end()!}
+                timeZone={() => s.timeZone()}
+                which="end"
+                ariaLabel="End time"
+                state={s}
+                referenceHour={() => s.start()!.getHours()}
+                excludeBeforeMinutes={() => s.start()!.getHours() * 60 + s.start()!.getMinutes()}
+              />
             </Show>
           </div>
         </Show>
       </Show>
       {/* "Your time" row — shown when event timezone differs from system */}
       <Show when={s.start() && s.end() && !s.isAllDay() && s.timeZone() && s.timeZone() !== SYSTEM_TIMEZONE}>
-        <div class="flex items-center gap-2 ml-[22px] text-xs text-fg-disabled">
-          <span class="w-[4.5rem] whitespace-nowrap px-0.5">{formatTime(s.start()!)}</span>
-          <ArrowRight size={14} class="shrink-0" />
-          <span class="w-[4.5rem] whitespace-nowrap px-0.5">
+        <div class="flex items-center gap-2 pl-[74px] text-xs text-fg-disabled">
+          <span class="whitespace-nowrap">{formatTime(s.start()!)}</span>
+          <ArrowRight size={12} class="shrink-0" />
+          <span class="whitespace-nowrap">
             {formatTime(s.end()!)}
             {(() => {
               const offset = getLocalDayOffset(s.start()!, s.timeZone()!);
@@ -118,145 +290,180 @@ export function TimeSection(props: SectionProps) {
           <span class="whitespace-nowrap">your time</span>
         </div>
       </Show>
-      {/* Date row */}
-      <Show when={s.start() && s.end()}>
-        <div
-          class={`flex gap-4 text-sm text-fg ${s.isAllDay() ? "ml-0" : "ml-[22px]"}`}
-        >
-          <Show when={s.isAllDay()}>
-            <Clock size={14} class="text-fg-muted shrink-0 mt-0.5" />
-          </Show>
-          <span>{formatDate(s.start()!, s.timeZone())}</span>
-          {(() => {
-            const displayEnd = s.isAllDay() ? getAllDayInclusiveEnd(s.end()!) : s.end()!;
-            return (
-              <Show when={formatDate(s.start()!, s.timeZone()) !== formatDate(displayEnd, s.timeZone())}>
-                <span>{formatDate(displayEnd, s.timeZone())}</span>
-              </Show>
-            );
-          })()}
-        </div>
-      </Show>
-      {/* All-day toggle, timezone, repeat — organizer only */}
-      <Show when={s.mode() === "create" || s.isOrganizer()}>
-      <Switch.Root
-        checked={s.isAllDay()}
-        onCheckedChange={() => {
-          const wasAllDay = s.isAllDay();
-          const st = s.start()!;
-          const editing = s.mode() === "edit";
-
-          if (!wasAllDay) {
-            // Timed -> all-day: save current times, set UTC midnight dates
-            s.savedTimedStart = new Date(st);
-            s.savedTimedEnd = s.end() ? new Date(s.end()!) : null;
-
-            // All-day events use UTC midnight dates (matching Google's format)
-            const allDayStart = new Date(
-              Date.UTC(st.getFullYear(), st.getMonth(), st.getDate()),
-            );
-            const e = s.end() ?? st;
-            const allDayEnd = new Date(
-              Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1),
-            );
-
-            s.setIsAllDay(true);
-            if (editing) {
-              s.setEditStart(allDayStart);
-              s.setEditEnd(allDayEnd);
-              s.scheduleSave({
-                isAllDay: true,
-                start: allDayStart,
-                end: allDayEnd,
-              });
-              s.flushSave();
-            }
-          } else {
-            // All-day -> timed: restore saved times or use sensible defaults
-            // All-day end dates are exclusive (Mon-Wed = end is Thu 00:00 UTC),
-            // so subtract one day to get the actual last day.
-            const rawEnd = s.end() ?? st;
-            const lastDay = new Date(rawEnd);
-            lastDay.setDate(lastDay.getDate() - 1);
-            // If lastDay landed before start (single-day all-day), clamp to start
-            if (lastDay < st) lastDay.setTime(st.getTime());
-
-            const isMultiDay = lastDay.toDateString() !== st.toDateString();
-
-            let newStart: Date;
-            let newEnd: Date;
-            if (s.savedTimedStart && s.savedTimedEnd) {
-              newStart = new Date(st);
-              newStart.setHours(
-                s.savedTimedStart.getHours(),
-                s.savedTimedStart.getMinutes(),
-                0,
-                0,
-              );
-              newEnd = new Date(isMultiDay ? lastDay : st);
-              newEnd.setHours(
-                s.savedTimedEnd.getHours(),
-                s.savedTimedEnd.getMinutes(),
-                0,
-                0,
-              );
-            } else if (isMultiDay) {
-              // Multi-day: default to 9am on first day, 5pm on last day
-              newStart = new Date(st);
-              newStart.setHours(9, 0, 0, 0);
-              newEnd = new Date(lastDay);
-              newEnd.setHours(17, 0, 0, 0);
-            } else {
-              // Single-day: default to 12pm + 1h
-              newStart = new Date(st);
-              newStart.setHours(12, 0, 0, 0);
-              newEnd = new Date(st);
-              newEnd.setHours(13, 0, 0, 0);
-            }
-
-            s.setIsAllDay(false);
-            if (editing) {
-              s.setEditStart(newStart);
-              s.setEditEnd(newEnd);
-              s.scheduleSave({
-                isAllDay: false,
-                start: newStart,
-                end: newEnd,
-              });
-              s.flushSave();
-            } else {
-              setDraftStart(newStart);
-              setDraftEnd(newEnd);
-            }
-          }
-        }}
-        class="flex items-center gap-2 cursor-pointer rounded px-2 py-2 hover:bg-surface-hover transition-colors"
-      >
-        <Sun size={14} class="text-fg-muted shrink-0" />
-        <Switch.Label class="flex-1 text-sm text-fg-muted cursor-pointer">
-          All-day
-        </Switch.Label>
-        <Switch.Control
-          class={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
-            s.isAllDay() ? "bg-fg" : "bg-border-light"
-          }`}
-        >
-          <Switch.Thumb
-            class={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200 ${
-              s.isAllDay() ? "translate-x-3" : "translate-x-0"
-            }`}
-          />
-        </Switch.Control>
-        <Switch.HiddenInput />
-      </Switch.Root>
-      {/* Timezone */}
-      <Show when={!s.isAllDay()}>
-        <TimezoneSelector state={s} />
-      </Show>
-      {/* Repeat */}
-      <RecurrenceSelector state={s} />
+      {/* Timezone + Repeat — organizer only */}
+      <Show when={isEditable()}>
+        <Show when={!s.isAllDay()}>
+          <TimezoneSelector state={s} />
+        </Show>
+        <RecurrenceSelector state={s} />
       </Show>
     </div>
+  );
+}
+
+/** Compact date picker trigger — shows formatted date, opens calendar popover on click */
+function DatePickerTrigger(props: {
+  date: () => Date;
+  timeZone: () => string | undefined;
+  onChange: (value: { year: number; month: number; day: number }) => void;
+}) {
+  function toDateString(d: Date, tz: string | undefined): string {
+    if (tz) {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      }).formatToParts(d);
+      const y = parts.find(p => p.type === "year")!.value;
+      const m = parts.find(p => p.type === "month")!.value.padStart(2, "0");
+      const dd = parts.find(p => p.type === "day")!.value.padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    }
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  const dateValue = createMemo(() => parseDate(toDateString(props.date(), props.timeZone())));
+
+  return (
+    <DatePicker.Root
+      value={[dateValue()]}
+      onValueChange={(details) => {
+        const v = details.value[0];
+        if (v) {
+          props.onChange({ year: v.year, month: v.month, day: v.day });
+        }
+      }}
+      closeOnSelect
+      positioning={{ placement: "bottom-start" }}
+    >
+      <DatePicker.Control>
+        <DatePicker.Trigger
+          class="flex-1 text-sm text-fg hover:text-fg cursor-pointer bg-transparent border-none outline-none px-1 py-0.5 rounded hover:bg-surface-hover transition-colors whitespace-nowrap text-left"
+        >
+          {formatDate(props.date(), props.timeZone())}
+        </DatePicker.Trigger>
+      </DatePicker.Control>
+      <DatePicker.Positioner>
+        <DatePicker.Content class="bg-surface border border-border rounded-lg shadow-lg p-3 z-50">
+          <DatePicker.Context>
+            {(api) => (
+              <>
+                <DatePicker.View view="day">
+                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
+                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="rotate-90" />
+                    </DatePicker.PrevTrigger>
+                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
+                      <DatePicker.RangeText />
+                    </DatePicker.ViewTrigger>
+                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="-rotate-90" />
+                    </DatePicker.NextTrigger>
+                  </DatePicker.ViewControl>
+                  <DatePicker.Table class="w-full">
+                    <DatePicker.TableHead>
+                      <DatePicker.TableRow>
+                        <For each={api().weekDays}>
+                          {(day) => (
+                            <DatePicker.TableHeader class="text-xs text-fg-muted font-normal p-1 text-center w-8">
+                              {day.narrow}
+                            </DatePicker.TableHeader>
+                          )}
+                        </For>
+                      </DatePicker.TableRow>
+                    </DatePicker.TableHead>
+                    <DatePicker.TableBody>
+                      <For each={api().weeks}>
+                        {(week) => (
+                          <DatePicker.TableRow>
+                            <For each={week}>
+                              {(day) => (
+                                <DatePicker.TableCell value={day}>
+                                  <DatePicker.TableCellTrigger
+                                    class="w-8 h-8 text-xs rounded-full flex items-center justify-center cursor-pointer
+                                      hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white
+                                      data-[outside-range]:text-fg-disabled data-[today]:font-semibold"
+                                  />
+                                </DatePicker.TableCell>
+                              )}
+                            </For>
+                          </DatePicker.TableRow>
+                        )}
+                      </For>
+                    </DatePicker.TableBody>
+                  </DatePicker.Table>
+                </DatePicker.View>
+                <DatePicker.View view="month">
+                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
+                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="rotate-90" />
+                    </DatePicker.PrevTrigger>
+                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
+                      <DatePicker.RangeText />
+                    </DatePicker.ViewTrigger>
+                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="-rotate-90" />
+                    </DatePicker.NextTrigger>
+                  </DatePicker.ViewControl>
+                  <DatePicker.Table class="w-full">
+                    <DatePicker.TableBody>
+                      <For each={api().getMonthsGrid({ columns: 4, format: "short" })}>
+                        {(months) => (
+                          <DatePicker.TableRow>
+                            <For each={months}>
+                              {(month) => (
+                                <DatePicker.TableCell value={month.value}>
+                                  <DatePicker.TableCellTrigger class="px-3 py-2 text-xs rounded cursor-pointer hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white">
+                                    {month.label}
+                                  </DatePicker.TableCellTrigger>
+                                </DatePicker.TableCell>
+                              )}
+                            </For>
+                          </DatePicker.TableRow>
+                        )}
+                      </For>
+                    </DatePicker.TableBody>
+                  </DatePicker.Table>
+                </DatePicker.View>
+                <DatePicker.View view="year">
+                  <DatePicker.ViewControl class="flex items-center justify-between mb-2">
+                    <DatePicker.PrevTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="rotate-90" />
+                    </DatePicker.PrevTrigger>
+                    <DatePicker.ViewTrigger class="text-sm font-medium text-fg cursor-pointer hover:bg-surface-hover px-2 py-1 rounded">
+                      <DatePicker.RangeText />
+                    </DatePicker.ViewTrigger>
+                    <DatePicker.NextTrigger class="p-1 rounded hover:bg-surface-hover cursor-pointer">
+                      <ChevronDown size={14} class="-rotate-90" />
+                    </DatePicker.NextTrigger>
+                  </DatePicker.ViewControl>
+                  <DatePicker.Table class="w-full">
+                    <DatePicker.TableBody>
+                      <For each={api().getYearsGrid({ columns: 4 })}>
+                        {(years) => (
+                          <DatePicker.TableRow>
+                            <For each={years}>
+                              {(year) => (
+                                <DatePicker.TableCell value={year.value}>
+                                  <DatePicker.TableCellTrigger class="px-3 py-2 text-xs rounded cursor-pointer hover:bg-surface-hover data-[selected]:bg-fg data-[selected]:text-white">
+                                    {year.label}
+                                  </DatePicker.TableCellTrigger>
+                                </DatePicker.TableCell>
+                              )}
+                            </For>
+                          </DatePicker.TableRow>
+                        )}
+                      </For>
+                    </DatePicker.TableBody>
+                  </DatePicker.Table>
+                </DatePicker.View>
+              </>
+            )}
+          </DatePicker.Context>
+        </DatePicker.Content>
+      </DatePicker.Positioner>
+    </DatePicker.Root>
   );
 }
 
