@@ -403,6 +403,7 @@ function DatePickerTrigger(props: {
               Tomorrow
             </button>
           </div>
+          <div class="border-t border-border mb-2" />
           {/* Month navigation */}
           <div class="flex items-center justify-between mb-2 px-1.5">
             <span class="text-sm font-medium text-fg">
