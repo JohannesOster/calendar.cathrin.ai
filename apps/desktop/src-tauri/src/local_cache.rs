@@ -26,6 +26,7 @@ pub struct CachedEvent {
     pub color: String,
     pub provider: String,
     pub is_read_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only_reason: Option<String>,
 }
 

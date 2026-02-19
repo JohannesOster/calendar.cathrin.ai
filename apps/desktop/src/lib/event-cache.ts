@@ -225,22 +225,31 @@ export async function loadEventsFromDisk(
   timeMin: string,
   timeMax: string
 ): Promise<CalendarEvent[]> {
+  return loadEventsFromDiskBulk([{ start: timeMin, end: timeMax }]);
+}
+
+function mapCachedEvent(event: CachedEvent): CalendarEvent {
+  return {
+    id: event.id,
+    calendarId: event.calendar_id,
+    title: event.title,
+    start: new Date(event.start),
+    end: new Date(event.end),
+    isAllDay: event.is_all_day,
+    color: event.color,
+    isReadOnly: event.is_read_only,
+    readOnlyReason: event.read_only_reason ?? undefined,
+  };
+}
+
+export async function loadEventsFromDiskBulk(
+  ranges: Array<{ start: string; end: string }>
+): Promise<CalendarEvent[]> {
   try {
-    const cached = await invoke<CachedEvent[]>("get_local_cached_events", {
-      start: timeMin,
-      end: timeMax,
+    const cached = await invoke<CachedEvent[]>("get_local_cached_events_bulk", {
+      ranges,
     });
-    return cached.map((event) => ({
-      id: event.id,
-      calendarId: event.calendar_id,
-      title: event.title,
-      start: new Date(event.start),
-      end: new Date(event.end),
-      isAllDay: event.is_all_day,
-      color: event.color,
-      isReadOnly: event.is_read_only,
-      readOnlyReason: event.read_only_reason ?? undefined,
-    }));
+    return cached.map(mapCachedEvent);
   } catch (error) {
     console.warn("[event-cache] Failed to load from cache:", error);
     return [];

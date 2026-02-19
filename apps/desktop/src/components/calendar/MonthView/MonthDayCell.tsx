@@ -1,4 +1,4 @@
-import { For, Show, createMemo, batch } from "solid-js";
+import { For, Show, createMemo, batch, startTransition } from "solid-js";
 import { isToday, isSameDay, getSundayOfWeek } from "../../../lib/date-utils";
 import { setCenterDate, setFlashDate, setNavigationTarget } from "../../../stores/calendar-navigation";
 import { setCurrentView, setVisibleDaysCount } from "../../../stores/view";
@@ -43,11 +43,13 @@ export function MonthDayCell(props: MonthDayCellProps) {
   // position and render the correct DayColumn components.
   const navigateToWeekView = (date: Date) => {
     const weekStart = getSundayOfWeek(date);
-    batch(() => {
-      setNavigationTarget(weekStart);
-      setCenterDate(weekStart);
-      setCurrentView("Week");
-      setVisibleDaysCount(7);
+    startTransition(() => {
+      batch(() => {
+        setNavigationTarget(weekStart);
+        setCenterDate(weekStart);
+        setCurrentView("Week");
+        setVisibleDaysCount(7);
+      });
     });
     setTimeout(() => {
       setFlashDate(date);

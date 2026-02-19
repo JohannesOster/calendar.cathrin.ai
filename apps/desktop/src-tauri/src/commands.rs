@@ -536,35 +536,69 @@ pub async fn get_local_cached_events(
     end: String,
 ) -> Result<Vec<CachedEvent>, String> {
     let cache = get_cache()?;
-    cache.get_events(&start, &end).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        cache.get_events(&start, &end).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
+}
+
+/// Get cached events for multiple date ranges in one IPC round-trip
+#[tauri::command]
+pub async fn get_local_cached_events_bulk(
+    ranges: Vec<WeekBound>,
+) -> Result<Vec<CachedEvent>, String> {
+    let cache = get_cache()?;
+    tokio::task::spawn_blocking(move || {
+        let mut all_events = Vec::new();
+        for range in ranges {
+            let events = cache.get_events(&range.start, &range.end).map_err(|e| e.to_string())?;
+            all_events.extend(events);
+        }
+        Ok(all_events)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 /// Store events in local cache
 #[tauri::command]
 pub async fn cache_events_locally(events: Vec<CachedEvent>) -> Result<usize, String> {
     let cache = get_cache()?;
-    cache.upsert_events(&events).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        cache.upsert_events(&events).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 /// Clear local event cache
 #[tauri::command]
 pub async fn clear_local_cache() -> Result<(), String> {
     let cache = get_cache()?;
-    cache.clear().map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || cache.clear().map_err(|e| e.to_string()))
+        .await
+        .unwrap()
 }
 
 /// Prune old events from cache (older than 90 days)
 #[tauri::command]
 pub async fn prune_local_cache() -> Result<usize, String> {
     let cache = get_cache()?;
-    cache.prune_old_events(90).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || cache.prune_old_events(90).map_err(|e| e.to_string()))
+        .await
+        .unwrap()
 }
 
 /// Delete a single event from local cache by its ID
 #[tauri::command]
 pub async fn delete_cached_event_by_id(event_id: String) -> Result<bool, String> {
     let cache = get_cache()?;
-    cache.delete_event_by_id(&event_id).map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        cache.delete_event_by_id(&event_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 /// Delete events for specific weeks from local cache
@@ -573,16 +607,18 @@ pub async fn delete_cached_event_by_id(event_id: String) -> Result<bool, String>
 #[tauri::command]
 pub async fn delete_cached_weeks(week_bounds: Vec<WeekBound>) -> Result<usize, String> {
     let cache = get_cache()?;
-    let mut total_deleted = 0;
-
-    for bound in week_bounds {
-        let deleted = cache
-            .delete_events_in_range(&bound.start, &bound.end)
-            .map_err(|e| e.to_string())?;
-        total_deleted += deleted;
-    }
-
-    Ok(total_deleted)
+    tokio::task::spawn_blocking(move || {
+        let mut total_deleted = 0;
+        for bound in week_bounds {
+            let deleted = cache
+                .delete_events_in_range(&bound.start, &bound.end)
+                .map_err(|e| e.to_string())?;
+            total_deleted += deleted;
+        }
+        Ok(total_deleted)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -605,14 +641,17 @@ const WEEK_FETCH_TIMES_KEY: &str = "week_fetch_times";
 #[tauri::command]
 pub async fn get_week_fetch_times() -> Result<Vec<WeekFetchTime>, String> {
     let cache = get_cache()?;
-    let json = cache
-        .get_metadata(WEEK_FETCH_TIMES_KEY)
-        .map_err(|e| e.to_string())?;
-
-    match json {
-        Some(data) => serde_json::from_str(&data).map_err(|e| e.to_string()),
-        None => Ok(Vec::new()),
-    }
+    tokio::task::spawn_blocking(move || {
+        let json = cache
+            .get_metadata(WEEK_FETCH_TIMES_KEY)
+            .map_err(|e| e.to_string())?;
+        match json {
+            Some(data) => serde_json::from_str(&data).map_err(|e| e.to_string()),
+            None => Ok(Vec::new()),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 /// Save week fetch times to SQLite for persistence across restarts
@@ -620,16 +659,24 @@ pub async fn get_week_fetch_times() -> Result<Vec<WeekFetchTime>, String> {
 pub async fn save_week_fetch_times(times: Vec<WeekFetchTime>) -> Result<(), String> {
     let cache = get_cache()?;
     let json = serde_json::to_string(&times).map_err(|e| e.to_string())?;
-    cache
-        .set_metadata(WEEK_FETCH_TIMES_KEY, &json)
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        cache
+            .set_metadata(WEEK_FETCH_TIMES_KEY, &json)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }
 
 /// Clear week fetch times (called on logout)
 #[tauri::command]
 pub async fn clear_week_fetch_times() -> Result<(), String> {
     let cache = get_cache()?;
-    cache
-        .delete_metadata(WEEK_FETCH_TIMES_KEY)
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        cache
+            .delete_metadata(WEEK_FETCH_TIMES_KEY)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
 }

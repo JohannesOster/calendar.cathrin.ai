@@ -10,9 +10,10 @@ use commands::{
     cache_events_locally, clear_cached_events, clear_local_cache, clear_session_token,
     clear_week_fetch_times, delete_cached_event_by_id, delete_cached_weeks, ensure_valid_token,
     fetch_events, fetch_events_for_week, get_cached_events, get_connected_accounts,
-    get_local_cached_events, get_session_token, get_week_fetch_times, init_local_cache, open_url,
-    prune_local_cache, refresh_account_calendars, remove_account, save_session_token,
-    save_week_fetch_times, start_oauth_flow, toggle_calendar_visibility,
+    get_local_cached_events, get_local_cached_events_bulk, get_session_token,
+    get_week_fetch_times, init_local_cache, open_url, prune_local_cache,
+    refresh_account_calendars, remove_account, save_session_token, save_week_fetch_times,
+    start_oauth_flow, toggle_calendar_visibility,
 };
 
 #[cfg(target_os = "macos")]
@@ -285,6 +286,7 @@ pub fn run() {
             open_url,
             // Local SQLite cache commands
             get_local_cached_events,
+            get_local_cached_events_bulk,
             cache_events_locally,
             clear_local_cache,
             prune_local_cache,

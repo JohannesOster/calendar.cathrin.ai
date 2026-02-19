@@ -67,7 +67,7 @@ export function createGridScroll(deps: GridScrollDeps) {
     return Math.round((scroll + timeColWidth - CENTER_OFFSET) / width);
   };
 
-  const handleScroll = () => {
+  const handleScrollCore = () => {
     const ref = deps.getScrollContainerRef();
     if (!ref) return;
     const currentScrollLeft = ref.scrollLeft;
@@ -135,6 +135,15 @@ export function createGridScroll(deps: GridScrollDeps) {
     lastScrollLeft = currentScrollLeft;
   };
 
+  let rafId: number | null = null;
+  const handleScroll = () => {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      handleScrollCore();
+    });
+  };
+
   const scrollToDate = (date: Date) => {
     const ref = deps.getScrollContainerRef();
     if (!ref) return;
@@ -178,7 +187,7 @@ export function createGridScroll(deps: GridScrollDeps) {
       deps.setIsRestoringScrollPosition(false);
     });
 
-    handleScroll();
+    handleScrollCore();
 
     requestAnimationFrame(() => {
       if (gen !== deps.scrollGeneration.current) return;

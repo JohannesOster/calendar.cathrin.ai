@@ -150,23 +150,23 @@ export function CalendarEvent(props: CalendarEventProps) {
     a.getFullYear() === b.getFullYear();
 
   /** Determine which segment of a multi-day event this column represents */
-  const segment = (): "only" | "first" | "middle" | "last" => {
+  const segment = createMemo((): "only" | "first" | "middle" | "last" => {
     const col = props.columnDate;
     if (!col || isSameDay(props.event.start, props.event.end)) return "only";
     if (isSameDay(col, props.event.start)) return "first";
     if (isSameDay(col, props.event.end)) return "last";
     return "middle";
-  };
+  });
 
-  const getPosition = () => {
+  const position = createMemo(() => {
     const seg = segment();
     if (seg === "middle" || seg === "last") return 0;
     const startHours = props.event.start.getHours();
     const startMinutes = props.event.start.getMinutes();
     return (startHours + startMinutes / 60) * HOUR_HEIGHT_PX;
-  };
+  });
 
-  const getHeight = () => {
+  const height = createMemo(() => {
     const seg = segment();
 
     if (seg === "only") {
@@ -186,12 +186,12 @@ export function CalendarEvent(props: CalendarEventProps) {
     }
     // middle: full 24h grid
     return TOTAL_GRID_HEIGHT_PX - EVENT_MARGIN_BOTTOM_PX;
-  };
+  });
 
-  const getTitleMaxLines = () => {
-    const titleAreaHeight = getHeight() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX;
+  const titleMaxLines = createMemo(() => {
+    const titleAreaHeight = height() - EVENT_PADDING_Y_PX - TIME_ROW_HEIGHT_PX;
     return Math.max(1, Math.floor(titleAreaHeight / TITLE_LINE_HEIGHT_PX));
-  };
+  });
 
   // Exposed method to trigger the burn animation
   const triggerBurn = () => {
@@ -213,10 +213,10 @@ export function CalendarEvent(props: CalendarEventProps) {
   };
 
   // Get layout-aware positioning
-  const getLeft = () => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`;
-  const getWidth = () => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`;
-  const getZIndex = () => (isFocused() || isSelected() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1));
-  const hasOverlap = () => props.layout?.overlaps ?? false;
+  const left = createMemo(() => props.layout?.left ?? `${EVENT_MARGIN_LEFT_PX}px`);
+  const width = createMemo(() => props.layout?.width ?? `calc(100% - ${EVENT_MARGIN_TOTAL_PX}px)`);
+  const zIndex = createMemo(() => (isFocused() || isSelected() ? FOCUSED_Z_INDEX : (props.layout?.zIndex ?? 1)));
+  const hasOverlap = createMemo(() => props.layout?.overlaps ?? false);
 
   const showTzIndicator = () =>
     !props.event.isAllDay && !!props.event.timeZone && props.event.timeZone !== SYSTEM_TIMEZONE;
@@ -232,11 +232,11 @@ export function CalendarEvent(props: CalendarEventProps) {
       data-event-id={props.event.id}
       class="absolute"
       style={{
-        top: `${getPosition()}px`,
-        height: `${getHeight()}px`,
-        left: getLeft(),
-        width: getWidth(),
-        "z-index": getZIndex(),
+        top: `${position()}px`,
+        height: `${height()}px`,
+        left: left(),
+        width: width(),
+        "z-index": zIndex(),
       }}
     >
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
@@ -264,7 +264,7 @@ export function CalendarEvent(props: CalendarEventProps) {
         <div class="h-full">
           <div class="min-w-0 pl-3 pr-1.5 py-1">
             <Show
-              when={getHeight() >= SINGLE_LINE_THRESHOLD_PX}
+              when={height() >= SINGLE_LINE_THRESHOLD_PX}
               fallback={
                 <div class="truncate text-xs leading-tight font-medium">
                   {props.event.title}
@@ -276,14 +276,14 @@ export function CalendarEvent(props: CalendarEventProps) {
                 style={{
                   display: "-webkit-box",
                   "-webkit-box-orient": "vertical",
-                  "-webkit-line-clamp": getTitleMaxLines(),
+                  "-webkit-line-clamp": titleMaxLines(),
                 }}
               >
                 {props.event.title}
               </div>
               <div class="flex items-center gap-1 text-2xs font-light mt-0.5 opacity-80 whitespace-nowrap">
                 <span>
-                  {getHeight() < SHORT_TIME_THRESHOLD_PX
+                  {height() < SHORT_TIME_THRESHOLD_PX
                     ? formatCompactTime(props.event.start, props.event.timeZone)
                     : formatTimeRange(props.event.start, props.event.end, props.event.timeZone)}
                 </span>
@@ -296,7 +296,7 @@ export function CalendarEvent(props: CalendarEventProps) {
                     aria-label={`${props.event.attendees!.length} participants`}
                   >
                     <Users size={10} aria-hidden="true" />
-                    <Show when={getHeight() >= SHORT_TIME_THRESHOLD_PX}>
+                    <Show when={height() >= SHORT_TIME_THRESHOLD_PX}>
                       {props.event.attendees!.length}
                     </Show>
                   </span>

@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, startTransition } from "solid-js";
 import {
   ChevronLeft,
   ChevronRight,
@@ -122,7 +122,7 @@ export function CalendarHeader() {
           {(["Day", "Week", "Month"] as ViewType[]).map((view) => (
             <button
               onClick={() => {
-                setCurrentView(view);
+                startTransition(() => setCurrentView(view));
                 // Set day count presets for Day/Week views
                 if (view === "Day") {
                   // Check if today is visible BEFORE changing day count

@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect, on } from "solid-js";
+import { onMount, onCleanup, createEffect, on, lazy, Suspense } from "solid-js";
 import "./App.css";
 import { AppShell } from "./components/layout/AppShell";
 import { CalendarHeader } from "./components/layout/CalendarHeader";
@@ -6,8 +6,6 @@ import { LeftSidebar } from "./components/layout/LeftSidebar";
 import { isCreating, isDragging } from "./stores/event-creation";
 import { isDragActive } from "./stores/event-drag";
 import { CalendarGrid } from "./components/calendar/CalendarGrid";
-import { EventDetailPopover } from "./components/calendar/EventDetailPopover";
-import { EventEditSheet } from "./components/calendar/EventEditSheet";
 import { openCreationSheet } from "./stores/event-popover";
 import { activeVisibleWeeks, scrollDirection } from "./stores/calendar-navigation";
 import { UndoToastProvider } from "./components/ui/UndoToast";
@@ -36,6 +34,9 @@ import {
 } from "./stores/event-polling";
 import { connectWebSocket, disconnectWebSocket } from "./services/websocket";
 import { getNextWeek, getPreviousWeek, getWeekBounds } from "./lib/date-utils";
+
+const EventDetailPopover = lazy(() => import("./components/calendar/EventDetailPopover").then(m => ({ default: m.EventDetailPopover })));
+const EventEditSheet = lazy(() => import("./components/calendar/EventEditSheet").then(m => ({ default: m.EventEditSheet })));
 
 // Debounce delay for fetch trigger (ms)
 const FETCH_DEBOUNCE_MS = 100;
@@ -195,8 +196,8 @@ function App() {
         onCancel={() => cancelRecurrenceScope()}
       />
       <DeleteConfirmDialog />
-      <EventDetailPopover />
-      <EventEditSheet />
+      <Suspense fallback={null}><EventDetailPopover /></Suspense>
+      <Suspense fallback={null}><EventEditSheet /></Suspense>
       <AppShell
         header={<CalendarHeader />}
         leftSidebar={<LeftSidebar />}
