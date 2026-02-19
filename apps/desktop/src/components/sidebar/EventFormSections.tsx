@@ -83,12 +83,6 @@ export function TimeSection(props: SectionProps) {
       if (s.end()) {
         s.setEnd(new Date(s.end()!.getTime() + diff));
       }
-      // Scroll grid to show the new start date if it's off-screen
-      const visStart = visibleStartDate();
-      const visEnd = addDays(visStart, visibleDaysCount() - 1);
-      if (updated < visStart || updated > visEnd) {
-        setCenterDate(updated);
-      }
     } else {
       const diff = updated.getTime() - s.end()!.getTime();
       s.setEnd(updated);
@@ -96,6 +90,12 @@ export function TimeSection(props: SectionProps) {
       if (updated < s.start()!) {
         s.setStart(new Date(s.start()!.getTime() + diff));
       }
+    }
+    // Scroll grid to show the changed date if it's off-screen
+    const visStart = visibleStartDate();
+    const visEnd = addDays(visStart, visibleDaysCount() - 1);
+    if (updated < visStart || updated > visEnd) {
+      setCenterDate(updated);
     }
     if (s.mode() === "edit") s.flushSave();
   }
