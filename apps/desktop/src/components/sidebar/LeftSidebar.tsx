@@ -1,4 +1,4 @@
-import { onMount, createEffect, createSignal, Show } from "solid-js";
+import { onMount, createEffect, on, createSignal, Show } from "solid-js";
 import { Plus } from "lucide-solid";
 import { addAccount } from "../../stores/accounts";
 import { initializeSidebarUI, persistCollapsedAccounts, collapsedAccounts } from "../../stores/sidebar-ui";
@@ -19,12 +19,9 @@ export function LeftSidebar() {
   });
 
   // Persist collapsed accounts to localStorage when they change
-  createEffect(() => {
-    // Track the signal
-    collapsedAccounts();
-    // Persist changes
+  createEffect(on(collapsedAccounts, () => {
     persistCollapsedAccounts();
-  });
+  }));
 
   // Close menu on outside click
   function handleClickOutside(e: MouseEvent) {
@@ -33,13 +30,13 @@ export function LeftSidebar() {
     }
   }
 
-  createEffect(() => {
-    if (showProviderMenu()) {
+  createEffect(on(showProviderMenu, (open) => {
+    if (open) {
       document.addEventListener("mousedown", handleClickOutside);
     } else {
       document.removeEventListener("mousedown", handleClickOutside);
     }
-  });
+  }));
 
   function handleProviderSelect(provider: "google" | "outlook") {
     setShowProviderMenu(false);

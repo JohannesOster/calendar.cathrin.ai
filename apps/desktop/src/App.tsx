@@ -86,14 +86,14 @@ function App() {
   // Open edit sheet when event creation starts, but wait until drag finishes
   // so the sheet doesn't appear mid-drag. RAF delay lets the grid settle
   // before the popover anchors to the placeholder.
-  createEffect(() => {
-    if (isCreating() && !isDragging()) {
+  createEffect(on([isCreating, isDragging], ([creating, dragging]) => {
+    if (creating && !dragging) {
       requestAnimationFrame(() => {
         const placeholder = document.querySelector("[data-event-placeholder]") as HTMLElement | null;
         openCreationSheet(placeholder ?? undefined);
       });
     }
-  });
+  }));
 
   // Weeks deferred during drag — deduplicated Set so repeated deferrals don't
   // cause duplicate fetches when the drag ends.

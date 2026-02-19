@@ -1,4 +1,4 @@
-import { createSignal, createEffect, JSX, onMount, onCleanup } from "solid-js";
+import { createSignal, createEffect, on, JSX, onMount, onCleanup } from "solid-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { PanelLeftClose, PanelLeft } from "lucide-solid";
@@ -91,13 +91,13 @@ export function AppShell(props: AppShellProps) {
   });
 
   // Persist sidebar state to localStorage
-  createEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.LEFT_SIDEBAR_OPEN, String(leftSidebarOpen()));
-  });
+  createEffect(on(leftSidebarOpen, (open) => {
+    localStorage.setItem(STORAGE_KEYS.LEFT_SIDEBAR_OPEN, String(open));
+  }));
 
-  createEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN, String(rightSidebarOpen()));
-  });
+  createEffect(on(rightSidebarOpen, (open) => {
+    localStorage.setItem(STORAGE_KEYS.RIGHT_SIDEBAR_OPEN, String(open));
+  }));
 
   return (
     <div class="h-screen flex flex-col bg-surface overflow-hidden">

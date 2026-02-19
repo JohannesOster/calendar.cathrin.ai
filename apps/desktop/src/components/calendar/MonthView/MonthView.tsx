@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, onMount, onCleanup, For } from "solid-js";
+import { createSignal, createMemo, createEffect, on, onMount, onCleanup, untrack, For } from "solid-js";
 import { Key } from "@solid-primitives/keyed";
 import { type DayInfo } from "./MonthDayCell";
 import { MonthWeekRow } from "./MonthWeekRow";
@@ -109,11 +109,10 @@ export function MonthView() {
 
   // Sync computed week IDs to the shared signal for event fetching
   // Only sync after initialized to prevent wrong weeks from being set
-  createEffect(() => {
-    const weekIds = computedWeekIds();
-    if (!isInitialized()) return;
+  createEffect(on(computedWeekIds, (weekIds) => {
+    if (!untrack(isInitialized)) return;
     setMonthVisibleWeekIds(weekIds);
-  });
+  }));
 
   // Compute the month/year label for the header
   // Format: "January 2025" (single month visible), "January – February 2025" (same year),
@@ -221,12 +220,11 @@ export function MonthView() {
   });
 
   // React to external centerDate changes (from navigation or mini-calendar)
-  createEffect(() => {
-    const target = centerDate();
-    if (isInitialized() && scrollContainerRef) {
+  createEffect(on(centerDate, (target) => {
+    if (untrack(isInitialized) && scrollContainerRef) {
       scrollToDate(target);
     }
-  });
+  }));
 
   return (
     <div class="flex-1 flex flex-col min-h-0">

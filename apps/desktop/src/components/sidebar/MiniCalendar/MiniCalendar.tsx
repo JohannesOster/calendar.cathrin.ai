@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
+import { createSignal, createEffect, on, createMemo, untrack, For, Show } from "solid-js";
 import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-solid";
 import { setCenterDate, setFlashDate, visibleStartDate } from "../../../stores/calendar-navigation";
 import { getSundayOfWeek, formatMonthYearLocale, computeWeeksInMonth } from "../../../lib/date-utils";
@@ -84,8 +84,7 @@ export function MiniCalendar() {
 
   // Sync mini calendar month when scroll position changes to a different month
   // (but not after user clicks a date - we want to preserve their intended month)
-  createEffect(() => {
-    const visible = visibleStartDate();
+  createEffect(on(visibleStartDate, (visible) => {
     if (visible.getTime() !== prevVisibleDate.getTime()) {
       prevVisibleDate = visible;
 
@@ -95,14 +94,15 @@ export function MiniCalendar() {
         return;
       }
 
+      const month = untrack(currentMonth);
       if (
-        visible.getMonth() !== currentMonth().getMonth() ||
-        visible.getFullYear() !== currentMonth().getFullYear()
+        visible.getMonth() !== month.getMonth() ||
+        visible.getFullYear() !== month.getFullYear()
       ) {
         setCurrentMonth(new Date(visible.getFullYear(), visible.getMonth(), 1));
       }
     }
-  });
+  }));
 
   return (
     <div class="p-2 border-b border-border select-none">

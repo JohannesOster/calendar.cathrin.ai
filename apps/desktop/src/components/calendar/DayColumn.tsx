@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, onCleanup, For } from "solid-js";
+import { createSignal, createEffect, createMemo, on, onCleanup, untrack, For } from "solid-js";
 import { flashDate } from "../../stores/calendar-navigation";
 import { isToday } from "../../lib/date-utils";
 import { CalendarEvent } from "./CalendarEvent";
@@ -37,14 +37,12 @@ export function DayColumn(props: DayColumnProps) {
 
   // Flash effect when this day is selected from mini-calendar
   let flashTimeout: number | undefined;
-  createEffect(() => {
-    const flash = flashDate();
-
+  createEffect(on(flashDate, (flash) => {
     // Ignore null - only react to explicit flash requests
     // This prevents canceling ongoing animations when flashDate is cleared
     if (!flash) return;
 
-    const shouldFlash = isSameDay(flash, props.date);
+    const shouldFlash = isSameDay(flash, untrack(() => props.date));
 
     // Clear any existing timeout when flashDate changes
     if (flashTimeout) {
@@ -63,7 +61,7 @@ export function DayColumn(props: DayColumnProps) {
       // A different date was flashed, cancel our flash
       setShowFlash(false);
     }
-  });
+  }));
   onCleanup(() => {
     if (flashTimeout) clearTimeout(flashTimeout);
   });

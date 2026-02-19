@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createMemo, createEffect, onCleanup, on } from "solid-js";
+import { Show, For, createSignal, createMemo, createEffect, onCleanup, on, untrack } from "solid-js";
 import type { Attendee } from "@cathrin/shared-types";
 import {
   Clock,
@@ -1993,12 +1993,11 @@ function TimeCombobox(props: {
   let userNavigated = false;
 
   // Sync display when date/timezone changes externally (e.g., drag)
-  createEffect(() => {
-    const time = displayTime();
-    if (!isEditing()) {
+  createEffect(on(displayTime, (time) => {
+    if (!untrack(isEditing)) {
       setInputValue(time);
     }
-  });
+  }));
 
   // Always returns items — never an empty list.
   // First item is always the parsed interpretation of the typed input,
@@ -2226,10 +2225,9 @@ function TimezoneSelector(props: { state: EventFormState }) {
   let skipNextFocus = false;
 
   // Sync display when timezone changes externally
-  createEffect(() => {
-    const label = displayLabel();
-    if (!isEditing()) setInputValue(label);
-  });
+  createEffect(on(displayLabel, (label) => {
+    if (!untrack(isEditing)) setInputValue(label);
+  }));
 
   const allTimezones = getTimezoneItems();
 

@@ -79,11 +79,7 @@ export function createAllDayState(deps: AllDayStateDeps) {
 
   // Auto-expand all-day section when creating an event that will appear there
   let autoExpandedForCreation = false;
-  createEffect(() => {
-    const creating = isCreating();
-    const allDay = draftIsAllDay();
-    const start = draftStart();
-    const end = draftEnd();
+  createEffect(on([isCreating, draftIsAllDay, draftStart, draftEnd], ([creating, allDay, start, end]) => {
 
     let spansMultiple = false;
     if (start && end && !allDay) {
@@ -96,7 +92,7 @@ export function createAllDayState(deps: AllDayStateDeps) {
 
     const needsAllDayRow = allDay || spansMultiple;
 
-    if (creating && needsAllDayRow && !allDayExpanded() && !autoExpandedForCreation) {
+    if (creating && needsAllDayRow && !untrack(allDayExpanded) && !autoExpandedForCreation) {
       setAllDayExpanded(true);
       autoExpandedForCreation = true;
     }
@@ -106,28 +102,26 @@ export function createAllDayState(deps: AllDayStateDeps) {
     }
     if (autoExpandedForCreation && !creating) {
       autoExpandedForCreation = false;
-      if (visibleAllDayLayouts().length === 0) {
+      if (untrack(visibleAllDayLayouts).length === 0) {
         setAllDayExpanded(false);
       }
     }
-  });
+  }));
 
   // Auto-expand all-day section when resize finishes with a multi-day event.
   // During drag the event stays in the time grid (excluded via excludeId);
   // it only moves to the all-day row on pointerup, so we expand then.
   let resizeDragIsMultiDay = false;
-  createEffect(() => {
-    const eventId = resizeDragEventId();
-
+  createEffect(on(resizeDragEventId, (eventId) => {
     if (!eventId) {
-      if (resizeDragIsMultiDay && !allDayExpanded()) {
+      if (resizeDragIsMultiDay && !untrack(allDayExpanded)) {
         setAllDayExpanded(true);
       }
       resizeDragIsMultiDay = false;
       return;
     }
 
-    const event = events().find((e) => e.id === eventId);
+    const event = untrack(events).find((e) => e.id === eventId);
     if (!event) return;
 
     const effectiveEnd =
@@ -135,12 +129,11 @@ export function createAllDayState(deps: AllDayStateDeps) {
         ? new Date(event.end.getTime() - 1)
         : event.end;
     resizeDragIsMultiDay = event.start.toDateString() !== effectiveEnd.toDateString();
-  });
+  }));
 
   // Auto-expand/collapse all-day section when toggling isAllDay in edit mode
   let allDayStateBeforeEdit: boolean | null = null;
-  createEffect(() => {
-    const event = selectedEvent();
+  createEffect(on(selectedEvent, (event) => {
     if (!event) {
       allDayStateBeforeEdit = null;
       return;
@@ -148,16 +141,16 @@ export function createAllDayState(deps: AllDayStateDeps) {
 
     if (event.isAllDay) {
       if (allDayStateBeforeEdit === null) {
-        allDayStateBeforeEdit = allDayExpanded();
+        allDayStateBeforeEdit = untrack(allDayExpanded);
       }
-      if (!allDayExpanded()) {
+      if (!untrack(allDayExpanded)) {
         setAllDayExpanded(true);
       }
     } else if (allDayStateBeforeEdit !== null) {
       setAllDayExpanded(allDayStateBeforeEdit);
       allDayStateBeforeEdit = null;
     }
-  });
+  }));
 
   // Get visible calendar IDs for filtering events
   const visibleCalendarIds = createMemo(() => {
@@ -521,11 +514,10 @@ export function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
   const [showFlash, setShowFlash] = createSignal(false);
 
   let flashTimeout: number | undefined;
-  createEffect(() => {
-    const flash = flashDate();
+  createEffect(on(flashDate, (flash) => {
     if (!flash) return;
 
-    if (isSameDay(flash, props.date())) {
+    if (isSameDay(flash, untrack(props.date))) {
       setFlashKey((k) => k + 1);
       setShowFlash(true);
       if (flashTimeout) clearTimeout(flashTimeout);
@@ -533,7 +525,7 @@ export function AllDayFlashOverlay(props: { date: Accessor<Date> }) {
     } else {
       setShowFlash(false);
     }
-  });
+  }));
   onCleanup(() => {
     if (flashTimeout) clearTimeout(flashTimeout);
   });
