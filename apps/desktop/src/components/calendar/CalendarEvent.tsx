@@ -244,7 +244,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-md transition-[background-color,color,box-shadow,opacity] duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${isPast() ? "calendar-event--past" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-[background-color,color,box-shadow] duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${isPast() ? "calendar-event--past" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}

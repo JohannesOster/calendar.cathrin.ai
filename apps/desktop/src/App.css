@@ -430,7 +430,7 @@ body.dragging * {
 }
 
 /* Past all-day/spanning events — subtle dim */
-.all-day-chip--past {
+.all-day-chip--past:not(.all-day-chip--selected):not(:focus) {
   opacity: 0.55;
 }
 

@@ -186,7 +186,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         "all-day-chip--selected": isSelected() || isDragging(),
         "all-day-chip--needs-action": selfResponse() === "needsAction",
         "all-day-chip--tentative": selfResponse() === "tentative",
-        "all-day-chip--past": isPast() && !isSelected() && !isDragging(),
+        "all-day-chip--past": isPast(),
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id, chipRef); }}
       onPointerDown={handlePointerDown}
