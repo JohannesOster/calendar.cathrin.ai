@@ -1,6 +1,7 @@
 import { Show, createMemo } from "solid-js";
 import { Repeat } from "lucide-solid";
 import type { CalendarEvent } from "../../../stores/event-types";
+import { currentMinute } from "../../../stores/current-time";
 import { formatCompactTime } from "../../../lib/format-utils";
 
 interface MonthEventChipProps {
@@ -10,6 +11,7 @@ interface MonthEventChipProps {
 export function MonthEventChip(props: MonthEventChipProps) {
   const time = () => formatCompactTime(props.event.start);
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
+  const isPast = createMemo(() => props.event.end.getTime() < currentMinute().getTime());
 
   return (
     <div
@@ -17,6 +19,7 @@ export function MonthEventChip(props: MonthEventChipProps) {
       classList={{
         "month-event-chip--needs-action": selfResponse() === "needsAction",
         "month-event-chip--tentative": selfResponse() === "tentative",
+        "month-event-chip--past": isPast(),
       }}
       style={{ "--event-color": props.event.color }}
       tabIndex={0}

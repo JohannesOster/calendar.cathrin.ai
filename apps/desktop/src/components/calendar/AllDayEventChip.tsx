@@ -2,6 +2,7 @@ import { Show, onMount, onCleanup, createMemo } from "solid-js";
 import { Users, Repeat } from "lucide-solid";
 import { isPendingNotification } from "../../stores/pending-notifications";
 import { isBuffered } from "../../stores/buffered-attendees";
+import { currentMinute } from "../../stores/current-time";
 import type { CalendarEvent } from "../../stores/event-types";
 import { selectEvent } from "../../stores/event-selection";
 import { selectedEventId } from "../../stores/event-selection";
@@ -42,6 +43,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
   const isDragging = () => dragActiveEventId() === props.event.id;
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
   const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id) || isBuffered(props.event.id));
+  const isPast = createMemo(() => props.event.end.getTime() < currentMinute().getTime());
 
   const hasTimes = () => !props.event.isAllDay;
 
@@ -184,6 +186,7 @@ export function AllDayEventChip(props: AllDayEventChipProps) {
         "all-day-chip--selected": isSelected() || isDragging(),
         "all-day-chip--needs-action": selfResponse() === "needsAction",
         "all-day-chip--tentative": selfResponse() === "tentative",
+        "all-day-chip--past": isPast() && !isSelected() && !isDragging(),
       }}
       onClick={() => { chipRef?.focus(); selectEvent(props.event.id, chipRef); }}
       onPointerDown={handlePointerDown}

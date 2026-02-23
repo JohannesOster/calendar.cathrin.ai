@@ -429,6 +429,11 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color), #000 15%);
 }
 
+/* Past all-day/spanning events — subtle dim */
+.all-day-chip--past {
+  opacity: 0.55;
+}
+
 /* Month view timed event chips — light tinted background, no left border */
 .month-event-chip {
   background-color: color-mix(
@@ -458,6 +463,11 @@ body.dragging * {
     var(--color-surface)
   );
   border: 1px dashed var(--event-color);
+}
+
+/* Past month event chips — subtle dim */
+.month-event-chip--past {
+  opacity: 0.55;
 }
 
 /* Today column tint — subtle accent wash */
