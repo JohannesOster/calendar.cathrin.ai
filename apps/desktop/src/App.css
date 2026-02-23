@@ -326,10 +326,17 @@ body.dragging * {
   opacity: 0.5;
 }
 
-/* Past events — subtle dim, guides attention forward.
+/* Past events — desaturated colors, guides attention forward.
+   Reduces bg tint and text saturation instead of uniform opacity.
    Selected/focused/dragging states override to stay fully visible. */
 .calendar-event--past:not(.calendar-event--selected):not(.calendar-event--focused):not(:focus):not(.calendar-event--dragging) {
-  opacity: 0.55;
+  background-color: color-mix(in srgb, var(--event-color) 6%, var(--color-surface));
+  color: color-mix(in srgb, var(--event-color) 40%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--event-color) 15%, var(--color-surface));
+}
+
+.calendar-event--past:not(.calendar-event--selected):not(.calendar-event--focused):not(:focus):not(.calendar-event--dragging)::before {
+  opacity: 0.2;
 }
 
 /* Resize handle - bottom edge of timed events */
@@ -429,9 +436,11 @@ body.dragging * {
   background-color: color-mix(in srgb, var(--event-color), #000 15%);
 }
 
-/* Past all-day/spanning events — subtle dim */
+/* Past all-day/spanning events — desaturated colors */
 .all-day-chip--past:not(.all-day-chip--selected):not(:focus) {
-  opacity: 0.55;
+  background-color: color-mix(in srgb, var(--event-color) 5%, var(--color-surface));
+  color: color-mix(in srgb, var(--event-color) 40%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--event-color) 10%, var(--color-surface));
 }
 
 /* Month view timed event chips — light tinted background, no left border */
@@ -465,9 +474,11 @@ body.dragging * {
   border: 1px dashed var(--event-color);
 }
 
-/* Past month event chips — subtle dim */
+/* Past month event chips — desaturated colors */
 .month-event-chip--past {
-  opacity: 0.55;
+  background-color: color-mix(in srgb, var(--event-color) 5%, var(--color-surface));
+  color: color-mix(in srgb, var(--event-color) 40%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--event-color) 10%, var(--color-surface));
 }
 
 /* Today column tint — subtle accent wash */
