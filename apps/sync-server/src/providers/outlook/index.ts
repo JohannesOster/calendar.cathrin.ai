@@ -256,7 +256,7 @@ export class OutlookCalendarProvider implements CalendarProvider {
     incrementalSync: true,
     webhooks: true,
     moveEvent: true, // Copy+delete emulation
-    conferenceCreate: false, // Teams meeting creation via Graph is more complex
+    conferenceCreate: true,
   };
 
   // ---------------------------------------------------------------------------

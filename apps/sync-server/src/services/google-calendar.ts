@@ -462,6 +462,7 @@ export class GoogleCalendarService {
       visible: true, // Default to visible, will be user preference later
       provider: "google",
       accessRole: calendar.accessRole,
+      canCreateConference: true,
     };
   }
 

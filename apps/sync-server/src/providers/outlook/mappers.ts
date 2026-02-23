@@ -89,6 +89,7 @@ export function mapGraphCalendar(cal: GraphCalendar): ApiCalendar {
     visible: true,
     provider: "outlook",
     accessRole: cal.canEdit ? "writer" : "reader",
+    canCreateConference: cal.allowedOnlineMeetingProviders?.includes("teamsForBusiness") ?? false,
   };
 }
 
@@ -310,6 +311,10 @@ export function toOutlookCreateBody(event: NewProviderEvent): Record<string, unk
   if (event.visibility === "private") {
     body.sensitivity = "private";
   }
+  if (event.conferencing?.type === "create") {
+    body.isOnlineMeeting = true;
+    body.onlineMeetingProvider = "teamsForBusiness";
+  }
 
   return body;
 }
@@ -347,6 +352,14 @@ export function toOutlookPatchBody(patch: ProviderEventPatch): Record<string, un
   }
   if (patch.visibility !== undefined) {
     body.sensitivity = patch.visibility === "private" ? "private" : "normal";
+  }
+  if (patch.conferencing !== undefined) {
+    if (patch.conferencing === null) {
+      body.isOnlineMeeting = false;
+    } else if (patch.conferencing.type === "create") {
+      body.isOnlineMeeting = true;
+      body.onlineMeetingProvider = "teamsForBusiness";
+    }
   }
 
   return body;

@@ -47,7 +47,7 @@ import type { EventPatch } from "../../stores/event-types";
 import { apiFetch, ApiError } from "../../lib/api";
 import { showErrorToast } from "../../lib/toast";
 import type { ApiCalendarEvent, Attendee } from "@cathrin/shared-types";
-import { connectedAccounts, getProviderForCalendar } from "../../stores/accounts";
+import { connectedAccounts, getProviderForCalendar, canCalendarCreateConference } from "../../stores/accounts";
 import { startBuffering, isBuffered, getOriginalAttendees, clearBuffer } from "../../stores/buffered-attendees";
 import { addPendingNotification } from "../../stores/pending-notifications";
 import { parseTimeInput, reinterpretInTimezone, setTimeInTimezone } from "../../lib/format-utils";
@@ -569,6 +569,18 @@ export function useEventFormState() {
 
   const conferencing = () => mode() === "create" ? draftConferencing() : editConferencing();
 
+  /** The provider of the currently selected calendar ("google" | "outlook" | "caldav") */
+  const calendarProvider = createMemo(() => {
+    const calId = calendarId();
+    return calId ? getProviderForCalendar(calId) : undefined;
+  });
+
+  /** Whether the selected calendar supports auto-creating conference links */
+  const canCreateConference = createMemo(() => {
+    const calId = calendarId();
+    return calId ? canCalendarCreateConference(calId) : false;
+  });
+
   const attendees = () => mode() === "create" ? (draftAttendees().length > 0 ? draftAttendees() : undefined) : (editAttendees().length > 0 ? editAttendees() : undefined);
 
   /** Whether the current user is the organizer (can add/remove attendees) */
@@ -740,11 +752,12 @@ export function useEventFormState() {
     }
   };
 
-  /** Add a Google Meet link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
-  function addMeetConferencing(): void {
+  /** Add a provider conference link. In edit mode, PATCHes immediately. In create mode, marks as pending. */
+  function addConferencing(): void {
     if (mode() === "create") {
       // Mark pending — resolved server-side during commitCreation
-      setDraftConferencing({ uri: "", label: "Google Meet" });
+      const label = calendarProvider() === "outlook" ? "Microsoft Teams" : "Google Meet";
+      setDraftConferencing({ uri: "", label });
     } else {
       const eventId = selectedEventId();
       if (!eventId) return;
@@ -763,7 +776,7 @@ export function useEventFormState() {
           setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, conferencing: conf } : e));
         })
         .catch((err) => {
-          console.error("[conferencing] Failed to add Meet link:", err);
+          console.error("[conferencing] Failed to add conference link:", err);
         })
         .finally(() => setConferencingLoading(false));
     }
@@ -983,8 +996,10 @@ export function useEventFormState() {
     rsvpAttendee,
     timeZone,
     setTimeZone,
+    calendarProvider,
+    canCreateConference,
     conferencingLoading,
-    addMeetConferencing,
+    addConferencing,
     setManualConferencing,
     removeConferencing,
     revertTimeEdit,

@@ -9,6 +9,7 @@ export interface Calendar {
   color: string;
   visible: boolean;
   accessRole?: string;
+  canCreateConference?: boolean;
 }
 
 export interface CalendarAccount {
@@ -139,6 +140,17 @@ export function getProviderForCalendar(calendarId: string): Provider | undefined
       return account.provider;
     }
   }
+}
+
+/**
+ * Check if a calendar supports auto-creating conference links (Meet/Teams).
+ */
+export function canCalendarCreateConference(calendarId: string): boolean {
+  for (const account of connectedAccounts()) {
+    const cal = account.calendars.find(c => c.id === calendarId);
+    if (cal) return cal.canCreateConference ?? false;
+  }
+  return false;
 }
 
 export async function updateCalendarVisibility(

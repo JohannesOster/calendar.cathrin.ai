@@ -81,6 +81,8 @@ export interface ApiCalendar {
   visible: boolean;
   provider: Provider;
   accessRole?: string;
+  /** Whether this calendar supports auto-creating conference links (Meet/Teams) */
+  canCreateConference?: boolean;
 }
 
 /**

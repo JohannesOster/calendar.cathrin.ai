@@ -13,6 +13,7 @@ export interface GraphCalendar {
   canEdit: boolean;
   canViewPrivateItems: boolean;
   owner?: { name: string; address: string };
+  allowedOnlineMeetingProviders?: string[];
 }
 
 export interface GraphCalendarListResponse {

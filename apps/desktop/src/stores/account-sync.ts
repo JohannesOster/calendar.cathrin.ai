@@ -71,6 +71,7 @@ export async function fetchAccountsFromServer(): Promise<CalendarAccount[]> {
         // Use local visibility preference (client-side setting)
         visible: getCalendarVisibility(c.id),
         accessRole: c.accessRole,
+        canCreateConference: c.canCreateConference,
       })),
     );
   }

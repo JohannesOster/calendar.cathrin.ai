@@ -49,7 +49,23 @@ export function DetailsSection(props: SectionProps) {
         {(conf) => (
           <div class="flex items-center gap-2 text-sm px-2 py-2">
             <Video size={14} class="text-fg-muted shrink-0" />
-            <span class="flex-1 text-fg truncate">{conferencingLabel(conf())} Link</span>
+            <span class="flex-1 text-fg truncate">{conferencingLabel(conf())}</span>
+            <Show when={conf().uri}>
+              <button
+                class="text-xs font-medium text-fg cursor-pointer hover:underline"
+                onClick={() => openUrl(conf().uri)}
+                aria-label={`Join ${conferencingLabel(conf())} meeting`}
+              >
+                Join
+              </button>
+              <button
+                class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                onClick={() => copyUrl(conf().uri)}
+                aria-label="Copy conferencing link"
+              >
+                <Copy size={12} />
+              </button>
+            </Show>
           </div>
         )}
       </Show>
@@ -397,6 +413,19 @@ export function RemindersSection(props: SectionProps) {
   );
 }
 
+function openUrl(uri: string): void {
+  if (!uri) return;
+  invoke("open_url", { url: uri }).catch((err) =>
+    console.error("[conferencing] Failed to open URL:", err),
+  );
+}
+
+function copyUrl(uri: string): void {
+  navigator.clipboard
+    .writeText(uri)
+    .catch((err) => console.error("[conferencing] Failed to copy URL:", err));
+}
+
 /** Extract a short display label from a conferencing URI */
 function conferencingLabel(conf: { uri: string; label?: string }): string {
   if (conf.label) return conf.label;
@@ -417,10 +446,21 @@ function ConferencingField(props: { state: EventFormState }) {
   const s = props.state;
   const [showUrlInput, setShowUrlInput] = createSignal(false);
   const [urlValue, setUrlValue] = createSignal("");
+  const [urlError, setUrlError] = createSignal(false);
+
+  const conferenceLabel = () => {
+    const p = s.calendarProvider();
+    if (p === "outlook") return "Microsoft Teams";
+    if (p === "google") return "Google Meet";
+    return "Video call";
+  };
 
   function handleAddClick(): void {
-    // Auto-generate Meet link (all calendars are Google for now)
-    s.addMeetConferencing();
+    if (s.canCreateConference()) {
+      s.addConferencing();
+    } else {
+      setShowUrlInput(true);
+    }
   }
 
   function handleUrlSubmit(): void {
@@ -435,7 +475,7 @@ function ConferencingField(props: { state: EventFormState }) {
       setShowUrlInput(false);
       setUrlValue("");
     } catch {
-      // Invalid URL — keep input open
+      setUrlError(true);
     }
   }
 
@@ -447,20 +487,8 @@ function ConferencingField(props: { state: EventFormState }) {
       e.preventDefault();
       setShowUrlInput(false);
       setUrlValue("");
+      setUrlError(false);
     }
-  }
-
-  function openUrl(uri: string): void {
-    if (!uri) return;
-    invoke("open_url", { url: uri }).catch((err) =>
-      console.error("[conferencing] Failed to open URL:", err),
-    );
-  }
-
-  function copyUrl(uri: string): void {
-    navigator.clipboard
-      .writeText(uri)
-      .catch((err) => console.error("[conferencing] Failed to copy URL:", err));
   }
 
   return (
@@ -468,7 +496,7 @@ function ConferencingField(props: { state: EventFormState }) {
       <Show when={s.conferencingLoading()}>
         <div class="flex items-center gap-2 text-sm text-fg-muted px-2 py-2">
           <LoaderCircle size={14} class="shrink-0 animate-spin" />
-          <span>Adding Google Meet…</span>
+          <span>Adding {conferenceLabel()}…</span>
         </div>
       </Show>
       <Show when={!s.conferencingLoading()}>
@@ -482,18 +510,21 @@ function ConferencingField(props: { state: EventFormState }) {
                   <button
                     class="flex flex-1 items-center gap-2 text-sm text-fg-muted cursor-pointer rounded px-2 py-2 hover:text-fg hover:bg-surface-hover transition-colors"
                     onClick={handleAddClick}
-                    aria-label="Add Google Meet link"
+                    aria-label={`Add ${s.canCreateConference() ? conferenceLabel() : "custom video"} link`}
                   >
                     <Video size={14} class="shrink-0" />
-                    <span>Add conferencing</span>
+                    <span>{s.canCreateConference() ? `Add ${conferenceLabel()}` : "Add custom video link"}</span>
                   </button>
-                  <button
-                    class="text-xs text-fg-disabled cursor-pointer rounded px-1 hover:text-fg-muted transition-colors"
-                    onClick={() => setShowUrlInput(true)}
-                    aria-label="Paste a conferencing URL"
-                  >
-                    URL
-                  </button>
+                  <Show when={s.canCreateConference()}>
+                    <span class="text-fg-disabled">·</span>
+                    <button
+                      class="text-xs text-fg-muted cursor-pointer rounded px-1 hover:text-fg transition-colors"
+                      onClick={() => setShowUrlInput(true)}
+                      aria-label="Paste a conferencing URL"
+                    >
+                      URL
+                    </button>
+                  </Show>
                 </div>
               }
             >
@@ -505,12 +536,16 @@ function ConferencingField(props: { state: EventFormState }) {
                   aria-label="Conferencing URL"
                   value={urlValue()}
                   ref={(el) => requestAnimationFrame(() => el.focus())}
-                  onInput={(e) => setUrlValue(e.currentTarget.value)}
+                  onInput={(e) => { setUrlValue(e.currentTarget.value); setUrlError(false); }}
                   onBlur={handleUrlSubmit}
                   onKeyDown={handleUrlKeyDown}
-                  class="flex-1 text-sm text-fg py-2 px-2 placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors"
+                  class={`flex-1 text-sm text-fg py-2 px-2 placeholder-fg-disabled bg-surface-input outline-none border-none rounded hover:bg-surface-hover focus:bg-surface-hover transition-colors ${urlError() ? "ring-1 ring-red-400" : ""}`}
                 />
-                <button>
+                <button
+                  class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
+                  onClick={() => { setShowUrlInput(false); setUrlValue(""); setUrlError(false); }}
+                  aria-label="Cancel"
+                >
                   <X size={14} />
                 </button>
               </div>
@@ -520,15 +555,15 @@ function ConferencingField(props: { state: EventFormState }) {
           {(conf) => (
             <div class="flex items-center gap-2 text-sm px-2 py-2">
               <Video size={14} class="text-fg-muted shrink-0" />
-              <button
-                class="flex-1 text-left text-fg truncate cursor-pointer hover:underline"
-                onClick={() => openUrl(conf().uri)}
-                disabled={!conf().uri}
-                aria-label={`Open ${conferencingLabel(conf())} link`}
-              >
-                {conferencingLabel(conf())} Link
-              </button>
+              <span class="flex-1 text-fg truncate">{conferencingLabel(conf())}</span>
               <Show when={conf().uri}>
+                <button
+                  class="text-xs font-medium text-fg cursor-pointer hover:underline"
+                  onClick={() => openUrl(conf().uri)}
+                  aria-label={`Join ${conferencingLabel(conf())} meeting`}
+                >
+                  Join
+                </button>
                 <button
                   class="text-fg-muted hover:text-fg transition-colors cursor-pointer shrink-0"
                   onClick={() => copyUrl(conf().uri)}
