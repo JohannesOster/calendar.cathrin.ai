@@ -326,6 +326,12 @@ body.dragging * {
   opacity: 0.5;
 }
 
+/* Past events — subtle dim, guides attention forward.
+   Selected/focused/dragging states override to stay fully visible. */
+.calendar-event--past:not(.calendar-event--selected):not(.calendar-event--focused):not(:focus):not(.calendar-event--dragging) {
+  opacity: 0.55;
+}
+
 /* Resize handle - bottom edge of timed events */
 .calendar-event__resize-handle {
   position: absolute;
