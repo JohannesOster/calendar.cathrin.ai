@@ -1,10 +1,19 @@
-import { TokenExpiredError, ProviderApiError } from "../providers/types.js";
+import { TokenExpiredError, TokenRevokedError, ProviderApiError } from "../providers/types.js";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export function handleProviderError(error: unknown, c: Context): Response | null {
+  if (error instanceof TokenRevokedError) {
+    return c.json(
+      { error: "token_revoked", message: "Token revoked — re-authorization required" },
+      422,
+    );
+  }
   if (error instanceof TokenExpiredError) {
-    return c.json({ error: "Token expired - re-authorization required" }, 401);
+    return c.json(
+      { error: "token_expired", message: "Token expired — re-authorization required" },
+      422,
+    );
   }
   if (error instanceof ProviderApiError) {
     if (error.statusCode === 403) {

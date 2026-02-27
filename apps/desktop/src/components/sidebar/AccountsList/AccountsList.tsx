@@ -18,6 +18,7 @@ import {
   defaultCalendarId,
   type Calendar,
 } from "../../../stores/accounts";
+import { runOAuthFlow } from "../../../stores/auth";
 import {
   orderedAccounts,
   setAccountOrderAndPersist,
@@ -53,6 +54,13 @@ export function AccountsList() {
   const [activeItem, setActiveItem] = createSignal<string | null>(null);
   const [activeCalendar, setActiveCalendar] = createSignal<Calendar | null>(null);
   const [isDraggingAccounts, setIsDraggingAccounts] = createSignal(false);
+  const handleReconnect = (accountId: string, provider: string) => {
+    // Fire-and-forget — old poll times out silently if user closes the
+    // OAuth window, and they can click Reconnect again immediately.
+    runOAuthFlow(provider).catch((error) => {
+      console.error(`Failed to reconnect account ${accountId}:`, error);
+    });
+  };
 
   // Simple ids accessor for accounts
   const accountIds = () => orderedAccounts().map((a) => a.id);
@@ -195,9 +203,10 @@ export function AccountsList() {
                     account={account}
                     isCollapsed={isAccountCollapsed(account.id)}
                     toggleCollapse={() => toggleAccountCollapse(account.id)}
+                    onReconnect={() => handleReconnect(account.id, account.provider)}
                   />
-                  {/* Calendars - hidden during account drag, animated via Collapsible */}
-                  <Show when={!isDraggingAccounts()}>
+                  {/* Calendars - hidden during account drag or when disconnected */}
+                  <Show when={!isDraggingAccounts() && account.syncStatus !== "auth_error"}>
                     <Collapsible.Content>
                       <SortableProvider ids={getOrderedCalendarIds(account.id)}>
                         <For each={getOrderedCalendars(account.id)}>

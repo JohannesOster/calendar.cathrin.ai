@@ -76,7 +76,7 @@ export async function handleOAuthCallback(
   let isNewAccount = false;
 
   if (existingAccount) {
-    // Update existing account with new tokens
+    // Update existing account with new tokens and reset auth error state
     await db!
       .update(accounts)
       .set({
@@ -85,10 +85,21 @@ export async function handleOAuthCallback(
           ? encrypt(accessToken.token)
           : null,
         tokenExpiresAt,
+        ...(existingAccount.syncStatus === "auth_error" && {
+          syncStatus: "pending",
+          syncError: null,
+        }),
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, existingAccount.id));
     accountId = existingAccount.id;
+
+    // Re-trigger initial sync if account was in auth_error state (reconnect flow)
+    if (existingAccount.syncStatus === "auth_error") {
+      performInitialSync(accountId).catch((err) => {
+        console.error(`[auth] Re-sync failed for reconnected account ${accountId}:`, err);
+      });
+    }
   } else {
     // Create new account
     const [newAccount] = await db!
