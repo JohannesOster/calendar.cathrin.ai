@@ -54,17 +54,12 @@ export function AccountsList() {
   const [activeItem, setActiveItem] = createSignal<string | null>(null);
   const [activeCalendar, setActiveCalendar] = createSignal<Calendar | null>(null);
   const [isDraggingAccounts, setIsDraggingAccounts] = createSignal(false);
-  const [reconnectingAccountId, setReconnectingAccountId] = createSignal<string | null>(null);
-
-  const handleReconnect = async (accountId: string, provider: string) => {
-    setReconnectingAccountId(accountId);
-    try {
-      await startServerOAuth(provider);
-    } catch (error) {
+  const handleReconnect = (accountId: string, provider: string) => {
+    // Fire-and-forget — old poll times out silently if user closes the
+    // OAuth window, and they can click Reconnect again immediately.
+    startServerOAuth(provider).catch((error) => {
       console.error(`Failed to reconnect account ${accountId}:`, error);
-    } finally {
-      setReconnectingAccountId(null);
-    }
+    });
   };
 
   // Simple ids accessor for accounts
@@ -207,7 +202,6 @@ export function AccountsList() {
                   <SortableAccountItem
                     account={account}
                     isCollapsed={isAccountCollapsed(account.id)}
-                    isReconnecting={reconnectingAccountId() === account.id}
                     toggleCollapse={() => toggleAccountCollapse(account.id)}
                     onReconnect={() => handleReconnect(account.id, account.provider)}
                   />

@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
 import { createSortable, useDragDropContext } from "@thisbeyond/solid-dnd";
-import { ChevronDown, ChevronUp, Ellipsis, TriangleAlert, Loader2 } from "lucide-solid";
+import { ChevronDown, ChevronUp, Ellipsis, TriangleAlert } from "lucide-solid";
 import { Menu } from "@ark-ui/solid/menu";
 import type { CalendarAccount } from "../../../stores/accounts";
 import { SIDEBAR } from "../../../constants/sidebar";
@@ -10,7 +10,6 @@ import outlookIcon from "../../../assets/outlook.svg";
 interface AccountItemProps {
   account: CalendarAccount;
   isCollapsed: boolean;
-  isReconnecting?: boolean;
   toggleCollapse: () => void;
   onReconnect?: () => void;
 }
@@ -99,28 +98,18 @@ export function SortableAccountItem(props: AccountItemProps) {
           {/* Disconnected status line */}
           <Show when={isDisconnected()}>
             <div class="flex items-center gap-1 ml-5 mt-0.5">
-              <Show
-                when={!props.isReconnecting}
-                fallback={
-                  <span class="text-[11px] text-fg-faint flex items-center gap-1">
-                    <Loader2 size={10} class="animate-spin" />
-                    Reconnecting…
-                  </span>
-                }
-              >
-                <span class="text-[11px] text-fg-faint">
-                  Disconnected ·{" "}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onReconnect?.();
-                    }}
-                    class="text-fg-muted hover:text-fg underline cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
-                  >
-                    Reconnect
-                  </button>
-                </span>
-              </Show>
+              <span class="text-[11px] text-fg-faint">
+                Disconnected ·{" "}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onReconnect?.();
+                  }}
+                  class="text-fg-muted hover:text-fg underline cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded"
+                >
+                  Reconnect
+                </button>
+              </span>
             </div>
           </Show>
         </div>
