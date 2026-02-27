@@ -14,11 +14,11 @@ import { Collapsible } from "@ark-ui/solid/collapsible";
 import {
   authError,
   setAuthError,
-  addAccount,
   updateCalendarVisibility,
   defaultCalendarId,
   type Calendar,
 } from "../../../stores/accounts";
+import { startServerOAuth } from "../../../stores/auth";
 import {
   orderedAccounts,
   setAccountOrderAndPersist,
@@ -59,7 +59,9 @@ export function AccountsList() {
   const handleReconnect = async (accountId: string, provider: string) => {
     setReconnectingAccountId(accountId);
     try {
-      await addAccount(provider as "google" | "outlook");
+      await startServerOAuth(provider);
+    } catch (error) {
+      console.error(`Failed to reconnect account ${accountId}:`, error);
     } finally {
       setReconnectingAccountId(null);
     }

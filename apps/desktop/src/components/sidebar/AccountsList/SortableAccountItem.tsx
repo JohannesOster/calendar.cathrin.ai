@@ -98,7 +98,7 @@ export function SortableAccountItem(props: AccountItemProps) {
           </div>
           {/* Disconnected status line */}
           <Show when={isDisconnected()}>
-            <div class="flex items-center gap-1 ml-[18px] mt-0.5">
+            <div class="flex items-center gap-1 ml-5 mt-0.5">
               <Show
                 when={!props.isReconnecting}
                 fallback={

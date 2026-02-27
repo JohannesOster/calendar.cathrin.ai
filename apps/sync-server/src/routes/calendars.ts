@@ -6,12 +6,12 @@ import { authMiddleware } from "../middlewares/auth.js";
 import { getAccessToken } from "../services/token-refresh.js";
 import { TokenExpiredError, TokenRevokedError } from "../providers/types.js";
 import { getProvider } from "../providers/registry.js";
-import type { ApiCalendar, Provider } from "@cathrin/shared-types";
+import type { ApiCalendar, Provider, SyncStatus } from "@cathrin/shared-types";
 
 interface AccountCalendarsResult {
   accountId: string;
   calendars: ApiCalendar[];
-  syncStatus?: string;
+  syncStatus?: SyncStatus;
   error?: string;
 }
 
@@ -44,7 +44,7 @@ export const calendarsRoute = new Hono()
               ...cal,
               accountId: account.id,
             })),
-            syncStatus: account.syncStatus ?? "pending",
+            syncStatus: (account.syncStatus as SyncStatus) ?? "pending",
           };
         } catch (error) {
           console.error(
@@ -68,7 +68,7 @@ export const calendarsRoute = new Hono()
           return {
             accountId: account.id,
             calendars: [],
-            syncStatus: account.syncStatus ?? "pending",
+            syncStatus: (account.syncStatus as SyncStatus) ?? "pending",
             error: error instanceof Error ? error.message : "Failed to fetch calendars",
           };
         }

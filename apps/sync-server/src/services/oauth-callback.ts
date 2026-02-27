@@ -85,8 +85,10 @@ export async function handleOAuthCallback(
           ? encrypt(accessToken.token)
           : null,
         tokenExpiresAt,
-        syncStatus: "pending",
-        syncError: null,
+        ...(existingAccount.syncStatus === "auth_error" && {
+          syncStatus: "pending",
+          syncError: null,
+        }),
         updatedAt: new Date(),
       })
       .where(eq(accounts.id, existingAccount.id));
