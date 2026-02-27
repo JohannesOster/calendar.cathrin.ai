@@ -18,7 +18,7 @@ import {
   defaultCalendarId,
   type Calendar,
 } from "../../../stores/accounts";
-import { startServerOAuth } from "../../../stores/auth";
+import { runOAuthFlow } from "../../../stores/auth";
 import {
   orderedAccounts,
   setAccountOrderAndPersist,
@@ -57,7 +57,7 @@ export function AccountsList() {
   const handleReconnect = (accountId: string, provider: string) => {
     // Fire-and-forget — old poll times out silently if user closes the
     // OAuth window, and they can click Reconnect again immediately.
-    startServerOAuth(provider).catch((error) => {
+    runOAuthFlow(provider).catch((error) => {
       console.error(`Failed to reconnect account ${accountId}:`, error);
     });
   };

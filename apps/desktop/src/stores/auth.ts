@@ -96,8 +96,45 @@ async function validateSession(token: string): Promise<boolean> {
 }
 
 /**
- * Start the OAuth flow by opening the browser to the server's OAuth endpoint.
- * Uses a state-based polling mechanism for the callback.
+ * Core OAuth flow: create state, open browser, poll for token, handle callback.
+ * No global loading/error side effects — callers manage their own state.
+ */
+export async function runOAuthFlow(provider = "google"): Promise<void> {
+  // Step 1: Create a pending state on the server
+  // If already authenticated, pass the token so the server links the new
+  // account to the existing user instead of creating a new one
+  const headers: Record<string, string> = {};
+  const currentToken = sessionToken();
+  if (currentToken) {
+    headers["Authorization"] = `Bearer ${currentToken}`;
+  }
+
+  const stateResponse = await fetch(`${SYNC_SERVER_URL}/auth/state`, {
+    method: "POST",
+    headers,
+  });
+
+  if (!stateResponse.ok) {
+    throw new Error("Failed to create OAuth state");
+  }
+
+  const { state } = await stateResponse.json();
+
+  // Step 2: Open browser to start OAuth flow with provider selection
+  await invoke("open_url", {
+    url: `${SYNC_SERVER_URL}/auth/start?state=${state}&provider=${provider}`,
+  });
+
+  // Step 3: Poll for the token
+  const token = await pollForToken(state);
+
+  // Step 4: Handle the callback
+  await handleAuthCallback(token);
+}
+
+/**
+ * Start the OAuth flow with global loading/error state.
+ * Used for initial login and add-account flows.
  * @param provider - "google" or "outlook" (defaults to "google")
  */
 export async function startServerOAuth(provider = "google"): Promise<void> {
@@ -105,36 +142,7 @@ export async function startServerOAuth(provider = "google"): Promise<void> {
   setAuthError(null);
 
   try {
-    // Step 1: Create a pending state on the server
-    // If already authenticated, pass the token so the server links the new
-    // account to the existing user instead of creating a new one
-    const headers: Record<string, string> = {};
-    const currentToken = sessionToken();
-    if (currentToken) {
-      headers["Authorization"] = `Bearer ${currentToken}`;
-    }
-
-    const stateResponse = await fetch(`${SYNC_SERVER_URL}/auth/state`, {
-      method: "POST",
-      headers,
-    });
-
-    if (!stateResponse.ok) {
-      throw new Error("Failed to create OAuth state");
-    }
-
-    const { state } = await stateResponse.json();
-
-    // Step 2: Open browser to start OAuth flow with provider selection
-    await invoke("open_url", {
-      url: `${SYNC_SERVER_URL}/auth/start?state=${state}&provider=${provider}`,
-    });
-
-    // Step 3: Poll for the token
-    const token = await pollForToken(state);
-
-    // Step 4: Handle the callback
-    await handleAuthCallback(token);
+    await runOAuthFlow(provider);
   } catch (error) {
     console.error("Failed to complete OAuth:", error);
     setAuthError(
