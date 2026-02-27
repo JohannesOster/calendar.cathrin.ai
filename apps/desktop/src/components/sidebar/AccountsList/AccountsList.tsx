@@ -14,6 +14,7 @@ import { Collapsible } from "@ark-ui/solid/collapsible";
 import {
   authError,
   setAuthError,
+  addAccount,
   updateCalendarVisibility,
   defaultCalendarId,
   type Calendar,
@@ -53,6 +54,16 @@ export function AccountsList() {
   const [activeItem, setActiveItem] = createSignal<string | null>(null);
   const [activeCalendar, setActiveCalendar] = createSignal<Calendar | null>(null);
   const [isDraggingAccounts, setIsDraggingAccounts] = createSignal(false);
+  const [reconnectingAccountId, setReconnectingAccountId] = createSignal<string | null>(null);
+
+  const handleReconnect = async (accountId: string, provider: string) => {
+    setReconnectingAccountId(accountId);
+    try {
+      await addAccount(provider as "google" | "outlook");
+    } finally {
+      setReconnectingAccountId(null);
+    }
+  };
 
   // Simple ids accessor for accounts
   const accountIds = () => orderedAccounts().map((a) => a.id);
@@ -194,10 +205,12 @@ export function AccountsList() {
                   <SortableAccountItem
                     account={account}
                     isCollapsed={isAccountCollapsed(account.id)}
+                    isReconnecting={reconnectingAccountId() === account.id}
                     toggleCollapse={() => toggleAccountCollapse(account.id)}
+                    onReconnect={() => handleReconnect(account.id, account.provider)}
                   />
-                  {/* Calendars - hidden during account drag, animated via Collapsible */}
-                  <Show when={!isDraggingAccounts()}>
+                  {/* Calendars - hidden during account drag or when disconnected */}
+                  <Show when={!isDraggingAccounts() && account.syncStatus !== "auth_error"}>
                     <Collapsible.Content>
                       <SortableProvider ids={getOrderedCalendarIds(account.id)}>
                         <For each={getOrderedCalendars(account.id)}>
