@@ -11,6 +11,7 @@ import type { ApiCalendar, Provider } from "@cathrin/shared-types";
 interface AccountCalendarsResult {
   accountId: string;
   calendars: ApiCalendar[];
+  syncStatus?: string;
   error?: string;
 }
 
@@ -43,6 +44,7 @@ export const calendarsRoute = new Hono()
               ...cal,
               accountId: account.id,
             })),
+            syncStatus: account.syncStatus ?? "pending",
           };
         } catch (error) {
           console.error(
@@ -58,6 +60,7 @@ export const calendarsRoute = new Hono()
             return {
               accountId: account.id,
               calendars: [],
+              syncStatus: "auth_error",
               error: "Token expired or revoked - re-authorization required",
             };
           }
@@ -65,6 +68,7 @@ export const calendarsRoute = new Hono()
           return {
             accountId: account.id,
             calendars: [],
+            syncStatus: account.syncStatus ?? "pending",
             error: error instanceof Error ? error.message : "Failed to fetch calendars",
           };
         }

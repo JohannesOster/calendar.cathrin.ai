@@ -82,6 +82,8 @@ export async function getAccessToken(accountId: string): Promise<string> {
         .set({
           encryptedAccessToken: null,
           tokenExpiresAt: null,
+          syncStatus: "auth_error",
+          syncError: "Token revoked — re-authorization required",
           updatedAt: new Date(),
         })
         .where(eq(accounts.id, accountId));
@@ -138,6 +140,8 @@ export async function forceRefresh(accountId: string): Promise<string> {
         .set({
           encryptedAccessToken: null,
           tokenExpiresAt: null,
+          syncStatus: "auth_error",
+          syncError: "Token revoked — re-authorization required",
           updatedAt: new Date(),
         })
         .where(eq(accounts.id, accountId));

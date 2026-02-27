@@ -88,7 +88,7 @@ export interface ApiCalendar {
 /**
  * Sync status for an account
  */
-export type SyncStatus = "pending" | "syncing" | "complete" | "failed";
+export type SyncStatus = "pending" | "syncing" | "complete" | "failed" | "auth_error";
 
 /**
  * A connected calendar account as transported over the API
