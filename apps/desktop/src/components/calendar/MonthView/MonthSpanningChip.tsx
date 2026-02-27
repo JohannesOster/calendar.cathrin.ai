@@ -1,4 +1,6 @@
+import { createMemo } from "solid-js";
 import type { CalendarEvent } from "../../../stores/event-types";
+import { currentMinute } from "../../../stores/current-time";
 import { CHIP_BORDER_RADIUS } from "../../../constants/layout";
 
 interface MonthSpanningChipProps {
@@ -14,6 +16,8 @@ interface MonthSpanningChipProps {
 }
 
 export function MonthSpanningChip(props: MonthSpanningChipProps) {
+  const isPast = createMemo(() => props.event.end.getTime() < currentMinute().getTime());
+
   const getBorderRadius = () => {
     const left = props.startsBeforeView ? "0" : CHIP_BORDER_RADIUS;
     const right = props.endsAfterView ? "0" : CHIP_BORDER_RADIUS;
@@ -23,6 +27,7 @@ export function MonthSpanningChip(props: MonthSpanningChipProps) {
   return (
     <div
       class="all-day-chip absolute flex items-center px-1.5 text-xs cursor-pointer truncate transition-[background-color]"
+      classList={{ "all-day-chip--past": isPast() }}
       style={{
         left: `calc(${(props.startCol / 7) * 100}% + 2px)`,
         width: `calc(${(props.span / 7) * 100}% - 4px)`,

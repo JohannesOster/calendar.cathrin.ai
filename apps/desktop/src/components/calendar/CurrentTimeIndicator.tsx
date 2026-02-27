@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { currentMinute } from "../../stores/current-time";
 import { HOUR_HEIGHT_PX } from "../../constants/calendar";
 
 interface CurrentTimeIndicatorProps {
@@ -26,26 +26,16 @@ function getTimePosition(date: Date): number {
  * Time badge component that sits in the time column area
  */
 export function CurrentTimeBadge() {
-  const [now, setNow] = createSignal(new Date());
-
-  onMount(() => {
-    // Update every minute
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 60000);
-    onCleanup(() => clearInterval(interval));
-  });
-
   return (
     <div
       class="absolute left-0 right-0 z-20 pointer-events-none"
       style={{
-        top: `${getTimePosition(now())}px`,
+        top: `${getTimePosition(currentMinute())}px`,
       }}
     >
       {/* Time badge */}
       <div class="absolute right-0 -translate-y-1/2 bg-today text-surface text-2xs font-medium px-2.5 py-1 rounded-sm leading-none whitespace-nowrap">
-        {formatCurrentTime(now())}
+        {formatCurrentTime(currentMinute())}
       </div>
     </div>
   );
@@ -55,21 +45,11 @@ export function CurrentTimeBadge() {
  * Horizontal line component that spans across all day columns
  */
 export function CurrentTimeLine(props: CurrentTimeIndicatorProps) {
-  const [now, setNow] = createSignal(new Date());
-
-  onMount(() => {
-    // Update every minute
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 60000);
-    onCleanup(() => clearInterval(interval));
-  });
-
   return (
     <div
       class="absolute left-0 z-20 pointer-events-none"
       style={{
-        top: `${getTimePosition(now())}px`,
+        top: `${getTimePosition(currentMinute())}px`,
         width: `${(props.totalDays / props.visibleDaysCount) * 100}%`,
       }}
     >

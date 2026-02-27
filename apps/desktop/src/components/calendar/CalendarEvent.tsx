@@ -9,6 +9,7 @@ import { startMoveDrag, startResizeDrag, dragActiveEventId } from "../../stores/
 import { snapMinutes } from "../../stores/event-creation";
 import { isPendingNotification } from "../../stores/pending-notifications";
 import { isBuffered } from "../../stores/buffered-attendees";
+import { currentMinute } from "../../stores/current-time";
 import { Users, Repeat } from "lucide-solid";
 import { formatCompactTime, formatTimeRange, getTimezoneAbbr } from "../../lib/format-utils";
 
@@ -46,6 +47,7 @@ export function CalendarEvent(props: CalendarEventProps) {
   const isBeingDragged = createMemo(() => dragActiveEventId() === props.event.id);
   const selfResponse = createMemo(() => props.event.attendees?.find(a => a.isSelf)?.responseStatus);
   const hasPendingNotification = createMemo(() => isPendingNotification(props.event.id) || isBuffered(props.event.id));
+  const isPast = createMemo(() => props.event.end.getTime() < currentMinute().getTime());
 
   /** Threshold in px for click-vs-drag detection */
   const MOVE_DRAG_THRESHOLD = 3;
@@ -242,7 +244,7 @@ export function CalendarEvent(props: CalendarEventProps) {
       {/* Outer container - rounded corners, box-shadow border, clips inner content */}
       <div
         ref={contentRef}
-        class={`absolute inset-0 rounded-md transition-[background-color,color,box-shadow] duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
+        class={`absolute inset-0 rounded-md transition-[background-color,color,box-shadow] duration-75 calendar-event overflow-hidden ${hasOverlap() ? "calendar-event--overlapping" : ""} ${isFocused() ? "calendar-event--focused" : ""} ${isSelected() ? "calendar-event--selected" : ""} ${isBeingDragged() ? "calendar-event--dragging" : ""} ${isPast() ? "calendar-event--past" : ""} ${selfResponse() === "needsAction" ? "calendar-event--needs-action" : ""} ${selfResponse() === "tentative" ? "calendar-event--tentative" : ""} ${props.event.isReadOnly ? "cursor-default" : props.event.isAllDay ? "cursor-pointer" : "cursor-grab"}`}
         style={{
           "--event-color": props.event.color,
         }}
